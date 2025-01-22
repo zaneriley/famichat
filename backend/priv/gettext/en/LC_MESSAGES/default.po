@@ -1,0 +1,149 @@
+msgid "Zane Riley"
+msgstr "Zane Riley"
+
+msgid "Zane Riley | Product Design Famichat"
+msgstr "Zane Riley | Product Design Famichat"
+
+msgid "Zane Riley | Product Designer (Tokyo) | 10+ Years Experience"
+msgstr "Zane Riley | Product Designer (Tokyo) | 10+ Years Experience"
+
+msgid "Zane Riley: Tokyo Product Designer. 10+ yrs experience. Currently at Google. Worked in e-commerce, healthcare, and finance. Designed and built products for Google, Google Maps, and Google Search."
+msgstr "Zane Riley: Tokyo Product Designer. 10+ yrs experience. Currently at Google. Worked in e-commerce, healthcare, and finance. Designed and built products for Google, Google Maps, and Google Search."
+
+msgid "%{role} based in %{city}"
+msgstr "%{role} based in %{city}"
+
+msgid "Digital Product Designer"
+msgstr "Digital Product Designer <br />"
+
+msgid "Tokyo"
+msgstr "Tokyo"
+
+msgid "Solving problems for customers through %{tagline_methods} or %{tagline_else}"
+msgstr "Solving problems for customers through %{tagline_methods} or %{tagline_else}"
+
+msgid "tagline_methods"
+msgstr "product strategy, design, code"
+
+msgid "tagline_else"
+msgstr "WHATEVER IT TAKES"
+
+msgid "10+ years of experience based in Tokyo, Japan. I believe in creating products that empower people’s lives. My ultimate goal is to make things that help people shape the future they desire, not a future that is imposed upon them."
+msgstr "10+ years of experience based in Tokyo, Japan. I believe in creating products that empower people’s lives. My ultimate goal is to make things that help people shape the future they desire, not a future that is imposed upon them."
+
+msgid "Helping people make informed healthcare choices and access care when they need it."
+msgstr "Helping people make informed healthcare choices and access care when they need it."
+
+msgid "Skip to main content"
+msgstr "Skip to main content"
+
+msgid "Zane Riley Famichat Logo"
+msgstr "Zane Riley Famichat Logo"
+
+msgid "Change language"
+msgstr "Change language"
+
+msgid "Language switcher"
+msgstr "Language switcher"
+
+msgid "English"
+msgstr "English"
+
+msgid "Japanese"
+msgstr "日本語"
+
+msgid "Theme switcher"
+msgstr "Theme switcher"
+
+msgid "Light mode"
+msgstr "Light mode"
+
+msgid "Dark mode"
+msgstr "Dark mode"
+
+msgid "Case Study"
+msgid_plural "Case Studies"
+msgstr[0] "Case Study"
+msgstr[1] "Case Studies"
+
+msgid "Role"
+msgstr "Role"
+
+msgid "Platform"
+msgid_plural "Platforms"
+msgstr[0] "Platform"
+msgstr[1] "Platforms"
+
+
+msgid "Timeline"
+msgstr "Timeline"
+
+msgid "Company"
+msgstr "Company"
+
+
+msgid "Note"
+msgid_plural "Notes"
+msgstr[0] "Note"
+msgstr[1] "Notes"
+
+msgid "Self"
+msgstr "Self"
+
+msgid "Switch to English"
+msgstr "Switch to English"
+
+msgid "Switch to Japanese"
+msgstr "Switch to Japanese"
+
+msgid "Colophon"
+msgstr "Colophon"
+
+msgid "Hosted on my home server in Tokyo."
+msgstr "Hosted on my home server in Tokyo."
+
+msgid "Type set in %{font1}, %{font2}, %{font3}, & %{font4}."
+msgstr "Type set in %{font1}, %{font2}, %{font3}, & %{font4}."
+
+msgid "Written in Elixir."
+msgstr "Written in Elixir."
+
+msgid "Open source on %{github}."
+msgstr "Open source on %{github}."
+
+msgid "Design avaiable in %{figma}."
+msgstr "Design avaiable in %{figma}."
+
+
+# Read time
+msgid "Less than a minute read"
+msgstr "Less than a minute read"
+
+msgid "1 min read"
+msgstr "1 min read"
+
+msgid "%{count} min read"
+msgstr "%{count} min read"
+
+msgid "%{hours} hour %{minutes} min read"
+msgstr "%{hours} hour %{minutes} min read"
+
+# Word/Character count
+msgid "%{formatted_count} word"
+msgid_plural "%{formatted_count} words"
+msgstr[0] "%{formatted_count} word"
+msgstr[1] "%{formatted_count} words"
+
+# Update date
+msgid "Updated today"
+msgstr "Updated today"
+
+msgid "Updated yesterday"
+msgstr "Updated yesterday"
+
+msgid "Updated %{date}"
+msgstr "Updated %{date}"
+
+# Separator
+msgid "Metadata separator"
+msgstr " • "

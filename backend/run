@@ -1,0 +1,423 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o pipefail
+
+DC="${DC:-exec}"
+
+# If we're running in CI we need to disable TTY allocation for docker compose
+# commands that enable it by default, such as exec and run.
+TTY=""
+if [[ ! -t 1 ]]; then
+  TTY="-T"
+fi
+
+# -----------------------------------------------------------------------------
+# Helper functions start with _ and aren't listed in this script's help menu.
+# -----------------------------------------------------------------------------
+
+function _dc {
+  docker compose "${DC}" ${TTY} "${@}"
+}
+
+function _build_run_down {
+  docker compose build
+  docker compose run ${TTY} "${@}"
+  docker compose down
+}
+
+# -----------------------------------------------------------------------------
+
+function cmd {
+  # Run any command you want in the web container
+  _dc web "${@}"
+}
+
+# -----------------------------------------------------------------------------
+# Elixir
+# -----------------------------------------------------------------------------
+
+function mix {
+  # Run any mix commands
+  echo "Running mix as user: $(id)"
+  echo "From directory: $(pwd)"
+  echo "Command: mix $*"
+  cmd mix "${@}"
+}
+
+function mix:install {
+  # Install mix dependencies and write lock file
+  _build_run_down web mix deps.get
+}
+
+function mix:clean {
+  # Clean mix dependencies
+  _build_run_down web mix deps.clean ${@}
+}
+
+
+function mix:outdated {
+  # List any installed packages that are outdated
+  mix hex.outdated
+}
+
+function iex {
+  # Connect to an IEx session
+  cmd iex -S mix
+}
+
+function secret {
+  # Generate a random secret that can be used for secret keys and more
+  mix phx.gen.secret
+}
+
+function lint:dockerfile {
+  # Lint Dockerfile
+  docker container run --rm -i \
+    hadolint/hadolint hadolint --ignore DL3008 -t style "${@}" - < Dockerfile
+}
+
+function elixir:lint {
+  # Lint Elixir code
+  mix credo
+}
+
+function elixir:format {
+  # Run the mix formatter
+  mix format
+}
+
+function elixir:format:check {
+  # Check to see if there's an unformatted code
+  mix format --check-formatted
+}
+
+function elixir:security-check {
+  # Run Sobelow security checks
+  mix sobelow --config --exit
+}
+
+function elixir:test {
+  # Run test suite
+  _dc -e "MIX_ENV=test" web mix test "${@}"
+}
+
+function elixir:test:file {
+  # Run test suite and log to file
+  _dc -e "MIX_ENV=test" web mix test "${@}" > test_output.log 2>&1
+}
+
+function elixir:test:coverage {
+  echo "GITHUB_EVENT_PATH: $GITHUB_EVENT_PATH"
+  
+  if [ -z "$GITHUB_EVENT_PATH" ]; then
+    echo "Running coverage locally without GitHub Actions environment"
+    _dc -e "MIX_ENV=test" web mix coveralls "${@}"
+  else
+    echo "Running coverage in GitHub Actions environment"
+    
+    if [ -z "$COVERALLS_REPO_TOKEN" ]; then
+      echo "Error: COVERALLS_REPO_TOKEN is not set"
+      exit 1
+    fi
+
+    BRANCH=${GITHUB_REF#refs/heads/}
+    SHA=$GITHUB_SHA
+    COMMITTER=$GITHUB_ACTOR
+
+    _dc -e "MIX_ENV=test" \
+       -e "GITHUB_TOKEN=${GITHUB_TOKEN}" \
+       web mix coveralls.post \
+         --token "$COVERALLS_REPO_TOKEN" \
+         --branch "$BRANCH" \
+         --sha "$SHA" \
+         --committer "$COMMITTER" \
+         --name "GitHub Actions" \
+         "${@}"
+  fi
+}
+
+function elixir:test:coverage:details {
+  # Get test coverage details
+  _dc -e "MIX_ENV=test" web mix coveralls.detail "${@}"
+}
+
+function elixir:static-analysis {
+  # Run Dialyzer static code analysis
+  mix dialyzer "${@}"
+}
+
+function elixir:static-analysis:ci {
+  # Run Dialyzer in CI environment
+  _dc -e "MIX_ENV=test" web mix dialyzer --format short
+}
+
+function elixir:static-analysis:explain {
+  # Explain a Dialyzer warning
+  mix dialyzer.explain "${@}"
+}
+
+# -----------------------------------------------------------------------------
+# Javascript
+# -----------------------------------------------------------------------------
+
+function js:lint {
+  # Lint JavaScript files
+  _dc js biome lint --write . 
+}
+
+function js:lint:check {
+  # Lint JavaScript files
+  _dc js biome lint .
+}
+
+function js:format {
+  # Check formatting
+  _dc js biome format --write .
+}
+
+function js:fix:check {
+  # Fix formatting issues
+  _dc js biome check .
+}
+
+function js:fix {
+  # Fix Biome issues (formatting and linting)
+  _dc js biome check --write "${@}"
+}
+
+function js:test {
+  # Run JavaScript tests with Vitest
+  _dc js vitest
+}
+
+function js:test:run {
+  # Run JavaScript tests once without watch mode
+  _dc js vitest run 
+}
+
+function js:test:browser {
+  # Run JavaScript tests once without watch mode
+  _dc js vitest --workspace=vitest.workspace.ts
+}
+
+function js:test:coverage {
+  # Run JavaScript tests with coverage
+  _dc js npx vitest run --coverage
+}
+
+function js:test:watch {
+  # Run JavaScript tests in watch mode (default behavior of vitest)
+  _dc js npx vitest
+}
+
+function js:test:ui {
+  # Run JavaScript tests with Vitest UI
+  _dc js npx vitest --ui
+}
+
+function yarn:add {
+  # Install a JS package
+  _build_run_down js yarn add "$@"
+}
+
+function yarn:install {
+  # Install yarn dependencies and write lock file
+  _build_run_down js yarn install
+}
+
+function yarn:upgrade {
+  # Update a JS package
+  _build_run_down js yarn upgrade "$@"
+}
+
+function yarn:remove {
+  # Install yarn dependencies and write lock file
+  _build_run_down js yarn remove "$@"
+}
+
+function yarn:outdated {
+  # List any installed packages that are outdated
+  _dc js yarn outdated
+}
+
+function yarn:build:js {
+  # Build JS assets, this is meant to be run from within the assets container
+  mkdir -p ../priv/static/js
+  node esbuild.config.mjs
+}
+
+# -----------------------------------------------------------------------------
+# CSS
+# -----------------------------------------------------------------------------
+
+function yarn:build:css {
+  # Build CSS assets, this is meant to be run from within the assets container
+  local args=()
+
+  if [ "${NODE_ENV:-}" == "production" ]; then
+    args=(--minify)
+  else
+    args=(--watch)
+  fi
+
+  mkdir -p ../priv/static/css
+  tailwindcss --postcss -i css/app.css -o ../priv/static/css/app.css "${args[@]}"
+}
+
+function css:lint {
+  _dc js yarn stylelint "**/*.css" --fix
+}
+
+function css:lint:check {
+  _dc js yarn stylelint "**/*.css"
+}
+
+# -----------------------------------------------------------------------------
+# Assets
+# -----------------------------------------------------------------------------
+
+function assets:font-metrics {
+  # Run the 'assets:font-metrics' script within the js container
+  _dc js yarn assets:font-metrics
+}
+
+# -----------------------------------------------------------------------------
+# Shell
+# -----------------------------------------------------------------------------
+
+function shell {
+  # Start a shell session in the web container
+  cmd bash "${@}"
+}
+
+# -----------------------------------------------------------------------------
+# Database
+# -----------------------------------------------------------------------------
+
+function psql {
+  # Connect to PostgreSQL
+  # shellcheck disable=SC1091
+  . .env
+ _dc postgres psql -U "${POSTGRES_USER}" "${@}"
+}
+
+function prod:migrate {
+  # Run database migrations in production
+  cmd bin/famichat eval "Famichat.Release.migrate"
+}
+
+function prod:remote {
+  # Connect an IEx session to your production system
+  cmd bin/famichat remote
+}
+
+function release {
+  # Build and tag the Docker image
+  docker build --no-cache -t famichat:"$(git rev-parse --short HEAD) ."
+
+  # Push to Docker registry (uncomment and modify as needed)
+  # docker push your-registry/famichat:$(git rev-parse --short HEAD)
+
+  echo "Release $(git rev-parse --short HEAD) built and ready for deployment"
+}
+
+function clean {
+  # Remove cache and other machine generates files
+  rm -rf priv/static/*.* priv/static/js priv/static/css priv/static/images priv/static/fonts
+  touch priv/static/.keep
+}
+
+# -----------------------------------------------------------------------------
+# CI
+# -----------------------------------------------------------------------------
+
+function ci:install-deps {
+    # Unchanged
+    sudo apt-get install -y curl shellcheck
+    sudo curl \
+        -L https://raw.githubusercontent.com/nickjj/wait-until/v0.2.0/wait-until \
+        -o /usr/local/bin/wait-until && sudo chmod +x /usr/local/bin/wait-until
+}
+
+function ci:setup-env {
+    cp --no-clobber .env.example .env
+    docker compose build
+    docker compose up -d
+
+    # shellcheck disable=SC1091
+    . .env
+    wait-until "docker compose exec -T \
+        -e PGPASSWORD=${POSTGRES_PASSWORD} postgres \
+        psql -U ${POSTGRES_USER} ${POSTGRES_USER} -c 'SELECT 1'"
+
+    docker compose logs
+}
+
+function ci:lint {
+    shellcheck run bin/*
+    lint:dockerfile "${@}"
+    elixir:lint
+    elixir:format
+    js:fix
+    css:lint
+}
+
+function ci:security-check {
+    elixir:security-check
+}
+
+function ci:setup-db {
+    mix ecto.setup
+}
+
+function ci:test {
+    test:coverage "${@}"
+}
+
+function ci:static-analysis {
+    elixir:static-analysis:ci || true
+}
+
+function ci:run-all {
+    ci:install-deps
+    ci:setup-env
+    ci:lint "$@"
+    ci:security-check
+    # ci:setup-db
+    ci:test "$@"
+    ci:static-analysis
+}
+
+# -----------------------------------------------------------------------------
+# Unified commands
+# -----------------------------------------------------------------------------
+
+function lint:all {
+    elixir:lint
+    js:lint
+    css:lint
+}
+
+function format:all {
+    elixir:format
+    js:fix
+    css:lint
+}
+
+function test:all {
+    elixir:test
+    js:test
+}
+
+function help {
+  printf "%s <task> [args]\n\nTasks:\n" "${0}"
+
+  compgen -A function | grep -v "^_" | cat -n
+
+  printf "\nExtended help:\n  Each task has comments for general usage\n"
+}
+
+# This idea is heavily inspired by: https://github.com/adriancooney/Taskfile
+TIMEFORMAT=$'\nTask completed in %3lR'
+time "${@:-help}"

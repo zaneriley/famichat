@@ -1,0 +1,64 @@
+@import url("tailwindcss/base");
+@import url("tailwindcss/components");
+@import url("tailwindcss/utilities");
+@import url("./_fontface.css");
+@import url("./_color.css");
+@import url("./_typography.css");
+
+@property --fantazio-rotate {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 15deg;
+}
+
+.u-container {
+  max-width: var(--grid-max-width);
+  padding-inline: var(--grid-outer-margins);
+  margin-inline: auto;
+}
+
+.u-grid {
+  display: grid;
+  gap: var(--grid-gutter);
+}
+
+.col-span-12-children > * {
+  grid-column: span 12;
+}
+
+body {
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  min-height: 100vh;
+  hanging-punctuation: allow-end last; /* Safari only */
+}
+
+* {
+  font-variation-settings: "wght" var(--font-wght), "wdth" var(--font-wdth);
+  font-feature-settings: "fina" 1, "kern" 1, "liga" 1, "onum" 1, "zero" 1,
+    "ss05" 1, "ss01" 1;
+  font-synthesis: none;
+}
+
+.dropcap {
+  display: block;
+  float: left;
+  text-align: left;
+  text-transform: uppercase;
+  line-height: 0.7;
+  font-size: calc(3em + 2rem); /* em is # of lines, rem is # of line-height units between lines */
+  margin-top: 0.11em; /* magic unit, needs to be computed somehow */
+  margin-right: var(--space-1xs);
+  font-style: normal;
+}
+
+html[lang="ja"] * {
+  line-height: var(--cjk-lh) !important;
+}
+@supports (text-justify: inter-character) {
+  .text-justify {
+    text-align: justify;
+    text-justify: inter-character;
+    text-align-last: left;
+  }
+}
