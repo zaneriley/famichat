@@ -1,0 +1,24 @@
+{
+  "skip_files": [
+    "test",
+    "lib/famichat_web/components/core_components.ex",
+    "lib/famichat_web/live/components/dev_toolbar_component.ex",
+    "lib/famichat/release.ex",
+    "lib/famichat/logger_formatter.ex",
+    "lib/famichat_web/controllers/error_json",
+    "lib/famichat_web/controllers/up_controller.ex"
+  ],
+  "coverage_options": {
+    "treat_no_relevant_lines_as_covered": true,
+    "output_dir": "code-coverage/"
+  },
+  "terminal_options": {
+    "file_column_width": 40
+  },
+  "custom_stop_words": [
+    "defmodule",
+    "defrecord",
+    "defimpl",
+    "def.+do"
+  ]
+}
