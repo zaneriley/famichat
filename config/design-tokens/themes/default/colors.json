@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/json",
+  "comment": "Default theme references for color, with possible overrides from base.",
+  "colors": {
+    "textColor": {
+      "main": "{colors.neutral.0}",
+      "callout": "{colors.whiteAbsolute}",
+      "deemphasized": "{colors.dusk.500}",
+      "suppressed": "{colors.dusk.600}",
+      "accent": "{colors.ochre.0}"
+    }
+  }
+} 

@@ -4,7 +4,7 @@ defmodule Famichat.MixProject do
   def project do
     [
       app: :famichat,
-      version: "0.4.1-alpha.1",
+      version: "0.0.1",
       elixir: "~> 1.13",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -72,7 +72,8 @@ defmodule Famichat.MixProject do
       {:telemetry_poller, "1.1.0"},
       {:timex, "~> 3.7"},
       {:yamerl, "~> 0.10.0"},
-      {:uuid, "~> 1.1"}
+      {:uuid, "~> 1.1"},
+      {:cors_plug, "~> 3.0"}
     ]
   end
 
@@ -81,7 +82,8 @@ defmodule Famichat.MixProject do
       setup: ["deps.get", "ecto.setup", "cmd npm install --prefix assets"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"]
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      "ecto.seed": ["run priv/repo/seeds.exs"]
     ]
   end
 end

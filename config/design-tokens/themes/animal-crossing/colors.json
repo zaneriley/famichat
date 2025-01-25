@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json.schemastore.org/json",
+  "comment": "Animal Crossing inspired theme with natural, cheerful colors",
+  "colors": {
+    "whitePoint": "oklch(98% 0.01 95deg)",
+    "blackPoint": "oklch(25% 0.02 275deg)",
+
+    "leaf": {
+      "100": "oklch(95% 0.12 145deg)",
+      "200": "oklch(90% 0.15 145deg)",
+      "300": "oklch(85% 0.18 145deg)",
+      "400": "oklch(80% 0.20 145deg)",
+      "500": "oklch(75% 0.22 145deg)",
+      "600": "oklch(70% 0.24 145deg)"
+    },
+
+    "sky": {
+      "100": "oklch(95% 0.10 235deg)",
+      "200": "oklch(90% 0.12 235deg)",
+      "300": "oklch(85% 0.14 235deg)",
+      "400": "oklch(80% 0.16 235deg)",
+      "500": "oklch(75% 0.18 235deg)"
+    },
+
+    "sand": {
+      "100": "oklch(95% 0.05 85deg)",
+      "200": "oklch(90% 0.07 85deg)",
+      "300": "oklch(85% 0.09 85deg)",
+      "400": "oklch(80% 0.11 85deg)"
+    },
+
+    "peach": {
+      "100": "oklch(95% 0.07 45deg)",
+      "200": "oklch(90% 0.09 45deg)",
+      "300": "oklch(85% 0.11 45deg)",
+      "400": "oklch(80% 0.13 45deg)"
+    },
+
+    "textColor": {
+      "main": "oklch(30% 0.02 275deg)",
+      "callout": "oklch(25% 0.02 275deg)",
+      "deemphasized": "oklch(45% 0.04 275deg)",
+      "suppressed": "oklch(60% 0.06 275deg)",
+      "accent": "oklch(65% 0.20 145deg)"
+    },
+
+    "background": {
+      "primary": "oklch(98% 0.02 85deg)",
+      "secondary": "oklch(95% 0.04 85deg)",
+      "tertiary": "oklch(90% 0.06 85deg)",
+      "accent": "oklch(85% 0.18 145deg)"
+    }
+  }
+} 

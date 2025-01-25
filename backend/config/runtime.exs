@@ -15,7 +15,7 @@ config :famichat, FamichatWeb.Endpoint,
   static_url: [
     host: System.get_env("URL_STATIC_HOST", url_host)
   ],
-  http: [port: System.get_env("PORT", "8000")],
+  http: [port: System.get_env("PORT", "8001")],
   secret_key_base: System.fetch_env!("SECRET_KEY_BASE"),
   # It is completely safe to hard code and use this salt value.
   live_view: [signing_salt: "k4yfnQW4r"]

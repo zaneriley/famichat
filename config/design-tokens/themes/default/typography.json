@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/json",
+  "comment": "Default theme references for typography—currently the same as base, but can override or extend as needed.",
+  "typography": {
+    "baseSize": "{typography.baseSize}",
+    "fontSizes": "{typography.fontSizes}",
+    "lineHeight": "{typography.lineHeight}"
+  }
+} 

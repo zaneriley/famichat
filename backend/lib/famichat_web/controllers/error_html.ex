@@ -33,7 +33,7 @@ defmodule FamichatWeb.ErrorHTML do
   def dynamic_home_url do
     scheme = Application.get_env(:famichat, :url_scheme, "http")
     host = Application.get_env(:famichat, :url_host, "localhost")
-    port = Application.get_env(:famichat, :url_port, "8000")
+    port = Application.get_env(:famichat, :url_port, "8001")
 
     port_segment = if port in ["80", "443"], do: "", else: ":#{port}"
     "#{scheme}://#{host}#{port_segment}"

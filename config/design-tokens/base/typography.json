@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/json",
+  "comment": "Base typography tokens for sizes and line-height references.",
+  "typography": {
+    "baseSize": "clamp(1.13rem, 0vi + 1.13rem, 1.13rem)",
+
+    "fontSizes": {
+      "2xs": "var(--fs-2xs)",
+      "1xs": "var(--fs-1xs)",
+      "md": "var(--fs-md)",
+      "1xl": "var(--fs-1xl)",
+      "2xl": "var(--fs-2xl)",
+      "3xl": "var(--fs-3xl)",
+      "4xl": "var(--fs-4xl)"
+    },
+
+    "lineHeight": {
+      "normal": "1.5",
+      "cjk": "calc(1em + 1rem)"
+    }
+  }
+} 

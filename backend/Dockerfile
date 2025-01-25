@@ -20,7 +20,6 @@ RUN apt-get update \
 # Install Playwright
 RUN npx playwright install --with-deps
 
-
 USER node
 
 # Copy package.json and yarn files and install dependencies
@@ -77,7 +76,7 @@ RUN if [ "${MIX_ENV}" = "dev" ]; then \
   mix deps.get --verbose; else mix deps.get --only "${MIX_ENV}"; fi
 
 # Copy config files and compile dependencies  
-COPY --chown=elixir:elixir config/config.exs config/"${MIX_ENV}".exs config/
+COPY --chown=elixir:elixir config config/
 RUN mix deps.compile
 
 # Copy built assets from Stage 1
@@ -90,10 +89,11 @@ RUN if [ "${MIX_ENV}" != "dev" ]; then \
   && cp -r /public/* /app/priv/static/ \
   && mix phx.digest && mix release; fi
 
+COPY --chown=elixir:elixir bin/docker-entrypoint-web /app/bin/
   
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
-EXPOSE 8000
+EXPOSE 8001
 
 CMD ["iex", "-S", "mix", "phx.server"]
 
@@ -125,13 +125,13 @@ ENV USER=elixir
 # Copy built assets and release from Stage 2
 COPY --chown=elixir:elixir --from=dev /public /public
 COPY --chown=elixir:elixir --from=dev /mix/_build/prod/rel/famichat ./
-COPY --chown=elixir:elixir bin/docker-entrypoint-web bin/
+COPY --chown=elixir:elixir bin/docker-entrypoint-web /app/bin/
 
 COPY --chown=elixir:elixir --from=dev /app/priv /app/priv
 RUN mkdir -p /app/priv/static && chown elixir:elixir /app/priv/static
 
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
-EXPOSE 8000
+EXPOSE 8001
 
 CMD ["bin/famichat", "start"]
