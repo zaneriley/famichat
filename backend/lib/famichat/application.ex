@@ -18,17 +18,6 @@ defmodule Famichat.Application do
       Famichat.Cache
     ]
 
-    # Add file watcher for all environments
-    watcher_config =
-      Application.get_env(
-        :famichat,
-        Famichat.Content.FileManagement.Watcher,
-        []
-      )
-
-    children =
-      children ++ [{Famichat.Content.FileManagement.Watcher, watcher_config}]
-
     opts = [strategy: :one_for_one, name: Famichat.Supervisor]
     Supervisor.start_link(children, opts)
   end

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/json",
+  "comment": "Base color tokens, including brand-agnostic primitives and base palette reference.",
+  "colors": {
+    "whiteAbsolute": "oklch(100% 0 0deg)",
+    "blackAbsolute": "oklch(0% 0 0deg)",
+    "whitePoint": "oklch(90.76% 0.0184 316.61deg)",
+    "blackPoint": "oklch(11.47% 0 0deg)",
+
+    "dusk": {
+      "0": "{colors.whitePoint}",
+      "100": "oklch(88.73% 0.056 324.15deg)",
+      "200": "oklch(85.53% 0.072 314.14deg)",
+      "300": "oklch(81.03% 0.086 303.13deg)",
+      "400": "oklch(76.32% 0.1 291.05deg)",
+      "500": "oklch(68.67% 0.095 276.77deg)",
+      "600": "oklch(56.6% 0.07 263.77deg)",
+      "700": "oklch(41.84% 0.038 261.51deg)",
+      "800": "oklch(33.09% 0.022 259.38deg)",
+      "900": "oklch(28.04% 0.012 264.36deg)",
+      "1000": "oklch(25.26% 0.008 274.64deg)"
+    },
+
+    "neutral": {
+      "0": "{colors.whitePoint}",
+      "100": "oklch(78.23% 0.036 333.34deg)",
+      "200": "#bd9ca6",
+      "300": "oklch(77.77% 0.0704 75.85deg)"
+    },
+
+    "ochre": {
+      "0": "oklch(77.77% 0.0704 75.85deg)"
+    }
+  }
+} 

@@ -45,6 +45,8 @@ defmodule FamichatWeb.Router do
 
   scope "/api/v1", FamichatWeb do
     pipe_through :api
+
+    get "/hello", HelloController, :index
   end
 
   # Enables LiveDashboard only for development.
@@ -78,7 +80,8 @@ defmodule FamichatWeb.Router do
   scope "/", FamichatWeb do
     pipe_through [:browser, :locale]
 
-    live "/", HomeLive
+    get "/", HelloController, :index # Temporarily point root to HelloController
+    get "/:locale", HelloController, :index # And locale route as well
   end
 
   # Catch-all route for unmatched paths

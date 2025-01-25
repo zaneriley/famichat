@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/json",
+  "comment": "Base spacing tokens e.g., grid widths, base spacing steps.",
+  "spacing": {
+    "gridMaxWidth": "1440px",
+    "gridGutter": "3rem",
+    "gridOuterMargins": "0.5rem",
+
+    "spaceSizes": {
+      "3xs": "var(--space-3xs)",
+      "2xs": "var(--space-2xs)",
+      "1xs": "var(--space-1xs)",
+      "md": "var(--space-md)",
+      "1xl": "var(--space-1xl)",
+      "2xl": "var(--space-2xl)",
+      "3xl": "var(--space-3xl)",
+      "4xl": "var(--space-4xl)"
+    }
+  }
+} 

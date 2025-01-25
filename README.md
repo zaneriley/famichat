@@ -3,6 +3,35 @@
 This repository contains a minimal Docker setup for an Elixir/Phoenix backend
 and a Flutter app to validate end-to-end functionality.
 
+
+## Overview
+```
++---------------------+      WebSocket/Phoenix Channels     +---------------------+
+| Flutter Client App  | <-----------------------------------> | Phoenix Backend     |
++---------------------+                                     +---------------------+
+      |                                                         |
+      | UI, State Mgmt, WebRTC                                  | (Controllers, Channels, Bots/Agents,       
+      | WebRTC Signaling, DB Access                             |
+      v                                                         v
++---------------------+                                     +---------------------+
+| Rich Media (Local  |                                      | PostgreSQL Database |
+| Caching, Playback) |                                      +---------------------+
++---------------------+                                          ^
+                                                                 | (Metadata, Text, Media Refs)
+                                                                 |
+                                                         +---------------------+
+                                                         | Object Storage      |
+                                                         | AWS S3, MinIO, etc. |
+                                                         +---------------------+
+                                                                 ^
+                                                                 | (Rich Media Files - Images, Videos, Audio)
+                                                                 |
+                                                         +---------------------+
+                                                         | TURN/STUN Servers   |
+                                                         | (for WebRTC)        |
+                                                         +---------------------+
+
+```
 ## Prerequisites
 
 - Docker / Docker Compose
@@ -72,36 +101,6 @@ and a Flutter app to validate end-to-end functionality.
    ```
 
 ## Troubleshooting
-
-### Web-Specific Issues
-
-1. **CORS Errors**
-   
-   If you see network errors in the browser console, you may need to enable CORS in the Phoenix backend:
-
-   ```elixir
-   # In mix.exs, add:
-   {:cors_plug, "~> 3.0"}
-   
-   # In endpoint.ex, add:
-   plug CORSPlug, origin: ["http://localhost:3000"]
-   ```
-
-2. **SDK Version Issues**
-   
-   If you see SDK constraint errors, ensure your `pubspec.yaml` has the correct SDK version:
-
-   ```yaml
-   environment:
-     sdk: '>=3.6.0 <4.0.0'
-   ```
-
-3. **Web Server Port Conflicts**
-   
-   If port 3000 is already in use:
-   ```bash
-   flutter run -d chrome --web-port=3001
-   ```
 
 ### General Flutter Issues
 

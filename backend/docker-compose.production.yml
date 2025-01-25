@@ -14,7 +14,7 @@ services:
       - "MIX_ENV=${MIX_ENV:-prod}"
       - "NODE_ENV=${NODE_ENV:-production}"
     ports:
-      - "${DOCKER_WEB_PORT_FORWARD:-0.0.0.0:8000}:${PORT:-8000}"
+      - "${DOCKER_WEB_PORT_FORWARD:-0.0.0.0:8001}:${PORT:-8001}"
     depends_on:
       postgres:
         condition: service_healthy

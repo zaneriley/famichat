@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/json",
+  "comment": "Animal Crossing inspired typography with rounded, friendly characteristics",
+  "typography": {
+    "baseSize": "clamp(1.15rem, 0.2vi + 1.1rem, 1.2rem)",
+    
+    "fontFamilies": {
+      "primary": ["FinkHeavy", "Baloo 2", "system-ui", "sans-serif"],
+      "secondary": ["Seurat Pro", "M PLUS Rounded 1c", "system-ui", "sans-serif"],
+      "body": ["M PLUS Rounded 1c", "system-ui", "sans-serif"]
+    },
+
+    "fontWeights": {
+      "regular": "500",
+      "medium": "600",
+      "bold": "700"
+    },
+
+    "fontSizes": {
+      "2xs": "0.85rem",
+      "1xs": "1rem",
+      "md": "1.15rem",
+      "1xl": "1.35rem",
+      "2xl": "1.75rem",
+      "3xl": "2.25rem",
+      "4xl": "3rem"
+    },
+
+    "lineHeight": {
+      "normal": "1.6",
+      "cjk": "calc(1.1em + 1rem)",
+      "heading": "1.2"
+    },
+
+    "letterSpacing": {
+      "normal": "0.02em",
+      "loose": "0.05em",
+      "tight": "0.01em"
+    }
+  }
+} 

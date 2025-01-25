@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/json",
+  "comment": "Animal Crossing inspired spacing with generous, friendly proportions",
+  "spacing": {
+    "gridMaxWidth": "1280px",
+    "gridGutter": "2rem",
+    "gridOuterMargins": "1rem",
+
+    "spaceSizes": {
+      "3xs": "0.25rem",
+      "2xs": "0.5rem",
+      "1xs": "0.75rem",
+      "md": "1.25rem",
+      "1xl": "2rem",
+      "2xl": "3rem",
+      "3xl": "4rem",
+      "4xl": "6rem"
+    },
+
+    "borderRadius": {
+      "small": "0.75rem",
+      "medium": "1.25rem",
+      "large": "2rem",
+      "pill": "9999px"
+    },
+
+    "shadows": {
+      "small": "0 2px 4px oklch(0% 0 0deg / 0.1)",
+      "medium": "0 4px 8px oklch(0% 0 0deg / 0.12)",
+      "large": "0 8px 16px oklch(0% 0 0deg / 0.15)"
+    }
+  }
+} 
