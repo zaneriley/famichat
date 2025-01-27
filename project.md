@@ -2,7 +2,7 @@
 
 ## Purpose
 - Validate Docker-based Phoenix + Postgres.
-- Confirm minimal SwiftUI iOS client can fetch data from the backend.
+- Confirm minimal Flutter client that can fetch data from the backend.
 - Provide a foundation for future customizations and white-label features.
 
 ## Next Steps
@@ -13,7 +13,32 @@
 ## Definition of Done
 - `docker-compose up` shows a Phoenix "Hello World" message in a browser.
 - The iOS app fetches and displays that message in a Text view.
+----
+# NEXT STEPS
+Plan:
 
+    Address Flutter client fetching data:
+        Current State: The Flutter app already fetches data (the "Hello" message). The next step is to generalize this to fetch actual data related to the Famichat application (messages, user data, etc.).
+        Next Steps:
+            Define data models: Determine the structure of data to be fetched from the backend (e.g., message model with sender, content, timestamp).
+            Create backend endpoints: Develop Phoenix endpoints to serve this data.
+            Update Flutter client: Modify the Flutter app to:
+                Fetch data from the new backend endpoints.
+                Parse the JSON response into Flutter data models.
+                Display the data in the UI.
+            Consider state management: For a real application, think about using state management solutions (Provider, BLoC, Riverpod) to handle data efficiently in Flutter.
+
+    Address foundation for customizations and white-labeling:
+        Current State: Design tokens are in place in the backend, but not yet consumed by the Flutter client.
+        Next Steps:
+            Backend theme endpoint: Create a Phoenix endpoint to serve design tokens as JSON. This endpoint could be dynamic to serve different themes based on configuration.
+            Flutter theme integration:
+                Fetch design tokens from the backend endpoint in the Flutter app.
+                Use a theming solution in Flutter (e.g., ThemeData, custom theme classes) to apply these tokens to the UI.
+                Implement logic to switch between themes (white-labeling aspect).
+            Configuration: Extend app_settings.json or introduce a new configuration mechanism to handle theme selection and other white-label settings.
+
+    Structure of the Response:  Organize the response into actionable steps, starting with the Flutter client data fetching, then moving to theming and customization. Provide code snippets or guidance where applicable.
 
 ---
 

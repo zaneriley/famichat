@@ -43,7 +43,7 @@ RUN if [ "${NODE_ENV}" != "development" ]; then \
 ###############################################################################
 
 # Stage 2: Development environment
-FROM elixir:1.17.2-slim AS dev
+FROM elixir:1.18-slim AS dev
 LABEL maintainer="Zane Riley <zaneriley@gmail.com>"
 
 WORKDIR /app
@@ -100,7 +100,7 @@ CMD ["iex", "-S", "mix", "phx.server"]
 ###############################################################################
 
 # Stage 3: Production environment
-FROM elixir:1.17.2-slim AS prod
+FROM elixir:1.18-slim AS prod
 LABEL maintainer="Zane Riley <zaneriley@gmail.com>"
 
 WORKDIR /app
