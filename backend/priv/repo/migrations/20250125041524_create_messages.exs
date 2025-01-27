@@ -3,6 +3,7 @@ defmodule Famichat.Repo.Migrations.CreateMessages do
 
   def change do
     IO.puts("Migration: CreateMessages - Starting table creation...")
+
     create table(:messages, primary_key: false) do
       IO.puts("Migration: CreateMessages - Creating table structure...")
       add :id, :binary_id, primary_key: true
@@ -18,10 +19,13 @@ defmodule Famichat.Repo.Migrations.CreateMessages do
       add :metadata, :map, default: %{}
       IO.puts("Migration: CreateMessages - Added column: metadata")
       add :timestamp, :utc_datetime_usec
-      IO.puts("Migration: CreateMessages - Added column: timestamp")  # <--- CRITICAL COLUMN
-      timestamps([type: :utc_datetime_usec]) # Corrected timestamps macro usage
+      # <--- CRITICAL COLUMN
+      IO.puts("Migration: CreateMessages - Added column: timestamp")
+      # Corrected timestamps macro usage
+      timestamps(type: :utc_datetime_usec)
       IO.puts("Migration: CreateMessages - Added timestamps (inserted_at, updated_at)")
     end
+
     IO.puts("Migration: CreateMessages - Table 'messages' created.")
 
     IO.puts("Migration: CreateMessages - Creating index on sender_id...")

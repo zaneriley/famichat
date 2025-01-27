@@ -7,7 +7,8 @@ defmodule Famichat.ChatFixtures do
   @doc """
   Generate a unique user username.
   """
-  def unique_user_username, do: "some username#{System.unique_integer([:positive])}"
+  def unique_user_username,
+    do: "some username#{System.unique_integer([:positive])}"
 
   @doc """
   Generate a user.

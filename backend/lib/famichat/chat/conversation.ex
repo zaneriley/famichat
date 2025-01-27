@@ -9,40 +9,51 @@ defmodule Famichat.Chat.Conversation do
   import Ecto.Changeset
 
   @type t :: %__MODULE__{
-    id: Ecto.UUID.t(),
-    conversation_type: :direct | :group | :self,
-    metadata: map(),
-    messages: [Famichat.Chat.Message.t()] | nil,
-    users: [Famichat.Chat.User.t()] | nil,
-    inserted_at: DateTime.t(),
-    updated_at: DateTime.t()
-  }
+          id: Ecto.UUID.t(),
+          conversation_type: :direct | :group | :self,
+          metadata: map(),
+          messages: [Famichat.Chat.Message.t()] | nil,
+          users: [Famichat.Chat.User.t()] | nil,
+          inserted_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "conversations" do
-    field :conversation_type, Ecto.Enum, values: [:direct, :group, :self], default: :direct  # Enum for conversation types
-    field :metadata, :map # For future metadata (e.g., group chat name, etc.)
+    # Enum for conversation types
+    field :conversation_type, Ecto.Enum,
+      values: [:direct, :group, :self],
+      default: :direct
+
+    # For future metadata (e.g., group chat name, etc.)
+    field :metadata, :map
 
     has_many :messages, Famichat.Chat.Message, foreign_key: :conversation_id
-    many_to_many :users, Famichat.Chat.User, join_through: "conversation_users" # Explicit many-to-many for users
+    # Explicit many-to-many for users
+    many_to_many :users, Famichat.Chat.User, join_through: "conversation_users"
 
     timestamps()
   end
 
   @doc false
-  @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t() # Changed t() to __MODULE__.t()
+  # Changed t() to __MODULE__.t()
+  @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(conversation, attrs) do
     conversation
     |> cast(attrs, [:conversation_type, :metadata])
-    |> validate_required([:conversation_type]) # conversation_type will always be set, but good to have
-    |> cast_assoc(:users, with: &user_changeset/2) # Ensure users association is handled correctly if needed in changeset
+    # conversation_type will always be set, but good to have
+    |> validate_required([:conversation_type])
+    # Ensure users association is handled correctly if needed in changeset
+    |> cast_assoc(:users, with: &user_changeset/2)
   end
 
   @doc false
   @spec user_changeset(Famichat.Chat.User.t(), map()) :: Ecto.Changeset.t()
-  defp user_changeset(user, attrs) do #Dummy user changeset, adapt if needed for associations
+  # Dummy user changeset, adapt if needed for associations
+  defp user_changeset(user, attrs) do
     user
-    |> Famichat.Chat.User.changeset(attrs) # assuming User has its own changeset
+    # assuming User has its own changeset
+    |> Famichat.Chat.User.changeset(attrs)
   end
 end
