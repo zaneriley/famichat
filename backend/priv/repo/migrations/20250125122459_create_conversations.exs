@@ -3,9 +3,11 @@ defmodule Famichat.Repo.Migrations.CreateConversations do
 
   def change do
     IO.puts("Migration: CreateConversations - Starting table creation...")
-    create table(:conversations, primary_key: false) do  # Specify primary_key: false for custom primary key if needed, or remove if default is ok.
+    # Specify primary_key: false for custom primary key if needed, or remove if default is ok.
+    create table(:conversations, primary_key: false) do
       IO.puts("Migration: CreateConversations - Creating table structure...")
-      add :id, :binary_id, primary_key: true # Add primary key if needed, binary_id is a good choice
+      # Add primary key if needed, binary_id is a good choice
+      add :id, :binary_id, primary_key: true
       IO.puts("Migration: CreateConversations - Added column: id")
 
       IO.puts("Migration: CreateConversations - Adding column: user1_id...")
@@ -16,9 +18,11 @@ defmodule Famichat.Repo.Migrations.CreateConversations do
       add :user2_id, references(:users, on_delete: :delete_all, type: :binary_id), null: false
       IO.puts("Migration: CreateConversations - Added column: user2_id")
 
-      timestamps([type: :utc_datetime_usec]) # Correct # Keep timestamps type consistent
+      # Correct # Keep timestamps type consistent
+      timestamps(type: :utc_datetime_usec)
       IO.puts("Migration: CreateConversations - Added timestamps (inserted_at, updated_at)")
     end
+
     IO.puts("Migration: CreateConversations - Table 'conversations' created.")
 
     IO.puts("Migration: CreateConversations - Creating index on user1_id...")

@@ -56,7 +56,10 @@ defmodule Famichat.Chat do
       {:error, %Ecto.Changeset{}}
 
   """
-  @spec create_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()} | {:error, :invalid_input}
+  @spec create_user(map()) ::
+          {:ok, User.t()}
+          | {:error, Ecto.Changeset.t()}
+          | {:error, :invalid_input}
   def create_user(attrs) when is_map(attrs) do
     try do
       %User{}

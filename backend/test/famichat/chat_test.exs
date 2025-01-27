@@ -41,7 +41,10 @@ defmodule Famichat.ChatTest do
 
     test "update_user/2 with invalid data returns error changeset" do
       user = user_fixture()
-      assert {:error, %Ecto.Changeset{}} = Chat.update_user(user, @invalid_attrs)
+
+      assert {:error, %Ecto.Changeset{}} =
+               Chat.update_user(user, @invalid_attrs)
+
       assert user == Chat.get_user!(user.id)
     end
 

@@ -23,10 +23,12 @@ defmodule Famichat.Chat.MessageService do
   - `{:error, :invalid_input}` on invalid input parameters.
   """
   @spec send_message(Ecto.UUID.t(), Ecto.UUID.t(), String.t()) ::
-    {:ok, Message.t()} |
-    {:error, Ecto.Changeset.t()} |
-    {:error, :invalid_input}
-  def send_message(sender_id, conversation_id, content) when is_binary(sender_id) and is_binary(conversation_id) and is_binary(content) do
+          {:ok, Message.t()}
+          | {:error, Ecto.Changeset.t()}
+          | {:error, :invalid_input}
+  def send_message(sender_id, conversation_id, content)
+      when is_binary(sender_id) and is_binary(conversation_id) and
+             is_binary(content) do
     message_params = %{
       message_type: :text,
       content: content,
@@ -42,5 +44,6 @@ defmodule Famichat.Chat.MessageService do
       _ -> {:error, :invalid_input}
     end
   end
+
   def send_message(_, _, _), do: {:error, :invalid_input}
 end

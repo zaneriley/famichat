@@ -26,7 +26,7 @@ messages = [
     media_url: "/uploads/test/sample.jpg",
     metadata: %{
       dimensions: %{width: 800, height: 600},
-      size: 1024567,
+      size: 1_024_567,
       mime_type: "image/jpeg"
     }
   }

@@ -80,8 +80,10 @@ defmodule FamichatWeb.Router do
   scope "/", FamichatWeb do
     pipe_through [:browser, :locale]
 
-    get "/", HelloController, :index # Temporarily point root to HelloController
-    get "/:locale", HelloController, :index # And locale route as well
+    # Temporarily point root to HelloController
+    get "/", HelloController, :index
+    # And locale route as well
+    get "/:locale", HelloController, :index
   end
 
   # Catch-all route for unmatched paths

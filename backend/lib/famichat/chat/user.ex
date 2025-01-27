@@ -8,11 +8,11 @@ defmodule Famichat.Chat.User do
   import Ecto.Changeset
 
   @type t :: %__MODULE__{
-    id: Ecto.UUID.t() | nil,
-    username: String.t() | nil,
-    inserted_at: DateTime.t() | nil,
-    updated_at: DateTime.t() | nil
-  }
+          id: Ecto.UUID.t() | nil,
+          username: String.t() | nil,
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
+        }
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
