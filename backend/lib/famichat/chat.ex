@@ -5,7 +5,6 @@ defmodule Famichat.Chat do
 
   import Ecto.Query, warn: false
   alias Famichat.Repo
-
   alias Famichat.Chat.User
 
   @doc """
@@ -40,6 +39,14 @@ defmodule Famichat.Chat do
   @doc """
   Creates a user.
 
+  ## Parameters
+    * `attrs` - Map of attributes for the user
+
+  ## Returns
+    * `{:ok, user}` - The created user
+    * `{:error, changeset}` - If the user is invalid
+    * `{:error, :invalid_input}` - If the input is invalid
+
   ## Examples
 
       iex> create_user(%{field: value})
@@ -49,11 +56,18 @@ defmodule Famichat.Chat do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_user(attrs \\ %{}) do
-    %User{}
-    |> User.changeset(attrs)
-    |> Repo.insert()
+  @spec create_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()} | {:error, :invalid_input}
+  def create_user(attrs) when is_map(attrs) do
+    try do
+      %User{}
+      |> User.changeset(attrs)
+      |> Repo.insert()
+    rescue
+      _ -> {:error, :invalid_input}
+    end
   end
+
+  def create_user(_), do: {:error, :invalid_input}
 
   @doc """
   Updates a user.
