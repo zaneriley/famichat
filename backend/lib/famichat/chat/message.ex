@@ -12,18 +12,18 @@ defmodule Famichat.Chat.Message do
   @type status :: :sent | :delivered | :read
 
   @type t :: %__MODULE__{
-    id: Ecto.UUID.t(),
-    message_type: message_type(),
+    id: Ecto.UUID.t() | nil,
+    message_type: message_type() | nil,
     content: String.t() | nil,
     media_url: String.t() | nil,
     metadata: map() | nil,
-    status: status(),
-    sender_id: Ecto.UUID.t(),
-    conversation_id: Ecto.UUID.t(),
+    status: status() | nil,
+    sender_id: Ecto.UUID.t() | nil,
+    conversation_id: Ecto.UUID.t() | nil,
     sender: Famichat.Chat.User.t() | nil,
     conversation: Famichat.Chat.Conversation.t() | nil,
-    inserted_at: DateTime.t(),
-    updated_at: DateTime.t()
+    inserted_at: DateTime.t() | nil,
+    updated_at: DateTime.t() | nil
   }
 
   @primary_key {:id, :binary_id, autogenerate: true} # Explicit primary key type if needed - defaults to UUID
@@ -41,7 +41,7 @@ defmodule Famichat.Chat.Message do
   end
 
   @doc false
-  @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t() # Changed t() to __MODULE__.t()
+  @spec changeset(%__MODULE__{} | Ecto.Changeset.t(), map()) :: Ecto.Changeset.t()
   def changeset(message, attrs) do
     message
     |> cast(attrs, [:message_type, :content, :media_url, :metadata, :status, :sender_id, :conversation_id])

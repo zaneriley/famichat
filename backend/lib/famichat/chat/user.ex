@@ -8,10 +8,10 @@ defmodule Famichat.Chat.User do
   import Ecto.Changeset
 
   @type t :: %__MODULE__{
-    id: Ecto.UUID.t(),
-    username: String.t(),
-    inserted_at: DateTime.t(),
-    updated_at: DateTime.t()
+    id: Ecto.UUID.t() | nil,
+    username: String.t() | nil,
+    inserted_at: DateTime.t() | nil,
+    updated_at: DateTime.t() | nil
   }
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -23,7 +23,7 @@ defmodule Famichat.Chat.User do
   end
 
   @doc false
-  @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t() # Changed t() to __MODULE__.t()
+  @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(user, attrs) do
     user
     |> cast(attrs, [:username])

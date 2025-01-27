@@ -5,31 +5,42 @@ defmodule Famichat.Chat.MessageService do
   This service module encapsulates the logic for sending messages,
   handling validations, and interacting with the database to persist messages.
   """
-  alias Famichat.Repo
-  alias Famichat.Chat
+  import Ecto.Query, warn: false
+  alias Famichat.{Repo}
   alias Famichat.Chat.Message
 
   @doc """
-  Sends a text message.
+  Sends a new text message in a conversation.
 
-  Receives sender_id, conversation_id, and message content,
-  creates a new message, and inserts it into the database.
+  ## Parameters
+  - `sender_id` - The ID of the user sending the message
+  - `conversation_id` - The ID of the conversation to send the message in
+  - `content` - The text content of the message
 
   ## Returns
-  - `{:ok, message}` on successful message creation, where `message` is the inserted `Famichat.Chat.Message` struct.
-  - `{:error, changeset}` on validation errors, where `changeset` is an `Ecto.Changeset` struct containing error information.
+  - `{:ok, Message.t()}` on success, where `Message.t()` is the created message.
+  - `{:error, Ecto.Changeset.t()}` on validation errors, where `Ecto.Changeset.t()` contains error information.
+  - `{:error, :invalid_input}` on invalid input parameters.
   """
-  @spec send_message(Ecto.UUID.t(), Ecto.UUID.t(), String.t()) :: {:ok, Message.t()} | {:error, Ecto.Changeset.t()}
-  def send_message(sender_id, conversation_id, content) do
+  @spec send_message(Ecto.UUID.t(), Ecto.UUID.t(), String.t()) ::
+    {:ok, Message.t()} |
+    {:error, Ecto.Changeset.t()} |
+    {:error, :invalid_input}
+  def send_message(sender_id, conversation_id, content) when is_binary(sender_id) and is_binary(conversation_id) and is_binary(content) do
     message_params = %{
-      sender_id: sender_id,
-      conversation_id: conversation_id,
+      message_type: :text,
       content: content,
-      message_type: :text # For Level 1, we only send text messages
+      sender_id: sender_id,
+      conversation_id: conversation_id
     }
 
-    %Message{}
-    |> Message.changeset(message_params)
-    |> Repo.insert()
+    try do
+      %Message{}
+      |> Message.changeset(message_params)
+      |> Repo.insert()
+    rescue
+      _ -> {:error, :invalid_input}
+    end
   end
+  def send_message(_, _, _), do: {:error, :invalid_input}
 end

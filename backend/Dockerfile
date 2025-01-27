@@ -51,12 +51,22 @@ WORKDIR /app
 ARG UID=1000
 ARG GID=1000
 
-# Install development dependencies and clean up apt cache
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates build-essential curl inotify-tools git  \
+# Configure apt and install essential packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gnupg \
+    wget \
+  && echo "deb http://deb.debian.org/debian bookworm main contrib non-free" > /etc/apt/sources.list \
+  && echo "deb http://deb.debian.org/debian-security bookworm-security main contrib non-free" >> /etc/apt/sources.list \
+  && echo "deb http://deb.debian.org/debian bookworm-updates main contrib non-free" >> /etc/apt/sources.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    build-essential \
+    curl \
+    inotify-tools \
+    git \
   && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man \
   && apt-get clean \
-  # Create elixir user and group and set ownership
   && groupadd -g "${GID}" elixir \
   && useradd --create-home --no-log-init -u "${UID}" -g "${GID}" elixir \
   && mkdir -p /mix && chown elixir:elixir -R /mix /app
@@ -108,9 +118,19 @@ WORKDIR /app
 ARG UID=1000
 ARG GID=1000
 
-# Install production dependencies and clean up apt cache
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl inotify-tools git \
+# Configure apt and install essential packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gnupg \
+    wget \
+  && echo "deb http://deb.debian.org/debian bookworm main contrib non-free" > /etc/apt/sources.list \
+  && echo "deb http://deb.debian.org/debian-security bookworm-security main contrib non-free" >> /etc/apt/sources.list \
+  && echo "deb http://deb.debian.org/debian bookworm-updates main contrib non-free" >> /etc/apt/sources.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    inotify-tools \
+    git \
   && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man \
   && apt-get clean \
   # Create elixir user and group and set ownership

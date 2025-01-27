@@ -412,6 +412,13 @@ defmodule Famichat.Chat.User do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @type t :: %__MODULE__{
+    id: Ecto.UUID.t(),
+    username: String.t(),
+    inserted_at: DateTime.t(),
+    updated_at: DateTime.t()
+  }
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "users" do
@@ -444,6 +451,24 @@ defmodule Famichat.Chat.Message do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @type message_type :: :text | :voice | :video | :image | :file | :poke | :reaction | :gif
+  @type status :: :sent | :delivered | :read
+
+  @type t :: %__MODULE__{
+    id: Ecto.UUID.t(),
+    message_type: message_type(),
+    content: String.t() | nil,
+    media_url: String.t() | nil,
+    metadata: map() | nil,
+    status: status(),
+    sender_id: Ecto.UUID.t(),
+    conversation_id: Ecto.UUID.t(),
+    sender: Famichat.Chat.User.t() | nil,
+    conversation: Famichat.Chat.Conversation.t() | nil,
+    inserted_at: DateTime.t(),
+    updated_at: DateTime.t()
+  }
+
   @primary_key {:id, :binary_id, autogenerate: true} # Explicit primary key type if needed - defaults to UUID
   schema "messages" do
     field :message_type, Ecto.Enum, values: [:text, :voice, :video, :image, :file, :poke, :reaction, :gif], default: :text # Enum for message types
@@ -468,7 +493,7 @@ defmodule Famichat.Chat.Message do
     |> validate_required([:content], where: [message_type: :text]) # Ensure content is present for text messages
     |> validate_length(:content, min: 1, where: [message_type: :text]) # Ensure content is not empty for text messages
   end
-endcd
+end
 ```
 
 # /srv/famichat/backend/lib/famichat/chat/message_service.ex
@@ -495,7 +520,7 @@ defmodule Famichat.Chat.MessageService do
   - `{:ok, message}` on successful message creation, where `message` is the inserted `Famichat.Chat.Message` struct.
   - `{:error, changeset}` on validation errors, where `changeset` is an `Ecto.Changeset` struct containing error information.
   """
-  @spec send_message(binary_id(), binary_id(), String.t()) :: {:ok, Message.t()} | {:error, Ecto.Changeset.t()}
+  @spec send_message(Ecto.UUID.t(), Ecto.UUID.t(), String.t()) :: {:ok, Message.t()} | {:error, Ecto.Changeset.t()}
   def send_message(sender_id, conversation_id, content) do
     message_params = %{
       sender_id: sender_id,
@@ -523,6 +548,16 @@ defmodule Famichat.Chat.Conversation do
   """
   use Ecto.Schema
   import Ecto.Changeset
+
+  @type t :: %__MODULE__{
+    id: Ecto.UUID.t(),
+    conversation_type: :direct | :group | :self,
+    metadata: map(),
+    messages: [Famichat.Chat.Message.t()] | nil,
+    users: [Famichat.Chat.User.t()] | nil,
+    inserted_at: DateTime.t(),
+    updated_at: DateTime.t()
+  }
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -766,4 +801,293 @@ defmodule Famichat.Repo do
     adapter: Ecto.Adapters.Postgres
 end
 ```
+
+# /srv/famichat/flutter/famichat/pubspec.yaml
+
+```yaml
+name: famichat
+description: A minimal Flutter project to test connectivity with the Famichat Phoenix backend.
+publish_to: "none"
+
+environment:
+  sdk: ">=2.17.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^0.13.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - "config/app_settings.json"```
+
+# /srv/famichat/flutter/famichat/analysis_options.yaml
+
+```yaml
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+
+# The following line activates a set of recommended lints for Flutter apps,
+# packages, and plugins designed to encourage good coding practices.
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  # The lint rules applied to this project can be customized in the
+  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
+  # included above or to enable additional rules. A list of all available lints
+  # and their documentation is published at https://dart.dev/lints.
+  #
+  # Instead of disabling a lint rule for the entire project in the
+  # section below, it can also be suppressed for a single line of code
+  # or a specific dart file by using the `// ignore: name_of_lint` and
+  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
+  # producing the lint.
+  rules:
+    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
+    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options
+```
+
+# /srv/famichat/flutter/famichat/lib/main.dart
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+void main() {
+  runApp(const FamichatApp());
+}
+
+class FamichatApp extends StatefulWidget {
+  const FamichatApp({super.key});
+
+  @override
+  State<FamichatApp> createState() => _FamichatAppState();
+}
+
+class _FamichatAppState extends State<FamichatApp> {
+  String appTitle = 'Loading...';
+  String apiUrl = 'http://127.0.0.1:4000/api/placeholder';
+
+  @override
+  void initState() {
+    super.initState();
+    _printAssetManifest();
+    _loadConfig();
+  }
+
+  Future<void> _printAssetManifest() async {
+    try {
+      final manifestContent = await rootBundle.loadString('AssetManifest.json');
+      print('AssetManifest.json contents:\n$manifestContent');
+    } catch (e) {
+      print('Error loading AssetManifest.json: $e');
+    }
+  }
+
+  Future<void> _loadConfig() async {
+    final jsonString = await rootBundle.loadString('config/app_settings.json');
+    final config = json.decode(jsonString);
+
+    setState(() {
+      appTitle = config['appTitle'] as String? ?? 'Famichat';
+      apiUrl = config['apiUrl'] as String? ?? 'http://127.0.0.1:8001/api/v1/hello';
+      print('API URL loaded from config: $apiUrl');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: appTitle,
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: HelloScreen(apiUrl: apiUrl, title: appTitle),
+    );
+  }
+}
+
+class HelloScreen extends StatefulWidget {
+  final String apiUrl;
+  final String title;
+
+  const HelloScreen({super.key, required this.apiUrl, required this.title});
+
+  @override
+  State<HelloScreen> createState() => _HelloScreenState();
+}
+
+class _HelloScreenState extends State<HelloScreen> {
+  String message = 'Loading...';
+
+  @override
+  void initState() {
+    super.initState();
+    fetchGreeting();
+  }
+
+  Future<void> fetchGreeting() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://127.0.0.1:8001/api/v1/hello'),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final jsonResponse = json.decode(response.body);
+        setState(() {
+          message = jsonResponse['message'] ?? 'No message received';
+        });
+      } else {
+        setState(() {
+          message = 'Error: ${response.statusCode}';
+        });
+      }
+    } catch (e, stackTrace) {
+      print('Network error: $e');
+      print('Stack trace: $stackTrace');
+      setState(() {
+        message = 'Network error: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: fetchGreeting,
+          ),
+        ],
+      ),
+      body: Center(
+        child: Text(
+          message,
+          style: const TextStyle(fontSize: 24),
+        ),
+      ),
+    );
+  }
+} ```
+
+# /srv/famichat/project-docs/done.md
+
+```md
+Level 1: Foundation - Basic Direct Message Sending (Text Only)
+
+    "Done" Definition:
+        Schema: Conversation and Message schemas are set up (as we've discussed). Migrations are run and database is updated.
+        Service Modules:
+            Famichat.Chat.MessageService module is created.
+            MessageService includes a function send_message(sender_id, conversation_id, content) that:
+                Creates a new Message record in the database of message_type: :text.
+                Returns {:ok, message} on success, or {:error, changeset} on validation failure.
+            Basic changeset validation in Message schema for sender_id, conversation_id, and content (for :text type).
+        Testing:
+            Unit tests for MessageService.send_message:
+                Test successful message creation.
+                Test validation errors (e.g., missing sender_id, conversation_id, empty content).
+        Scope: Focus only on sending text messages in direct conversations. Assume conversations and users exist (seed data or manual setup). No message retrieval yet, no conversation listing, no self-messages, no statuses beyond initial creation.
+
+Level 2: Message Retrieval - Get Messages in a Conversation
+
+    "Done" Definition (Builds on Level 1):
+        Service Modules:
+            MessageService module is updated to include get_conversation_messages(conversation_id) function.
+            get_conversation_messages function:
+                Retrieves all messages for a given conversation_id from the database, ordered by inserted_at (or timestamp if you add one).
+                Returns {:ok, messages} on success, or {:error, :not_found} if the conversation doesn't exist (optional error handling for MVP, could also just return empty list if no messages found).
+        Testing:
+            Unit tests for MessageService.get_conversation_messages:
+                Test successful retrieval of messages for a conversation.
+                Test case with no messages in a conversation (should return empty list or :ok, []).
+                (Optional for MVP Level 2) Test case where conversation doesn't exist (return :error, :not_found or handle gracefully).
+        Scope: Focus on retrieving messages for existing direct conversations. Still text messages only. No conversation creation, no listing, no self-messages.
+
+Level 3: Conversation Creation - Start Direct Conversations
+
+    "Done" Definition (Builds on Level 2):
+        Service Modules:
+            Famichat.Chat.ConversationService module is created.
+            ConversationService includes a function create_direct_conversation(user1_id, user2_id):
+                Creates a new Conversation record in the database of conversation_type: :direct.
+                Associates user1_id and user2_id with this new conversation using the conversation_users join table.
+                Handles cases where a direct conversation already exists between these two users (either return the existing one or prevent creation and return error - decide desired behavior). For MVP, let's say we return the existing conversation if one exists between the same user pair (order doesn't matter, user A & B is same as user B & A).
+                Returns {:ok, conversation} on success, or {:error, changeset} or {:error, :already_exists} on failure.
+        Testing:
+            Unit tests for ConversationService.create_direct_conversation:
+                Test successful creation of a new direct conversation between two users.
+                Test case where a conversation already exists between the same two users (should return the existing conversation).
+                Test validation errors (if any for conversation creation itself at this stage - maybe for future metadata).
+        Scope: Focus on creating direct conversations. Message sending and retrieval from Level 1 & 2 should still work. No conversation listing, no self-messages.
+
+Level 4: List User Conversations - Get User's Direct Conversations
+
+    "Done" Definition (Builds on Level 3):
+        Service Modules:
+            ConversationService module is updated to include list_user_conversations(user_id):
+                Retrieves all direct conversations that a given user_id is a participant in (using the conversation_users join table).
+                Returns {:ok, conversations}. Could return an empty list if the user has no conversations yet.
+        Testing:
+            Unit tests for ConversationService.list_user_conversations:
+                Test successful retrieval of a list of direct conversations for a user.
+                Test case where a user has no direct conversations (should return empty list).
+                Test that it only returns direct conversations and not other types (if we introduce other types later).
+        Scope: Focus on listing direct conversations for a user. All previous levels' functionality should remain working. No self-messages yet.
+
+Level 5: Self-Messages - Basic Support
+
+    "Done" Definition (Builds on Level 4):
+        Service Modules:
+            MessageService is extended to handle conversation_type: :self. send_message should now work for self-conversations too.
+            ConversationService is extended to include create_self_conversation(user_id):
+                Creates a Conversation of conversation_type: :self associated with a single user_id. We need to decide how self-conversations are modeled - maybe a direct conversation with the same user ID as both participants? Or a special type? Let's go with a special type conversation_type: :self for clarity.
+                list_user_conversations might need to be updated to optionally include self-conversations or have a separate list_user_self_conversations function if we want to distinguish them in the UI later. For now, let's have list_user_conversations return only direct conversations and have a separate list_user_self_conversations.
+        Testing:
+            Unit tests for MessageService.send_message extended to test with conversation_type: :self.
+            Unit tests for ConversationService.create_self_conversation.
+            Unit tests for ConversationService.list_user_self_conversations.
+        Scope: Adding basic self-message functionality. Direct messages and listing from previous levels remain. No message statuses beyond creation yet.
+
+Level 6: Basic Message Status - "Sent" Status
+
+    "Done" Definition (Builds on Level 5):
+        Schema: Message schema already has status field. Ensure it defaults to :sent.
+        Service Modules:
+            MessageService.send_message should, by default, create messages with status: :sent. No explicit changes needed in function logic likely, just verify in testing.
+        Testing:
+            Unit tests for MessageService.send_message to verify that created messages have status: :sent.
+        Scope: Implementing the "sent" message status. All previous levels' functionality remains. No "delivered" or "read" statuses yet.
+
+Level 7: Refinement, Testing, and Documentation - MVP Backend Complete
+
+    "Done" Definition (Builds on Level 6):
+        Code Review: Review all code in Famichat.Chat context for clarity, maintainability, and adherence to best practices.
+        Error Handling: Ensure proper error handling and logging in service modules.
+        Validation: Double-check all input validation in changesets and service functions.
+        Comprehensive Testing: Write integration tests (if feasible at this backend-only stage, maybe unit tests that test interactions between services) to ensure all levels work together as expected. Ensure good test coverage for all service functions.
+        Documentation: Add basic documentation to service modules and functions (using @doc in Elixir).
+        MVP Backend Functionality Complete: Levels 1-7 represent the core backend chat functionality for the MVP (Direct Messages, Self-Messages, Text messages, basic listing, "sent" status).```
 

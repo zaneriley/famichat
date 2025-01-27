@@ -16,9 +16,14 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
   @type locale :: String.t()
   @type path :: String.t()
 
+  @doc """
+  Initialize the plug with options.
+  """
   def init(opts), do: opts
 
-  @spec call(Plug.Conn.t(), any()) :: Plug.Conn.t()
+  @doc """
+  Handle locale redirection based on user preferences.
+  """
   def call(conn, _opts) do
     log(:debug, "LocaleRedirection plug called for path: #{conn.request_path}")
     log(:debug, "Request path: #{conn.request_path}")

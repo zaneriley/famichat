@@ -40,7 +40,7 @@ defmodule Famichat.Chat.Conversation do
   end
 
   @doc false
-  @spec user_changeset(Chat.User.t(), map()) :: Ecto.Changeset.t()
+  @spec user_changeset(Famichat.Chat.User.t(), map()) :: Ecto.Changeset.t()
   defp user_changeset(user, attrs) do #Dummy user changeset, adapt if needed for associations
     user
     |> Famichat.Chat.User.changeset(attrs) # assuming User has its own changeset
