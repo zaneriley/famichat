@@ -47,4 +47,22 @@ defmodule Famichat.ChatFixtures do
 
     user
   end
+
+    @moduledoc """
+  This module defines test helpers for creating
+  entities via the `Famichat.Chat` context.
+  """
+
+  # ... other fixture functions ...
+
+  @doc """
+  Returns a current UTC DateTime with microsecond precision,
+  offset by the given number of seconds.
+  """
+  def truncated_timestamp(offset_seconds \\ 0) when is_integer(offset_seconds) do
+    NaiveDateTime.utc_now()
+    |> NaiveDateTime.add(offset_seconds, :second)
+    |> NaiveDateTime.truncate(:microsecond)
+    |> DateTime.from_naive!("Etc/UTC")
+  end
 end

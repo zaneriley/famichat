@@ -4,7 +4,7 @@ defmodule Famichat.Chat.MessageServiceTest do
   alias Famichat.ChatFixtures
 
   describe "get_conversation_messages/1" do
-    test "retrieves messages in chronological order for a valid conversation" do
+    test "retrieves messages in chronological order for a valid conversation without pagination" do
       conversation = conversation_fixture(%{conversation_type: :direct})
       user = ChatFixtures.user_fixture()
 
@@ -35,7 +35,7 @@ defmodule Famichat.Chat.MessageServiceTest do
       assert {:error, :invalid_conversation_id} = MessageService.get_conversation_messages(nil)
     end
 
-    test "performance: retrieval completes under 200ms" do
+    test "performance: retrieval completes under 150ms" do
       conversation = conversation_fixture(%{conversation_type: :direct})
       user = ChatFixtures.user_fixture()
       {:ok, _msg} = MessageService.send_message(user.id, conversation.id, "Test message")
@@ -47,6 +47,42 @@ defmodule Famichat.Chat.MessageServiceTest do
       # Aggressive target: 150ms equals 150_000 microseconds.
       assert time < 150_000
       assert is_list(messages)
+    end
+
+    test "returns paginated messages with limit and offset" do
+      conversation = conversation_fixture(%{conversation_type: :direct})
+      user = ChatFixtures.user_fixture()
+
+      base_ts = NaiveDateTime.utc_now()
+
+      # Insert 5 messages with explicit inserted_at timestamps
+      for i <- 1..5 do
+        {:ok, msg} = MessageService.send_message(user.id, conversation.id, "Msg #{i}")
+        # Set inserted_at to base_ts plus i seconds; convert to %DateTime{} with UTC
+        new_ts =
+          NaiveDateTime.add(base_ts, i, :second)
+          |> DateTime.from_naive!("Etc/UTC")
+
+        Famichat.Repo.update!(Ecto.Changeset.change(msg, inserted_at: new_ts))
+      end
+
+      # Retrieve messages with pagination: get 2 messages starting at offset 1.
+      assert {:ok, paginated_messages} =
+               MessageService.get_conversation_messages(conversation.id, limit: 2, offset: 1)
+
+      assert length(paginated_messages) == 2
+
+      # Check that the messages are returned in the expected order
+      [first_msg, second_msg] = paginated_messages
+      assert first_msg.content == "Msg 2"
+      assert second_msg.content == "Msg 3"
+    end
+
+    test "returns error for invalid pagination options" do
+      conversation = conversation_fixture(%{conversation_type: :direct})
+      # Passing non-integer limit.
+      assert {:error, :invalid_pagination_values} =
+               MessageService.get_conversation_messages(conversation.id, limit: "ten", offset: -1)
     end
   end
 

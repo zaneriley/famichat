@@ -23,9 +23,7 @@ defmodule Famichat.Repo.Migrations.CreateMessages do
       add :status, :string, null: false, default: "sent"
       IO.puts("Migration: CreateMessages - Added column: status")
       add :timestamp, :utc_datetime_usec
-      # <--- CRITICAL COLUMN
       IO.puts("Migration: CreateMessages - Added column: timestamp")
-      # Corrected timestamps macro usage
       timestamps(type: :utc_datetime_usec)
       IO.puts("Migration: CreateMessages - Added timestamps (inserted_at, updated_at)")
     end
