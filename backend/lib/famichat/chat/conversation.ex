@@ -42,8 +42,8 @@ defmodule Famichat.Chat.Conversation do
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(conversation, attrs) do
     conversation
-    |> cast(attrs, [:conversation_type, :metadata, :family_id])
-    |> validate_required([:conversation_type, :family_id])
+    |> cast(attrs, [:family_id, :conversation_type, :metadata])
+    |> validate_required([:family_id])  # Only require family_id
     |> validate_metadata()
     |> validate_conversation_type()
   end

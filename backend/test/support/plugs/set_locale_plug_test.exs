@@ -98,5 +98,10 @@ defmodule FamichatWeb.SetLocalePlugTest do
       conn = get(conn, "/")
       assert get_session(conn, "user_locale") == "en"
     end
+
+    @tag :pending
+    test "SetLocale plug handles URLs with multiple path segments" do
+      # Test content remains
+    end
   end
 end

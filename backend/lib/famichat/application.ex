@@ -4,6 +4,13 @@ defmodule Famichat.Application do
 
   @impl true
   def start(_type, _args) do
+    # Only attach in non-test environments
+    if Mix.env() != :test do
+      Famichat.TelemetryHandler.attach()
+    else
+      :telemetry.detach("famichat-logger")
+    end
+
     # Can't be a child process for some reason.
     Application.start(:yamerl)
 

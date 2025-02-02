@@ -30,7 +30,6 @@ defmodule Famichat.Chat.ConversationTest do
       changeset = Conversation.changeset(%Conversation{}, %{})
       errors = errors_on(changeset)
       assert errors.family_id == ["can't be blank"]
-      assert errors.conversation_type == ["can't be blank"]
     end
 
     test "conversation_type must be one of allowed values", %{family: family} do
@@ -43,6 +42,17 @@ defmodule Famichat.Chat.ConversationTest do
     test "default conversation_type is :direct", %{family: family} do
       changeset = Conversation.changeset(%Conversation{}, %{metadata: %{}, family_id: family.id})
       assert :direct == Ecto.Changeset.get_field(changeset, :conversation_type)
+    end
+
+    test "conversation_type has default value" do
+      changeset = Conversation.changeset(%Conversation{}, %{family_id: Ecto.UUID.generate()})
+      assert changeset.changes[:conversation_type] == nil
+      assert Ecto.Changeset.get_field(changeset, :conversation_type) == :direct
+    end
+
+    test "requires family_id" do
+      changeset = Conversation.changeset(%Conversation{}, %{})
+      assert "can't be blank" in errors_on(changeset).family_id
     end
   end
 
