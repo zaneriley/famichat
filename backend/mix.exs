@@ -73,7 +73,8 @@ defmodule Famichat.MixProject do
       {:timex, "~> 3.7"},
       {:yamerl, "~> 0.10.0"},
       {:uuid, "~> 1.1"},
-      {:cors_plug, "~> 3.0"}
+      {:cors_plug, "~> 3.0"},
+      {:telemetry_test, "~> 0.1.0", only: :test}
     ]
   end
 
