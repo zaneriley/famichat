@@ -10,6 +10,8 @@ defmodule Famichat.Repo.Migrations.CreateMessages do
       IO.puts("Migration: CreateMessages - Added column: id")
       add :sender_id, references(:users, on_delete: :delete_all, type: :binary_id), null: false
       IO.puts("Migration: CreateMessages - Added column: sender_id")
+      add :conversation_id, references(:conversations, on_delete: :delete_all, type: :binary_id), null: false
+      IO.puts("Migration: CreateMessages - Added column: conversation_id")
       add :message_type, :string, null: false
       IO.puts("Migration: CreateMessages - Added column: message_type")
       add :content, :text
@@ -18,6 +20,8 @@ defmodule Famichat.Repo.Migrations.CreateMessages do
       IO.puts("Migration: CreateMessages - Added column: media_url")
       add :metadata, :map, default: %{}
       IO.puts("Migration: CreateMessages - Added column: metadata")
+      add :status, :string, null: false, default: "sent"
+      IO.puts("Migration: CreateMessages - Added column: status")
       add :timestamp, :utc_datetime_usec
       # <--- CRITICAL COLUMN
       IO.puts("Migration: CreateMessages - Added column: timestamp")
@@ -31,6 +35,10 @@ defmodule Famichat.Repo.Migrations.CreateMessages do
     IO.puts("Migration: CreateMessages - Creating index on sender_id...")
     create index(:messages, [:sender_id])
     IO.puts("Migration: CreateMessages - Index on sender_id created.")
+
+    IO.puts("Migration: CreateMessages - Creating index on conversation_id...")
+    create index(:messages, [:conversation_id])
+    IO.puts("Migration: CreateMessages - Index on conversation_id created.")
 
     IO.puts("Migration: CreateMessages - Creating index on inserted_at...")
     create index(:messages, [:inserted_at])

@@ -45,10 +45,10 @@ defmodule Famichat.Chat.Message do
     field :status, Ecto.Enum, values: [:sent, :delivered, :read], default: :sent
 
     # Sender of the message
-    belongs_to :sender, Famichat.Chat.User, foreign_key: :sender_id
+    belongs_to :sender, Famichat.Chat.User, foreign_key: :sender_id, type: :binary_id
     # Conversation message belongs to
     belongs_to :conversation, Famichat.Chat.Conversation,
-      foreign_key: :conversation_id
+      foreign_key: :conversation_id, type: :binary_id
 
     timestamps()
   end
@@ -58,29 +58,19 @@ defmodule Famichat.Chat.Message do
           Ecto.Changeset.t()
   def changeset(message, attrs) do
     message
-    |> cast(attrs, [
-      :message_type,
-      :content,
-      :media_url,
-      :metadata,
-      :status,
-      :sender_id,
-      :conversation_id
-    ])
+    |> cast(attrs, [:message_type, :content, :media_url, :metadata, :status, :sender_id, :conversation_id])
     |> validate_required([:message_type, :sender_id, :conversation_id])
-    |> validate_inclusion(:message_type, [
-      :text,
-      :voice,
-      :video,
-      :image,
-      :file,
-      :poke,
-      :reaction,
-      :gif
-    ])
-    # Ensure content is present for text messages
-    |> validate_required([:content], where: [message_type: :text])
-    # Ensure content is not empty for text messages
-    |> validate_length(:content, min: 1, where: [message_type: :text])
+    |> validate_by_type()
+  end
+
+  defp validate_by_type(changeset) do
+    case get_field(changeset, :message_type) do
+      :text -> validate_required(changeset, [:content])
+      :image -> validate_required(changeset, [:media_url])
+      :video -> validate_required(changeset, [:media_url])
+      :voice -> validate_required(changeset, [:media_url])
+      :file -> validate_required(changeset, [:media_url])
+      _ -> changeset
+    end
   end
 end

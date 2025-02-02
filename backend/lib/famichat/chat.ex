@@ -5,7 +5,54 @@ defmodule Famichat.Chat do
 
   import Ecto.Query, warn: false
   alias Famichat.Repo
-  alias Famichat.Chat.User
+  alias Famichat.Chat.{User, Family, Conversation, Message}
+
+  @doc """
+  Returns the list of families.
+
+  ## Examples
+
+      iex> list_families()
+      [%Family{}, ...]
+
+  """
+  def list_families do
+    Repo.all(Family)
+  end
+
+  @doc """
+  Gets a single family.
+
+  Raises `Ecto.NoResultsError` if the Family does not exist.
+
+  ## Examples
+
+      iex> get_family!(123)
+      %Family{}
+
+      iex> get_family!(456)
+      ** (Ecto.NoResultsError)
+
+  """
+  def get_family!(id), do: Repo.get!(Family, id)
+
+  @doc """
+  Creates a family.
+
+  ## Examples
+
+      iex> create_family(%{field: value})
+      {:ok, %Family{}}
+
+      iex> create_family(%{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def create_family(attrs \\ %{}) do
+    %Family{}
+    |> Family.changeset(attrs)
+    |> Repo.insert()
+  end
 
   @doc """
   Returns the list of users.

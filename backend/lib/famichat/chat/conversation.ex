@@ -2,15 +2,16 @@ defmodule Famichat.Chat.Conversation do
   @moduledoc """
   Schema and changeset for the `Conversation` model.
 
-  Represents a conversation between users in Famichat.  Supports
-  different conversation types (direct, group, self) and user associations.
+  Represents a conversation between users in Famichat. Supports
+  different conversation types (letter, direct, group, self) and user associations.
   """
   use Ecto.Schema
   import Ecto.Changeset
 
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
-          conversation_type: :direct | :group | :self,
+          family_id: Ecto.UUID.t(),
+          conversation_type: :letter | :direct | :group | :self,
           metadata: map(),
           messages: [Famichat.Chat.Message.t()] | nil,
           users: [Famichat.Chat.User.t()] | nil,
@@ -21,31 +22,65 @@ defmodule Famichat.Chat.Conversation do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "conversations" do
-    # Enum for conversation types
+    field :family_id, :binary_id
     field :conversation_type, Ecto.Enum,
-      values: [:direct, :group, :self],
+      values: [:letter, :direct, :group, :self],
       default: :direct
 
     # For future metadata (e.g., group chat name, etc.)
-    field :metadata, :map
+    field :metadata, :map, default: %{}
 
     has_many :messages, Famichat.Chat.Message, foreign_key: :conversation_id
-    # Explicit many-to-many for users
-    many_to_many :users, Famichat.Chat.User, join_through: "conversation_users"
+    # Update the many_to_many relationship
+    many_to_many :users, Famichat.Chat.User,
+      join_through: Famichat.Chat.ConversationParticipant
 
-    timestamps()
+    timestamps(type: :utc_datetime_usec)
   end
 
   @doc false
-  # Changed t() to __MODULE__.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(conversation, attrs) do
     conversation
-    |> cast(attrs, [:conversation_type, :metadata])
-    # conversation_type will always be set, but good to have
-    |> validate_required([:conversation_type])
-    # Ensure users association is handled correctly if needed in changeset
-    |> cast_assoc(:users, with: &user_changeset/2)
+    |> cast(attrs, [:conversation_type, :metadata, :family_id])
+    |> validate_required([:conversation_type, :family_id])
+    |> validate_metadata()
+    |> validate_conversation_type()
+  end
+
+  defp validate_metadata(changeset) do
+    case get_field(changeset, :metadata) do
+      nil -> put_change(changeset, :metadata, %{})
+      _ -> changeset
+    end
+  end
+
+  defp validate_conversation_type(changeset) do
+    case get_field(changeset, :conversation_type) do
+      :letter -> validate_letter_metadata(changeset)
+      :direct -> changeset
+      :group -> validate_group_metadata(changeset)
+      :self -> changeset
+      _ -> add_error(changeset, :conversation_type, "is invalid")
+    end
+  end
+
+  defp validate_letter_metadata(changeset) do
+    metadata = get_field(changeset, :metadata)
+    if is_map(metadata) && Map.has_key?(metadata, "subject") do
+      changeset
+    else
+      add_error(changeset, :metadata, "letters require a subject")
+    end
+  end
+
+  defp validate_group_metadata(changeset) do
+    metadata = get_field(changeset, :metadata)
+    if is_map(metadata) && Map.has_key?(metadata, "name") do
+      changeset
+    else
+      add_error(changeset, :metadata, "group conversations require a name")
+    end
   end
 
   @doc false
