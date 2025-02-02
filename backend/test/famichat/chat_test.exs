@@ -8,7 +8,7 @@ defmodule Famichat.ChatTest do
 
     import Famichat.ChatFixtures
 
-    @invalid_attrs %{username: nil}
+    @invalid_attrs %{username: nil, family_id: nil}
 
     test "list_users/0 returns all users" do
       user = user_fixture()
@@ -21,10 +21,17 @@ defmodule Famichat.ChatTest do
     end
 
     test "create_user/1 with valid data creates a user" do
-      valid_attrs = %{username: "some username"}
+      family = family_fixture()
+      valid_attrs = %{
+        username: "some username",
+        family_id: family.id,
+        role: :member
+      }
 
       assert {:ok, %User{} = user} = Chat.create_user(valid_attrs)
       assert user.username == "some username"
+      assert user.family_id == family.id
+      assert user.role == :member
     end
 
     test "create_user/1 with invalid data returns error changeset" do
@@ -41,10 +48,7 @@ defmodule Famichat.ChatTest do
 
     test "update_user/2 with invalid data returns error changeset" do
       user = user_fixture()
-
-      assert {:error, %Ecto.Changeset{}} =
-               Chat.update_user(user, @invalid_attrs)
-
+      assert {:error, %Ecto.Changeset{}} = Chat.update_user(user, @invalid_attrs)
       assert user == Chat.get_user!(user.id)
     end
 
