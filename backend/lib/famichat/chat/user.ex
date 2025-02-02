@@ -10,6 +10,8 @@ defmodule Famichat.Chat.User do
   @type t :: %__MODULE__{
           id: Ecto.UUID.t() | nil,
           username: String.t() | nil,
+          role: :admin | :member,
+          family_id: Ecto.UUID.t() | nil,
           inserted_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
         }
@@ -18,6 +20,11 @@ defmodule Famichat.Chat.User do
   @foreign_key_type :binary_id
   schema "users" do
     field :username, :string
+    field :role, Ecto.Enum, values: [:admin, :member], default: :member
+    field :family_id, :binary_id
+
+    many_to_many :conversations, Famichat.Chat.Conversation,
+      join_through: Famichat.Chat.ConversationParticipant
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -26,8 +33,8 @@ defmodule Famichat.Chat.User do
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(user, attrs) do
     user
-    |> cast(attrs, [:username])
-    |> validate_required([:username])
+    |> cast(attrs, [:username, :role, :family_id])
+    |> validate_required([:username, :role, :family_id])
     |> unique_constraint(:username)
   end
 end
