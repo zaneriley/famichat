@@ -40,9 +40,10 @@ defmodule Famichat.Chat.Message do
     # URL for media (voice, video, image, file) - nullable for text messages
     field :media_url, :string
     # For message-specific metadata (e.g., voice memo duration, reaction type)
-    field :metadata, :map
+    field :metadata, :map, default: %{}
     # Message delivery status
     field :status, Ecto.Enum, values: [:sent, :delivered, :read], default: :sent
+    field :timestamp, :utc_datetime_usec
 
     # Sender of the message
     belongs_to :sender, Famichat.Chat.User, foreign_key: :sender_id, type: :binary_id
@@ -50,7 +51,7 @@ defmodule Famichat.Chat.Message do
     belongs_to :conversation, Famichat.Chat.Conversation,
       foreign_key: :conversation_id, type: :binary_id
 
-    timestamps()
+    timestamps(type: :utc_datetime_usec)
   end
 
   @doc false
@@ -58,8 +59,8 @@ defmodule Famichat.Chat.Message do
           Ecto.Changeset.t()
   def changeset(message, attrs) do
     message
-    |> cast(attrs, [:message_type, :content, :media_url, :metadata, :status, :sender_id, :conversation_id])
-    |> validate_required([:message_type, :sender_id, :conversation_id])
+    |> cast(attrs, [:sender_id, :conversation_id, :message_type, :content, :media_url, :metadata, :status, :timestamp])
+    |> validate_required([:sender_id, :conversation_id, :message_type, :status])
     |> validate_by_type()
   end
 
