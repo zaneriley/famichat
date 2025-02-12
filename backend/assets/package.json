@@ -14,7 +14,7 @@
     "@vitest/coverage-istanbul": "2.1.1",
     "@vitest/coverage-v8": "2.1.1",
     "autoprefixer": "10.4.20",
-    "esbuild": "0.23.1",
+    "esbuild": "0.25.0",
     "esbuild-copy-static-files": "0.1.0",
     "fontkit": "^2.0.4",
     "jsdom": "^25.0.1",
