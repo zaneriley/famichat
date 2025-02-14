@@ -164,4 +164,12 @@
     </instruction>
   </follow_up_questions>
 
+  <performance_guidelines>
+  ## Telemetry Instrumentation Guidelines
+
+  • All new functions must be instrumented with Telemetry events using `:telemetry.span/3` where appropriate.
+  • Use event names in the form of `[:famichat, <module>, <function>]` (e.g., `[:famichat, :message_service, :get_conversation_messages]`).
+  • Emit relevant measurements (such as execution time, message counts, error occurrences) in each telemetry span.
+  • Ensure that telemetry is non-blocking; if telemetry handlers are not set up, the function should continue to work normally.
+  </performance_guidelines>
 </backend_guidelines>

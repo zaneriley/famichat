@@ -1,3 +1,11 @@
+# Famichat User Onboarding
+
+## Purpose
+This document focuses on the onboarding experience for new Famichat users. Its goal is to guide you through account creation, profile setup, and initial navigation of key features. It is designed from a user perspective, and it supplements the developer-focused documentation available in other project docs.
+
+## Additional Resources
+- Detailed technical and implementation information can be found in the [project plan](project.md) and the [feature completion criteria](done.md) documents.
+
 - Phone bump to add people
 
 Decision Recommendation:
