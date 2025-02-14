@@ -4,43 +4,56 @@
 - Validate Docker-based Phoenix + Postgres.
 - Confirm minimal Flutter client that can fetch data from the backend.
 - Provide a foundation for future customizations and white-label features.
+- **Messaging Requirements:**
+  - Enable users to send messages to themselves (acting as a personal notepad).
+  - Allow inter-user conversations only if both users are members of at least one common family.
 
-## Next Steps
-1. Expand Ecto schemas for storing messages, user accounts.
-2. Add theming endpoints to serve design tokens.
-3. Implement actual mobile UI for messaging.
+This document provides an overview of the Famichat project's architecture, design choices, and overall roadmap for future development. For detailed technical feature statuses and implementation criteria, please refer to the [done.md](done.md) document.
+
+## Next Steps (Updated January 25, 2024)
+
+1. Backend Refinements
+   - Fix remaining 4 failing tests
+   - Add additional error handling for edge cases
+   - Implement message delivery status updates
+   - Add real-time updates via Phoenix Channels
+
+2. Flutter Client Development
+   - Implement chat UI components
+   - Add state management (Provider/Bloc)
+   - Integrate with backend chat endpoints
+   - Add offline support & caching
+
+3. Design System Integration
+   - Complete design tokens implementation
+   - Add theme switching support
+   - Implement white-label configuration
+
+4. Security & Performance
+   - Add end-to-end encryption
+   - Implement message caching
+   - Add performance monitoring
+   - Set up error tracking
+
+Current Status:
+- Backend core functionality is largely complete with 94/98 tests passing
+- Basic Flutter client is set up with configuration management
+- Chat context and schemas are implemented and tested
+- Initial HTTP integration is working
 
 ## Definition of Done
 - `docker-compose up` shows a Phoenix "Hello World" message in a browser.
 - The iOS app fetches and displays that message in a Text view.
-----
+- **Messaging API:**  
+  - Supports creation of self-conversations for personal note taking.
+  - Permits creating a conversation between two distinct users only if they share a common family.
+
 # NEXT STEPS
 Plan:
 
-    Address Flutter client fetching data:
-        Current State: The Flutter app already fetches data (the "Hello" message). The next step is to generalize this to fetch actual data related to the Famichat application (messages, user data, etc.).
-        Next Steps:
-            Define data models: Determine the structure of data to be fetched from the backend (e.g., message model with sender, content, timestamp).
-            Create backend endpoints: Develop Phoenix endpoints to serve this data.
-            Update Flutter client: Modify the Flutter app to:
-                Fetch data from the new backend endpoints.
-                Parse the JSON response into Flutter data models.
-                Display the data in the UI.
-            Consider state management: For a real application, think about using state management solutions (Provider, BLoC, Riverpod) to handle data efficiently in Flutter.
+    Address Flutter client fetching data: Define data models, develop new backend endpoints, update the Flutter client, and implement state management solutions.
 
-    Address foundation for customizations and white-labeling:
-        Current State: Design tokens are in place in the backend, but not yet consumed by the Flutter client.
-        Next Steps:
-            Backend theme endpoint: Create a Phoenix endpoint to serve design tokens as JSON. This endpoint could be dynamic to serve different themes based on configuration.
-            Flutter theme integration:
-                Fetch design tokens from the backend endpoint in the Flutter app.
-                Use a theming solution in Flutter (e.g., ThemeData, custom theme classes) to apply these tokens to the UI.
-                Implement logic to switch between themes (white-labeling aspect).
-            Configuration: Extend app_settings.json or introduce a new configuration mechanism to handle theme selection and other white-label settings.
-
-    Structure of the Response:  Organize the response into actionable steps, starting with the Flutter client data fetching, then moving to theming and customization. Provide code snippets or guidance where applicable.
-
----
+    Address foundation for customizations and white-labeling: Create a backend theme endpoint, integrate theming in Flutter, and extend configuration for white-label settings.
 
 About the Project:
 This project is a self-hosted, white-label video and chat application designed specifically for families. It provides a secure and private digital space for families to stay connected through asynchronous messaging, occasional video calls, and unique "cozy" features inspired by games like Animal Crossing. The platform is highly customizable, allowing each family to tailor the experience, from branding to features, creating a truly personalized communication hub. It's built for families who value privacy, control over their data, and a more intimate, intentional way to connect with loved ones. It was originally built to meet a single family's needs for bilingiual, secure communication across continents, with a way to share photos, updates, and milestones. It is being made white-label so that others can use for their own families.
@@ -84,3 +97,39 @@ White-Label/Turnkey Considerations:
         Branding: Easy customization of the app's appearance (logos, colors, etc.).
         Features: A system for enabling/disabling features.
         Language: Easy addition of new language options.
+
+## Backlog Items
+
+As we continue to evolve Famichat, the following items have been identified as backlog features or improvements. These are important for future iterations, even though they are not part of our current sprint:
+
+- **Pagination for Message Retrieval**  
+  - **Priority:** High  
+  - **Description:** Enhance `get_conversation_messages/1` to support pagination (limit/offset) to handle large conversations without performance degradation.
+
+- **Concurrency and Simultaneous Access Handling**  
+  - **Priority:** Medium  
+  - **Description:** Monitor and address potential race conditions in simultaneous message sending and retrieval. Revisit once heavier traffic is observed.
+
+- **Soft Deletes and Message Editing**  
+  - **Priority:** Low-Medium  
+  - **Description:** Support for soft deletes (e.g., setting a `deleted_at` timestamp) & message edits to allow "undo" functionality and better moderation.
+
+- **Rate Limiting for Messaging Endpoints**  
+  - **Priority:** Medium  
+  - **Description:** Implement rate limiting on sending and retrieval APIs to prevent abuse, ensuring that telemetry helps monitor any potential spamming or overloads.
+
+- **Enhanced Telemetry for Error Scenarios**  
+  - **Priority:** Medium  
+  - **Description:** Expand telemetry instrumentation to capture and report error events and failure rates (e.g., database errors or not-found cases) to improve system monitoring.
+
+- **Multi-Device Synchronization & Advanced Features**  
+  - **Priority:** Low  
+  - **Description:** Plan for future features such as multi-device sync, message attachments, and real-time edits once the core messaging flows are established.
+
+- **Database Indexing Verification**  
+  - **Priority:** High  
+  - **Description:** Confirm that critical database fields (such as `conversation_id` on messages) are appropriately indexed to meet our performance targets.
+
+- **Improved Caching Strategy**  
+  - **Priority:** Medium  
+  - **Description:** Revisit our caching implementation to mitigate repeated database hits, especially for frequently accessed conversations.

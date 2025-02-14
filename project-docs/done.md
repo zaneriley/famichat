@@ -1,18 +1,31 @@
+# Purpose
+This document defines the "Done" criteria for various project feature levels. It outlines what is expected at each milestone and indicates the current implementation status.
+
+**Current Status Updates:**
+- Level 2 (Message Retrieval): NOT IMPLEMENTED (only basic message sending is available).
+- Level 3 (Direct Conversation Creation): NOT IMPLEMENTED (conversation creation logic is in progress; this includes proper telemetry instrumentation and adherence to business rules).
+- Level 4 (List User Conversations): NOT IMPLEMENTED (no dedicated listing function exists).
+- Level 5 (Self-Messages): PARTIALLY IMPLEMENTED (self-messaging is now allowed; users can message themselves as a text pad for storing notes).
+
+---
+
+# Implementation Progress
+
 Level 1: Foundation - Basic Direct Message Sending (Text Only)
 
-    "Done" Definition:
-        Schema: Conversation and Message schemas are set up (as we've discussed). Migrations are run and database is updated.
-        Service Modules:
-            Famichat.Chat.MessageService module is created.
-            MessageService includes a function send_message(sender_id, conversation_id, content) that:
-                Creates a new Message record in the database of message_type: :text.
-                Returns {:ok, message} on success, or {:error, changeset} on validation failure.
-            Basic changeset validation in Message schema for sender_id, conversation_id, and content (for :text type).
-        Testing:
-            Unit tests for MessageService.send_message:
-                Test successful message creation.
-                Test validation errors (e.g., missing sender_id, conversation_id, empty content).
-        Scope: Focus only on sending text messages in direct conversations. Assume conversations and users exist (seed data or manual setup). No message retrieval yet, no conversation listing, no self-messages, no statuses beyond initial creation.
+"Done" Definition:
+* Schema: Conversation and Message schemas are set up (as we've discussed). Migrations are run and database is updated.
+*  Service Modules:
+    * Famichat.Chat.MessageService module is created.
+        MessageService includes a function send_message(sender_id, conversation_id, content) that:
+            Creates a new Message record in the database of message_type: :text.
+            Returns {:ok, message} on success, or {:error, changeset} on validation failure.
+        Basic changeset validation in Message schema for sender_id, conversation_id, and content (for :text type).
+    Testing:
+        Unit tests for MessageService.send_message:
+            Test successful message creation.
+            Test validation errors (e.g., missing sender_id, conversation_id, empty content).
+    Scope: Focus only on sending text messages in direct conversations. Assume conversations and users exist (seed data or manual setup). No message retrieval yet, no conversation listing, no self-messages, no statuses beyond initial creation.
 
 Level 2: Message Retrieval - Get Messages in a Conversation
 
@@ -93,3 +106,30 @@ Level 7: Refinement, Testing, and Documentation - MVP Backend Complete
         Comprehensive Testing: Write integration tests (if feasible at this backend-only stage, maybe unit tests that test interactions between services) to ensure all levels work together as expected. Ensure good test coverage for all service functions.
         Documentation: Add basic documentation to service modules and functions (using @doc in Elixir).
         MVP Backend Functionality Complete: Levels 1-7 represent the core backend chat functionality for the MVP (Direct Messages, Self-Messages, Text messages, basic listing, "sent" status).
+
+## Updated Messaging Criteria:
+- **Self-Conversations:**  
+  - A user messaging themselves is valid and should be stored as a conversation. This enables the user to use the messaging interface as a personal note pad.
+- **Inter-User Conversations:**  
+  - For two distinct users, the conversation is only valid if they share at least one common family. A conversation attempt between users who share no common family must fail.
+- **Consistent API and Telemetry:**  
+  - All messaging endpoints should return a consistent tuple structure (with or without metadata) and be instrumented using telemetry where applicable.
+
+## Updated Messaging Criteria
+
+- **API Response Format:**  
+  All messaging endpoints return simple status tuples:
+  ```elixir
+  {:ok, entity} | {:error, reason}
+  ```
+- **Telemetry Integration:**  
+  Critical operations emit telemetry events with detailed metadata while keeping business logic returns clean.
+
+## Implementation Progress
+
+**Level 1: Foundation - Basic Direct Message Sending (Text Only)**  
+- `docker-compose up` shows a Phoenix "Hello World" message.
+- The iOS app fetches and displays that message.
+- Messaging functionality now supports:
+  - **Self-Messaging:** Users can send messages to themselves.
+  - **Family-Based Messaging:** Messaging between distinct users is allowed only when they share a common family.
