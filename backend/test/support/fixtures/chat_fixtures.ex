@@ -1,8 +1,9 @@
 defmodule Famichat.ChatFixtures do
   @moduledoc """
-  This module defines test helpers for creating
-  entities via the `Famichat.Chat` context.
+  Test fixtures for Chat context entities
   """
+  alias Famichat.Chat.{Conversation, ConversationParticipant}
+  alias Famichat.Repo
 
   @doc """
   Generate a unique user username.
@@ -48,12 +49,28 @@ defmodule Famichat.ChatFixtures do
     user
   end
 
-    @moduledoc """
-  This module defines test helpers for creating
-  entities via the `Famichat.Chat` context.
+  @doc """
+  Generate a conversation.
   """
+  def conversation_fixture(attrs \\ %{}) do
+    family = family_fixture()
+    user = user_fixture(%{family_id: family.id})
 
-  # ... other fixture functions ...
+    conversation =
+      %Conversation{}
+      |> Conversation.changeset(Map.merge(%{
+        family_id: family.id,
+        conversation_type: :direct,
+        metadata: %{}
+      }, attrs))
+      |> Repo.insert!()
+
+    %Famichat.Chat.ConversationParticipant{}
+    |> Famichat.Chat.ConversationParticipant.changeset(%{conversation_id: conversation.id, user_id: user.id})
+    |> Repo.insert!()
+
+    conversation
+  end
 
   @doc """
   Returns a current UTC DateTime with microsecond precision,

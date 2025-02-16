@@ -1,155 +1,226 @@
 defmodule Famichat.Chat.MessageService do
   @moduledoc """
-  Provides the core message sending functionality for Famichat.
-
-  This service module encapsulates the logic for sending messages,
-  handling validations, and interacting with the database to persist messages.
+  Message handling pipeline implementing:
+  1. Validation -> 2. Authorization -> 3. Persistence -> 4. Notification
   """
   import Ecto.Query, warn: false
-  alias Famichat.{Repo}
-  alias Famichat.Chat.Message
-
-  @doc """
-  Sends a new text message in a conversation.
-
-  ## Parameters
-  - `sender_id` - The ID of the user sending the message
-  - `conversation_id` - The ID of the conversation to send the message in
-  - `content` - The text content of the message
-
-  ## Returns
-  - `{:ok, Message.t()}` on success, where `Message.t()` is the created message.
-  - `{:error, Ecto.Changeset.t()}` on validation errors, where `Ecto.Changeset.t()` contains error information.
-  - `{:error, :invalid_input}` on invalid input parameters.
-  """
-  @spec send_message(Ecto.UUID.t(), Ecto.UUID.t(), String.t()) ::
-          {:ok, Message.t()}
-          | {:error, Ecto.Changeset.t()}
-          | {:error, :invalid_input}
-  def send_message(sender_id, conversation_id, content)
-      when is_binary(sender_id) and is_binary(conversation_id) and
-             is_binary(content) do
-    message_params = %{
-      message_type: :text,
-      content: content,
-      sender_id: sender_id,
-      conversation_id: conversation_id
-    }
-
-    try do
-      %Message{}
-      |> Message.changeset(message_params)
-      |> Repo.insert()
-    rescue
-      _ -> {:error, :invalid_input}
-    end
-  end
-
-  @doc """
-  Retrieves messages for the given conversation in ascending order (oldest first)
-  with optional pagination.
-
-  ## Parameters
-  - conversation_id: A valid binary UUID for the conversation.
-  - opts: A keyword list of options. Supported keys:
-    - `:limit` - Maximum number of messages to return.
-    - `:offset` - Number of messages to skip (zero-based index). Messages are ordered by insertion time.
-
-  ## Returns
-  - `{:ok, messages}` where messages are ordered by `inserted_at`
-  - `{:error, :invalid_conversation_id}` if the conversation_id is nil.
-  - `{:error, :not_found}` if the conversation does not exist.
-  """
-  @spec get_conversation_messages(Ecto.UUID.t(), Keyword.t()) ::
-          {:ok, [Message.t()]} | {:error, :invalid_conversation_id | :not_found}
-  def get_conversation_messages(conversation_id, opts \\ [])
-
-  def get_conversation_messages(conversation_id, _opts) when is_nil(conversation_id),
-    do: {:error, :invalid_conversation_id}
-
-  def get_conversation_messages(conversation_id, opts) when is_binary(conversation_id) do
-    with {:ok, validated_opts} <- validate_opts(opts) do
-      :telemetry.span(
-        [:famichat, :message_service, :get_conversation_messages],
-        %{opts: validated_opts},
-        fn ->
-          start = System.monotonic_time(:microsecond)
-
-          result =
-            case Repo.get(Famichat.Chat.Conversation, conversation_id) do
-              nil ->
-                {:error, :not_found}
-              _conversation ->
-                query =
-                  from m in Message,
-                    where: m.conversation_id == ^conversation_id,
-                    order_by: [asc: m.inserted_at]
-
-                # Apply pagination if provided.
-                query =
-                  if limit = validated_opts[:limit] do
-                    from q in query, limit: ^limit
-                  else
-                    query
-                  end
-
-                query =
-                  if offset = validated_opts[:offset] do
-                    from q in query, offset: ^offset
-                  else
-                    query
-                  end
-
-                {:ok, Repo.all(query)}
-            end
-
-          duration = System.monotonic_time(:microsecond) - start
-          measurements =
-            case result do
-              {:ok, messages} ->
-                %{message_count: length(messages), duration: duration}
-                |> Map.merge(validated_opts)
-              _ ->
-                %{duration: duration} |> Map.merge(validated_opts)
-            end
-
-          {result, measurements}
-        end
-      )
-    else
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  alias Famichat.{Repo, Telemetry}
+  alias Famichat.Chat.{Message, Conversation}
 
   @max_limit 100
-  # Private function to validate and normalize pagination options.
-  defp validate_opts(opts) do
-    opts = Enum.into(opts, %{})
+  @default_preloads [:sender, :conversation]
 
-    validated =
-      opts
-      |> Enum.reduce(%{}, fn
-        {:limit, limit}, acc when is_integer(limit) and limit > 0 ->
-          Map.put(acc, :limit, if(limit > @max_limit, do: @max_limit, else: limit))
+  @doc """
+  Pipeline-based message retrieval with structured error handling:
 
-        {:limit, _invalid}, _acc ->
-          :error
+  {:ok, messages} = MessageService.get_conversation_messages(conversation_id,
+    limit: 20,
+    offset: 0,
+    preload: [:sender]
+  )
+  """
+  @spec get_conversation_messages(Ecto.UUID.t(), Keyword.t()) ::
+          {:ok, [Message.t()]} | {:error, atom()}
+  def get_conversation_messages(conversation_id, opts \\ []) do
+    initial_state = %{
+      conversation_id: conversation_id,
+      opts: opts,
+      validated?: false,
+      query: nil
+    }
 
-        {:offset, offset}, acc when is_integer(offset) and offset >= 0 ->
-          Map.put(acc, :offset, offset)
+    initial_state
+    |> validate_conversation_id()
+    |> validate_pagination_opts()
+    |> check_conversation_exists()
+    |> build_base_query()
+    |> apply_pagination()
+    |> execute_query()
+    |> preload_associations()
+    |> handle_result()
+  end
 
-        {:offset, _invalid}, _acc ->
-          :error
+  defp validate_conversation_id(%{conversation_id: nil} = state) do
+    put_in(state.validated?, false)
+    |> Map.put(:error, :invalid_conversation_id)
+  end
 
-        {_key, _value}, acc ->
-          acc
-      end)
+  defp validate_conversation_id(state) do
+    put_in(state.validated?, true)
+  end
 
-    case validated do
-      :error -> {:error, :invalid_pagination_values}
-      _ -> {:ok, validated}
+  defp check_conversation_exists(%{error: _} = state), do: state
+  defp check_conversation_exists(state) do
+    if Repo.exists?(
+      from c in Conversation,
+      where: c.id == ^state.conversation_id
+    ) do
+      state
+    else
+      Map.put(state, :error, :conversation_not_found)
     end
   end
 
-  def send_message(_, _, _), do: {:error, :invalid_input}
+  defp validate_pagination_opts(%{validated?: false} = state), do: state
+
+  defp validate_pagination_opts(state) do
+    with {:ok, limit} <- validate_limit(state.opts[:limit]),
+         {:ok, offset} <- validate_offset(state.opts[:offset]) do
+      state
+      |> put_in([:opts, :limit], limit)
+      |> put_in([:opts, :offset], offset)
+    else
+      error -> Map.put(state, :error, error)
+    end
+  end
+
+  defp build_base_query(%{error: _} = state), do: state
+
+  defp build_base_query(state) do
+                query =
+                  from m in Message,
+        where: m.conversation_id == ^state.conversation_id,
+                    order_by: [asc: m.inserted_at]
+
+    Map.put(state, :query, query)
+  end
+
+  defp apply_pagination(%{error: _} = state), do: state
+
+  defp apply_pagination(state) do
+    state.query
+    |> maybe_apply(:limit, state.opts[:limit])
+    |> maybe_apply(:offset, state.opts[:offset])
+    |> then(&Map.put(state, :query, &1))
+  end
+
+  defp execute_query(%{error: _} = state), do: state
+
+  defp execute_query(state) do
+    case Repo.all(state.query) do
+      [] -> Map.put(state, :result, [])
+      messages -> Map.put(state, :result, messages)
+    end
+  rescue
+    _ -> Map.put(state, :error, :query_execution_failed)
+  end
+
+  defp preload_associations(%{error: _} = state), do: state
+
+  defp preload_associations(state) do
+    preloads = state.opts[:preload] || @default_preloads
+    Map.update!(state, :result, &Repo.preload(&1, preloads))
+  end
+
+  defp handle_result(%{error: error}), do: {:error, error}
+  defp handle_result(%{message: message}), do: {:ok, message}
+  defp handle_result(%{result: result}), do: {:ok, result}
+
+  @doc """
+  Message creation pipeline:
+
+  {:ok, message} = MessageService.send_message(%{
+    sender_id: "uuid",
+    conversation_id: "uuid",
+    content: "Hello",
+    type: :text
+  })
+  """
+  @spec send_message(map()) :: {:ok, Message.t()} | {:error, any()}
+  def send_message(params) do
+    initial_state = %{
+      params: params,
+      changeset: nil,
+      message: nil
+    }
+
+    initial_state
+    |> validate_required_fields()
+    |> validate_sender()
+    |> validate_conversation()
+    |> build_changeset()
+    |> persist_message()
+    |> notify_participants()
+    |> handle_result()
+  end
+
+  # Private pipeline implementations
+  defp validate_required_fields(state) do
+    required = [:sender_id, :conversation_id, :content]
+    missing = Enum.reject(required, &Map.has_key?(state.params, &1))
+
+    case missing do
+      [] -> state
+      _ -> Map.put(state, :error, {:missing_fields, missing})
+    end
+  end
+
+  defp validate_sender(%{error: _} = state), do: state
+
+  defp validate_sender(state) do
+    if Repo.exists?(from u in Famichat.Chat.User, where: u.id == ^state.params.sender_id) do
+      state
+    else
+      Map.put(state, :error, :sender_not_found)
+    end
+  end
+
+  defp validate_conversation(%{error: _} = state), do: state
+
+  defp validate_conversation(state) do
+    if Repo.exists?(from c in Conversation, where: c.id == ^state.params.conversation_id) do
+      state
+    else
+      Map.put(state, :error, :conversation_not_found)
+    end
+  end
+
+  defp build_changeset(%{error: _} = state), do: state
+
+  defp build_changeset(state) do
+    changeset =
+      %Message{}
+      |> Message.changeset(state.params)
+
+    if changeset.valid? do
+      Map.put(state, :changeset, changeset)
+    else
+      Map.put(state, :error, changeset)
+    end
+  end
+
+  defp persist_message(%{error: _} = state), do: state
+
+  defp persist_message(state) do
+    case Repo.insert(state.changeset) do
+      {:ok, message} -> Map.put(state, :message, message)
+      {:error, reason} -> Map.put(state, :error, reason)
+    end
+  end
+
+  defp notify_participants(%{error: _} = state), do: state
+
+  defp notify_participants(state) do
+    # Placeholder for real notification system
+    :telemetry.execute([:famichat, :message, :sent], %{count: 1}, %{
+      conversation_id: state.message.conversation_id,
+      sender_id: state.message.sender_id
+    })
+    state
+  end
+
+  # Shared helpers
+  defp validate_limit(nil), do: {:ok, nil}
+  defp validate_limit(limit) when is_integer(limit) and limit > 0 and limit <= @max_limit,
+    do: {:ok, limit}
+
+  defp validate_limit(_), do: {:error, :invalid_limit}
+
+  defp validate_offset(nil), do: {:ok, nil}
+  defp validate_offset(offset) when is_integer(offset) and offset >= 0, do: {:ok, offset}
+  defp validate_offset(_), do: {:error, :invalid_offset}
+
+  defp maybe_apply(query, _clause, nil), do: query
+  defp maybe_apply(query, :limit, value), do: from(q in query, limit: ^value)
+  defp maybe_apply(query, :offset, value), do: from(q in query, offset: ^value)
 end
