@@ -46,10 +46,14 @@ defmodule Famichat.Chat.Message do
     field :timestamp, :utc_datetime_usec
 
     # Sender of the message
-    belongs_to :sender, Famichat.Chat.User, foreign_key: :sender_id, type: :binary_id
+    belongs_to :sender, Famichat.Chat.User,
+      foreign_key: :sender_id,
+      type: :binary_id
+
     # Conversation message belongs to
     belongs_to :conversation, Famichat.Chat.Conversation,
-      foreign_key: :conversation_id, type: :binary_id
+      foreign_key: :conversation_id,
+      type: :binary_id
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -59,7 +63,16 @@ defmodule Famichat.Chat.Message do
           Ecto.Changeset.t()
   def changeset(message, attrs) do
     message
-    |> cast(attrs, [:sender_id, :conversation_id, :message_type, :content, :media_url, :metadata, :status, :timestamp])
+    |> cast(attrs, [
+      :sender_id,
+      :conversation_id,
+      :message_type,
+      :content,
+      :media_url,
+      :metadata,
+      :status,
+      :timestamp
+    ])
     |> validate_required([:sender_id, :conversation_id, :message_type, :status])
     |> validate_by_type()
   end

@@ -23,6 +23,7 @@ defmodule Famichat.Chat.Conversation do
   @foreign_key_type :binary_id
   schema "conversations" do
     field :family_id, :binary_id
+
     field :conversation_type, Ecto.Enum,
       values: [:letter, :direct, :group, :self],
       default: :direct
@@ -43,7 +44,8 @@ defmodule Famichat.Chat.Conversation do
   def changeset(conversation, attrs) do
     conversation
     |> cast(attrs, [:family_id, :conversation_type, :metadata])
-    |> validate_required([:family_id])  # Only require family_id
+    # Only require family_id
+    |> validate_required([:family_id])
     |> validate_metadata()
     |> validate_conversation_type()
   end
@@ -67,6 +69,7 @@ defmodule Famichat.Chat.Conversation do
 
   defp validate_letter_metadata(changeset) do
     metadata = get_field(changeset, :metadata)
+
     if is_map(metadata) && Map.has_key?(metadata, "subject") do
       changeset
     else
@@ -76,6 +79,7 @@ defmodule Famichat.Chat.Conversation do
 
   defp validate_group_metadata(changeset) do
     metadata = get_field(changeset, :metadata)
+
     if is_map(metadata) && Map.has_key?(metadata, "name") do
       changeset
     else

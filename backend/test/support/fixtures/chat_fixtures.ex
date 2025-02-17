@@ -58,15 +58,23 @@ defmodule Famichat.ChatFixtures do
 
     conversation =
       %Conversation{}
-      |> Conversation.changeset(Map.merge(%{
-        family_id: family.id,
-        conversation_type: :direct,
-        metadata: %{}
-      }, attrs))
+      |> Conversation.changeset(
+        Map.merge(
+          %{
+            family_id: family.id,
+            conversation_type: :direct,
+            metadata: %{}
+          },
+          attrs
+        )
+      )
       |> Repo.insert!()
 
     %Famichat.Chat.ConversationParticipant{}
-    |> Famichat.Chat.ConversationParticipant.changeset(%{conversation_id: conversation.id, user_id: user.id})
+    |> Famichat.Chat.ConversationParticipant.changeset(%{
+      conversation_id: conversation.id,
+      user_id: user.id
+    })
     |> Repo.insert!()
 
     conversation
@@ -76,7 +84,8 @@ defmodule Famichat.ChatFixtures do
   Returns a current UTC DateTime with microsecond precision,
   offset by the given number of seconds.
   """
-  def truncated_timestamp(offset_seconds \\ 0) when is_integer(offset_seconds) do
+  def truncated_timestamp(offset_seconds \\ 0)
+      when is_integer(offset_seconds) do
     NaiveDateTime.utc_now()
     |> NaiveDateTime.add(offset_seconds, :second)
     |> NaiveDateTime.truncate(:microsecond)

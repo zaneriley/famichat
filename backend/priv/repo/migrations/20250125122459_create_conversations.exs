@@ -39,7 +39,9 @@ defmodule Famichat.Repo.Migrations.CreateConversations do
 
     # Create the conversation_users join table
     create table(:conversation_users, primary_key: false) do
-      add :conversation_id, references(:conversations, type: :binary_id, on_delete: :delete_all), null: false
+      add :conversation_id, references(:conversations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false
       timestamps(type: :utc_datetime_usec)
     end

@@ -11,11 +11,11 @@ defmodule Famichat.Chat.ConversationParticipant do
   import Ecto.Changeset
 
   @type t :: %__MODULE__{
-    conversation_id: Ecto.UUID.t(),
-    user_id: Ecto.UUID.t(),
-    inserted_at: DateTime.t(),
-    updated_at: DateTime.t()
-  }
+          conversation_id: Ecto.UUID.t(),
+          user_id: Ecto.UUID.t(),
+          inserted_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
 
   @primary_key false
   @foreign_key_type :binary_id
@@ -42,6 +42,7 @@ defmodule Famichat.Chat.ConversationParticipant do
     |> cast(attrs, [:conversation_id, :user_id])
     |> validate_required([:conversation_id, :user_id])
     |> unique_constraint([:conversation_id, :user_id],
-        name: :conversation_users_conversation_id_user_id_index)
+      name: :conversation_users_conversation_id_user_id_index
+    )
   end
 end

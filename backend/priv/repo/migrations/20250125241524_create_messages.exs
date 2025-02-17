@@ -10,7 +10,10 @@ defmodule Famichat.Repo.Migrations.CreateMessages do
       IO.puts("Migration: CreateMessages - Added column: id")
       add :sender_id, references(:users, on_delete: :delete_all, type: :binary_id), null: false
       IO.puts("Migration: CreateMessages - Added column: sender_id")
-      add :conversation_id, references(:conversations, on_delete: :delete_all, type: :binary_id), null: false
+
+      add :conversation_id, references(:conversations, on_delete: :delete_all, type: :binary_id),
+        null: false
+
       IO.puts("Migration: CreateMessages - Added column: conversation_id")
       add :message_type, :string, null: false
       IO.puts("Migration: CreateMessages - Added column: message_type")

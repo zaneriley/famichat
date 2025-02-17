@@ -156,7 +156,55 @@
         Utilize helper functions for computations and manage assigns using `assign/2`, `assign/3`, `assign_new/3`, and `update/3` to ensure LiveView can effectively track and render changes.
       </recommendation>
     </additional_guideline>
+    <guideline>
+      <description>
+        Telemetry tests must explicitly attach/detach handlers and validate event structures
+      </description>
+      <examples>
+        <bad>
+          <code>
+            # Missing handler attachment
+            assert_receive {event, ...}
+          </code>
+        </bad>
+        <good>
+          <code>
+            :telemetry.attach_many(...)
+            assert_receive {[:famichat, :service, :action], measurements, metadata}
+            :telemetry.detach(...)
+          </code>
+        </good>
+      </examples>
+    </guideline>
   </liveview_optimizations>
+
+  <testing_guidelines>
+    <telemetry>
+      <rule>
+        All telemetry tests must:
+        1. Attach temporary handlers in setup
+        2. Use explicit event structure matching
+        3. Detach handlers in cleanup
+      </rule>
+      <pattern>
+        defmodule MyTest do
+          setup do
+            handler_id = "test-handler-#{inspect(self())}"
+            :telemetry.attach_many(handler_id, [events], &handler/4)
+            on_exit(fn -> :telemetry.detach(handler_id) end)
+          end
+        end
+      </pattern>
+    </telemetry>
+    <fixtures>
+      <rule>
+        Fixture functions must:
+        1. Use full module namespaces
+        2. Validate required associations
+        3. Clean up after themselves
+      </rule>
+    </fixtures>
+  </testing_guidelines>
 
   <follow_up_questions>
     <instruction>
