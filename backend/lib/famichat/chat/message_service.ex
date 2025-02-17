@@ -50,11 +50,12 @@ defmodule Famichat.Chat.MessageService do
   end
 
   defp check_conversation_exists(%{error: _} = state), do: state
+
   defp check_conversation_exists(state) do
     if Repo.exists?(
-      from c in Conversation,
-      where: c.id == ^state.conversation_id
-    ) do
+         from c in Conversation,
+           where: c.id == ^state.conversation_id
+       ) do
       state
     else
       Map.put(state, :error, :conversation_not_found)
@@ -77,10 +78,10 @@ defmodule Famichat.Chat.MessageService do
   defp build_base_query(%{error: _} = state), do: state
 
   defp build_base_query(state) do
-                query =
-                  from m in Message,
+    query =
+      from m in Message,
         where: m.conversation_id == ^state.conversation_id,
-                    order_by: [asc: m.inserted_at]
+        order_by: [asc: m.inserted_at]
 
     Map.put(state, :query, query)
   end
@@ -158,7 +159,9 @@ defmodule Famichat.Chat.MessageService do
   defp validate_sender(%{error: _} = state), do: state
 
   defp validate_sender(state) do
-    if Repo.exists?(from u in Famichat.Chat.User, where: u.id == ^state.params.sender_id) do
+    if Repo.exists?(
+         from u in Famichat.Chat.User, where: u.id == ^state.params.sender_id
+       ) do
       state
     else
       Map.put(state, :error, :sender_not_found)
@@ -168,7 +171,9 @@ defmodule Famichat.Chat.MessageService do
   defp validate_conversation(%{error: _} = state), do: state
 
   defp validate_conversation(state) do
-    if Repo.exists?(from c in Conversation, where: c.id == ^state.params.conversation_id) do
+    if Repo.exists?(
+         from c in Conversation, where: c.id == ^state.params.conversation_id
+       ) do
       state
     else
       Map.put(state, :error, :conversation_not_found)
@@ -206,18 +211,24 @@ defmodule Famichat.Chat.MessageService do
       conversation_id: state.message.conversation_id,
       sender_id: state.message.sender_id
     })
+
     state
   end
 
   # Shared helpers
   defp validate_limit(nil), do: {:ok, nil}
-  defp validate_limit(limit) when is_integer(limit) and limit > 0 and limit <= @max_limit,
-    do: {:ok, limit}
+
+  defp validate_limit(limit)
+       when is_integer(limit) and limit > 0 and limit <= @max_limit,
+       do: {:ok, limit}
 
   defp validate_limit(_), do: {:error, :invalid_limit}
 
   defp validate_offset(nil), do: {:ok, nil}
-  defp validate_offset(offset) when is_integer(offset) and offset >= 0, do: {:ok, offset}
+
+  defp validate_offset(offset) when is_integer(offset) and offset >= 0,
+    do: {:ok, offset}
+
   defp validate_offset(_), do: {:error, :invalid_offset}
 
   defp maybe_apply(query, _clause, nil), do: query

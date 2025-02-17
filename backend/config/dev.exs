@@ -37,7 +37,15 @@ config :famichat, :cache, disabled: true
 
 config :logger, :console,
   format: {Famichat.LoggerFormatter, :format},
-  metadata: [:request_id, :user_id, :duration, :module, :function, :line],
+  metadata: [
+    :request_id,
+    :user_id,
+    :duration,
+    :module,
+    :function,
+    :line,
+    :changeset
+  ],
   level: :debug,
   colors: [enabled: true]
 

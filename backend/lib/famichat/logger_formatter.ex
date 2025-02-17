@@ -72,12 +72,24 @@ defmodule Famichat.LoggerFormatter do
     line = Keyword.get(metadata, :line, "")
     request_id = Keyword.get(metadata, :request_id, "")
 
-    [
+    changeset =
+      metadata
+      |> Keyword.get(:changeset, "")
+      |> inspect(pretty: true, limit: :infinity)
+      |> String.replace(~r/"password": ".+?"/, ~S("password": "[FILTERED]"))
+
+    base = [
       :faint,
       "  #{function}",
       (line != "" && ", Line #{line}") || "",
       (request_id != "" && ", Request: #{request_id}") || ""
     ]
+
+    if changeset != "" do
+      [base, "\n  Changeset: ", :red, changeset]
+    else
+      base
+    end
   end
 
   defp format_function(metadata) do

@@ -13,6 +13,7 @@ defmodule Famichat.Repo.Seed do
       {:ok, family} ->
         IO.puts("Created family: #{family.id}")
         {:ok, family}
+
       {:error, changeset} ->
         IO.puts("Error creating family:")
         IO.inspect(changeset.errors)
@@ -22,14 +23,17 @@ defmodule Famichat.Repo.Seed do
 
   def create_user(family_id, attrs) do
     user_attrs = Map.merge(%{family_id: family_id}, attrs)
+
     case Chat.create_user(user_attrs) do
       {:ok, user} ->
         IO.puts("Created user: #{user.username} (ID: #{user.id})")
         {:ok, user}
+
       {:error, changeset} ->
         IO.puts("Error creating user:")
         IO.inspect(changeset.errors)
         {:error, changeset}
+
       {:error, :invalid_input} ->
         IO.puts("Invalid input for user creation.")
         {:error, :invalid_input}
@@ -42,10 +46,13 @@ defmodule Famichat.Repo.Seed do
       conversation_type: conversation_type,
       metadata: metadata
     }
-    case Conversation.changeset(%Conversation{}, conversation_attrs) |> Repo.insert() do
+
+    case Conversation.changeset(%Conversation{}, conversation_attrs)
+         |> Repo.insert() do
       {:ok, conversation} ->
         IO.puts("Created #{conversation_type} conversation: #{conversation.id}")
         {:ok, conversation}
+
       {:error, changeset} ->
         IO.puts("Error creating conversation:")
         IO.inspect(changeset.errors)
@@ -62,15 +69,25 @@ defmodule Famichat.Repo.Seed do
            |> Repo.insert(on_conflict: :nothing) do
         {:ok, _participant} ->
           IO.puts("  Added user #{user_id} to conversation #{conversation.id}")
+
         {:error, changeset} ->
-          IO.puts("  Error adding user #{user_id} to conversation #{conversation.id}:")
+          IO.puts(
+            "  Error adding user #{user_id} to conversation #{conversation.id}:"
+          )
+
           IO.inspect(changeset.errors)
       end
     end)
   end
 
-
-  defp create_message(conversation_id, sender_id, message_type, content, metadata \\ %{}, timestamp \\ DateTime.utc_now()) do
+  defp create_message(
+         conversation_id,
+         sender_id,
+         message_type,
+         content,
+         metadata \\ %{},
+         timestamp \\ DateTime.utc_now()
+       ) do
     message_attrs = %{
       conversation_id: conversation_id,
       sender_id: sender_id,
@@ -82,15 +99,18 @@ defmodule Famichat.Repo.Seed do
 
     case Message.changeset(%Message{}, message_attrs) |> Repo.insert() do
       {:ok, message} ->
-        IO.puts("  Created message (type: #{message_type}) in conversation #{conversation_id} from sender #{sender_id}")
+        IO.puts(
+          "  Created message (type: #{message_type}) in conversation #{conversation_id} from sender #{sender_id}"
+        )
+
         {:ok, message}
+
       {:error, changeset} ->
         IO.puts("Error creating message:")
         IO.inspect(changeset.errors)
         {:error, changeset}
     end
   end
-
 
   # --- Seed Data Creation ---
   def run do
@@ -105,19 +125,33 @@ defmodule Famichat.Repo.Seed do
 
     # --- Users ---
     IO.puts("\n--- Creating Users ---")
-    {:ok, zane_user} = create_user(homelab_family.id, %{username: "Zane", role: "admin"})
-    {:ok, naho_user} = create_user(homelab_family.id, %{username: "Naho", role: "member"})
 
-    {:ok, jacob_user} = create_user(mclaws_family.id, %{username: "Jacob", role: "admin"})
-    {:ok, shae_user} = create_user(mclaws_family.id, %{username: "Shae", role: "member"})
+    {:ok, zane_user} =
+      create_user(homelab_family.id, %{username: "Zane", role: "admin"})
 
-    {:ok, katharine_user} = create_user(li_family.id, %{username: "Katharine", role: "admin"})
-    {:ok, yuka_user} = create_user(li_family.id, %{username: "Yuka", role: "member"})
+    {:ok, naho_user} =
+      create_user(homelab_family.id, %{username: "Naho", role: "member"})
 
-    {:ok, chelsey_user} = create_user(sample_family.id, %{username: "Chelsey", role: "admin"})
-    {:ok, clayton_user} = create_user(sample_family.id, %{username: "Clayton", role: "member"})
-    {:ok, theo_user} = create_user(sample_family.id, %{username: "Theo", role: "member"})
+    {:ok, jacob_user} =
+      create_user(mclaws_family.id, %{username: "Jacob", role: "admin"})
 
+    {:ok, shae_user} =
+      create_user(mclaws_family.id, %{username: "Shae", role: "member"})
+
+    {:ok, katharine_user} =
+      create_user(li_family.id, %{username: "Katharine", role: "admin"})
+
+    {:ok, yuka_user} =
+      create_user(li_family.id, %{username: "Yuka", role: "member"})
+
+    {:ok, chelsey_user} =
+      create_user(sample_family.id, %{username: "Chelsey", role: "admin"})
+
+    {:ok, clayton_user} =
+      create_user(sample_family.id, %{username: "Clayton", role: "member"})
+
+    {:ok, theo_user} =
+      create_user(sample_family.id, %{username: "Theo", role: "member"})
 
     # --- Direct Conversations ---
     IO.puts("\n--- Creating Direct Conversations ---")
@@ -128,47 +162,139 @@ defmodule Famichat.Repo.Seed do
     add_users_to_conversation(convo_jacob_shae, [jacob_user.id, shae_user.id])
 
     {:ok, convo_katharine_yuka} = create_conversation(li_family.id, :direct)
-    add_users_to_conversation(convo_katharine_yuka, [katharine_user.id, yuka_user.id])
 
-    {:ok, convo_chelsey_clayton} = create_conversation(sample_family.id, :direct)
-    add_users_to_conversation(convo_chelsey_clayton, [chelsey_user.id, clayton_user.id])
+    add_users_to_conversation(convo_katharine_yuka, [
+      katharine_user.id,
+      yuka_user.id
+    ])
+
+    {:ok, convo_chelsey_clayton} =
+      create_conversation(sample_family.id, :direct)
+
+    add_users_to_conversation(convo_chelsey_clayton, [
+      chelsey_user.id,
+      clayton_user.id
+    ])
 
     {:ok, convo_chelsey_theo} = create_conversation(sample_family.id, :direct)
-    add_users_to_conversation(convo_chelsey_theo, [chelsey_user.id, theo_user.id])
+
+    add_users_to_conversation(convo_chelsey_theo, [
+      chelsey_user.id,
+      theo_user.id
+    ])
 
     # --- Group Conversation (within Sample family) ---
     IO.puts("\n--- Creating Group Conversation ---")
-    {:ok, convo_sample_group} = create_conversation(sample_family.id, :group, %{"name" => "Sample Family Group Chat"})
-    add_users_to_conversation(convo_sample_group, [chelsey_user.id, clayton_user.id, theo_user.id])
 
+    {:ok, convo_sample_group} =
+      create_conversation(sample_family.id, :group, %{
+        "name" => "Sample Family Group Chat"
+      })
+
+    add_users_to_conversation(convo_sample_group, [
+      chelsey_user.id,
+      clayton_user.id,
+      theo_user.id
+    ])
 
     # --- Messages ---
     IO.puts("\n--- Creating Messages ---")
     # Conversation Zane & Naho
-    create_message(convo_zane_naho.id, zane_user.id, :text, "Hey Naho, everything good?")
-    create_message(convo_zane_naho.id, naho_user.id, :text, "Yeah, just working from home today. You?")
+    create_message(
+      convo_zane_naho.id,
+      zane_user.id,
+      :text,
+      "Hey Naho, everything good?"
+    )
+
+    create_message(
+      convo_zane_naho.id,
+      naho_user.id,
+      :text,
+      "Yeah, just working from home today. You?"
+    )
 
     # Conversation Jacob & Shae
-    create_message(convo_jacob_shae.id, jacob_user.id, :text, "Shae, can you pick up groceries later?")
-    create_message(convo_jacob_shae.id, shae_user.id, :text, "Sure, what do we need?")
+    create_message(
+      convo_jacob_shae.id,
+      jacob_user.id,
+      :text,
+      "Shae, can you pick up groceries later?"
+    )
+
+    create_message(
+      convo_jacob_shae.id,
+      shae_user.id,
+      :text,
+      "Sure, what do we need?"
+    )
 
     # Conversation Katharine & Yuka
-    create_message(convo_katharine_yuka.id, katharine_user.id, :text, "Yuka, did you book the flights?")
-    create_message(convo_katharine_yuka.id, yuka_user.id, :text, "Almost done, just confirming dates.")
+    create_message(
+      convo_katharine_yuka.id,
+      katharine_user.id,
+      :text,
+      "Yuka, did you book the flights?"
+    )
+
+    create_message(
+      convo_katharine_yuka.id,
+      yuka_user.id,
+      :text,
+      "Almost done, just confirming dates."
+    )
 
     # Conversation Chelsey & Clayton
-    create_message(convo_chelsey_clayton.id, chelsey_user.id, :text, "Clayton, Theo's soccer practice is at 4pm.")
-    create_message(convo_chelsey_clayton.id, clayton_user.id, :text, "Got it, thanks for the reminder.")
+    create_message(
+      convo_chelsey_clayton.id,
+      chelsey_user.id,
+      :text,
+      "Clayton, Theo's soccer practice is at 4pm."
+    )
+
+    create_message(
+      convo_chelsey_clayton.id,
+      clayton_user.id,
+      :text,
+      "Got it, thanks for the reminder."
+    )
 
     # Conversation Chelsey & Theo
-    create_message(convo_chelsey_theo.id, chelsey_user.id, :text, "Theo, how was school today?")
-    create_message(convo_chelsey_theo.id, theo_user.id, :text, "It was fun! We learned about space.")
+    create_message(
+      convo_chelsey_theo.id,
+      chelsey_user.id,
+      :text,
+      "Theo, how was school today?"
+    )
+
+    create_message(
+      convo_chelsey_theo.id,
+      theo_user.id,
+      :text,
+      "It was fun! We learned about space."
+    )
 
     # Group Conversation (Sample Family)
-    create_message(convo_sample_group.id, chelsey_user.id, :text, "Hi everyone, quick update on the family trip.")
-    create_message(convo_sample_group.id, clayton_user.id, :text, "Sounds good, Chelsey! Looking forward to it.")
-    create_message(convo_sample_group.id, theo_user.id, :text, "Are we there yet?")
+    create_message(
+      convo_sample_group.id,
+      chelsey_user.id,
+      :text,
+      "Hi everyone, quick update on the family trip."
+    )
 
+    create_message(
+      convo_sample_group.id,
+      clayton_user.id,
+      :text,
+      "Sounds good, Chelsey! Looking forward to it."
+    )
+
+    create_message(
+      convo_sample_group.id,
+      theo_user.id,
+      :text,
+      "Are we there yet?"
+    )
 
     IO.puts("\nSeed data creation completed!")
   end
