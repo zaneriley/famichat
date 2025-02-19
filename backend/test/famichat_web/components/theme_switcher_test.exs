@@ -1,7 +1,6 @@
 defmodule FamichatWeb.Components.ThemeSwitcherTest do
   use FamichatWeb.ConnCase, async: true
   import Phoenix.LiveViewTest
-  import FamichatWeb.Gettext
   alias Floki
 
   alias FamichatWeb.Components.ThemeSwitcher

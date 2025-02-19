@@ -55,7 +55,7 @@ defmodule FamichatWeb.Navigation do
         class="col-span-2"
         aria-label={gettext("Zane Riley Famichat Logo")}
       >
-        <.typography locale={@user_locale} tag="span" size="2xl" font="cardinal">
+        <.typography tag="span" size="2xl" font="cardinal">
           Zane
         </.typography>
       </.link>
@@ -67,7 +67,7 @@ defmodule FamichatWeb.Navigation do
               navigate={Routes.case_study_index_path(@socket, :index, @user_locale)}
               class={active_class(@current_path, :case_studies)}
             >
-              <.typography locale={@user_locale} tag="span" size="md">
+              <.typography tag="span" size="md">
                 <%= ngettext("Case Study", "Case Studies", 2) %>
               </.typography>
             </.link>
@@ -77,7 +77,7 @@ defmodule FamichatWeb.Navigation do
               navigate={Routes.note_index_path(@socket, :index, @user_locale)}
               class={active_class(@current_path, :notes)}
             >
-              <.typography locale={@user_locale} tag="span" size="md">
+              <.typography tag="span" size="md">
                 <%= ngettext("Note", "Notes", 2) %>
               </.typography>
             </.link>
@@ -87,7 +87,7 @@ defmodule FamichatWeb.Navigation do
               navigate={Routes.about_path(@socket, :index, @user_locale)}
               class={active_class(@current_path, :about)}
             >
-              <.typography locale={@user_locale} tag="span" size="md">
+              <.typography tag="span" size="md">
                 <%= gettext("Self") %>
               </.typography>
             </.link>
@@ -109,7 +109,7 @@ defmodule FamichatWeb.Navigation do
               aria-current={if @user_locale == "en", do: "page", else: "false"}
               class={"#{if @user_locale == "en", do: "font-bold", else: ""}"}
             >
-              <.typography locale={@user_locale} tag="span" size="1xs">
+              <.typography tag="span" size="1xs">
                 English
               </.typography>
             </.link>
@@ -121,7 +121,7 @@ defmodule FamichatWeb.Navigation do
               aria-current={if @user_locale == "ja", do: "page", else: "false"}
               class={"#{if @user_locale == "ja", do: "font-bold", else: ""}"}
             >
-              <.typography locale={@user_locale} tag="span" size="1xs">
+              <.typography tag="span" size="1xs">
                 日本語
               </.typography>
             </.link>

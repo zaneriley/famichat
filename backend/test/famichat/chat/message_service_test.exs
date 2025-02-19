@@ -2,7 +2,7 @@ defmodule Famichat.Chat.MessageServiceTest do
   use Famichat.DataCase
   use ExUnit.Case, async: true
 
-  alias Famichat.Chat.{MessageService, Message, Conversation}
+  alias Famichat.Chat.{MessageService, Message}
   alias Famichat.Repo
   import Famichat.ChatFixtures
 

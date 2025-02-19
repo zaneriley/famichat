@@ -60,10 +60,12 @@ Security & Performance Considerations
 ## Completed Sprints  
 
 **Sprint 1: Environment & Foundational Setup** ✓
+**Sprint 2: Basic Messaging Functionality (Sending)** ✓
 **Sprint 3: Direct Conversation Creation** ✓  
 **Sprint 4: Message Retrieval & Conversation Listing** ✓  
 **Sprint 5: Self–Messaging Support** ✓  
 **Sprint 6: Telemetry Instrumentation** ✓  
+**Sprint 6b: Encryption Foundation** ✓  
 
 
 ## Current Sprint Progress  
@@ -128,6 +130,16 @@ Outcome: Key endpoints are instrumented and performance data flows are establish
 • Story 6.5: Configure Prometheus/Grafana (or a stub) to receive and display telemetry data for key endpoints
 
 ─────────────────────────────  
+Sprint 6b: Encryption Foundation (SPIKE!)
+Outcome: Core cryptographic patterns established and ready for E2EE implementation.
+
+• Story 6b.1: Design encrypted message storage format  
+• Story 6b.2: Implement key management service skeleton  
+• Story 6b.3: Establish protocol for device trust verification  
+• Story 6b.4: Create key rotation scaffolding  
+• Story 6b.5: Document crypto architecture decisions  
+
+─────────────────────────────  
 Sprint 7: Real–Time Messaging Integration  
 Outcome: New messages and conversation updates are broadcast in real time via Phoenix Channels.
 
@@ -135,7 +147,8 @@ Outcome: New messages and conversation updates are broadcast in real time via Ph
 • Story 7.2: Write unit / integration tests to verify that new messages trigger channel events  
 • Story 7.3: Document the process for subscribing to channels and the API for live updates  
 • Story 7.4: Create a simple UI hook (dummy route/component) that consumes real–time events  
-• Story 7.5: Verify real–time notifications with a manual test and log results
+• Story 7.5: Verify real–time notifications with a manual test and log results  
+• Story 7.6: Add encryption-aware message serialization/deserialization hooks
 
 ─────────────────────────────  
 Sprint 8: Flutter Client – Messaging UI & Integration  
@@ -159,13 +172,13 @@ Outcome: Families can customize their interface with theme switching and basic w
 
 ─────────────────────────────  
 Sprint 10: Security & Performance Enhancements  
-Outcome: The application gains end-to-end encryption and improved caching, ensuring better security and performance.
+Outcome: Full Signal Protocol implementation with X3DH/Double Ratchet.
 
-• Story 10.1: Implement basic end-to-end encryption support for messaging endpoints  
-• Story 10.2: Set up caching for get_conversation_messages to reduce database load  
-• Story 10.3: Add middleware or logging for performance monitoring across critical endpoints  
-• Story 10.4: Write tests to simulate heavy load and verify caching performance  
-• Story 10.5: Document security measures, encryption details, and caching strategies
+• Story 10.1: Implement X3DH key exchange protocol  
+• Story 10.2: Add Double Ratchet message encryption  
+• Story 10.3: Create key rotation system  
+• Story 10.4: Implement encrypted message payload handling  
+• Story 10.5: Develop key recovery/backup mechanism  
 
 ─────────────────────────────  
 Sprint 11: Code Quality, Error Handling & Documentation Refinement  
@@ -202,7 +215,7 @@ Notes
 
 • Although each story is 1 point, they are defined in such a way that their cumulative effect in a 2–week sprint yields a clear, measurable outcome.  
 • This breakdown covers core backend, real–time messaging, frontend integration, customization, security, and onboarding. Additional one–point stories can be added for further refinements or any backlog items not listed here.  
-• Regular refinement sessions will help ensure that “legacy” items or emerging requirements are converted into new one–point stories for upcoming sprints.
+• Regular refinement sessions will help ensure that "legacy" items or emerging requirements are converted into new one–point stories for upcoming sprints.
 
 
 ─────────────────────────────  
@@ -230,6 +243,11 @@ Letters Inbox Screen – Detailed Layout
  • Main Content: A scrollable list of letters presented in chronological order, with elements such as sender avatar, sender name, message preview, timestamp, and media indicator if applicable.  
  • Empty State: Friendly placeholder messaging prompting the user to write a letter if the inbox is empty.
 
+Cozy features:
+- "fingers touching" adds a to merge families, where one family can merge with another by touching a spot on the UI at the same time where it vibrates.
+- "phone bumping" adds a to merge families, where one family can merge with another by touching a spot on the UI at the same time where it vibrates.
+- "ambient tracing" lets users sketch across the other persons visible area, as a sort of shared canvas or sketchbook (per day? per week?)
+
 ─────────────────────────────  
 5. Quality Assurance, Testing & Telemetry
 
@@ -239,9 +257,9 @@ Quality Assurance & Testing Approach
  • Peer reviews and automated static analysis (using tools like Credo, Sobelow) to flag potential issues before merge.
 
 Telemetry Guidelines & Best Practices  
- • Instrument critical functions (e.g., message retrieval, conversation creation) using :telemetry.span/3.  
- • Follow a consistent naming convention for events (for instance, [:famichat, :message_service, :get_conversation_messages]).  
- • Set performance budgets—e.g., messaging endpoints should finish execution in less than 200ms under normal load.  
+ • Instrument critical functions (e.g., message retrieval, conversation creation) using :telemetry.span/3 and :telemetry.execute/3.  
+ • Follow event naming convention: [:famichat, :context, :action] (e.g., [:famichat, :message, :sent]).  
+ • Set performance budgets (e.g., 200ms for message retrieval endpoints).  
  • Export telemetry metrics to monitoring tools (Prometheus/Grafana) for live tracking, facilitating rapid detection of performance degradations.
  • Validate that every new endpoint or modified function includes telemetry hooks to support both development and production monitoring.
 
@@ -249,13 +267,18 @@ Acceptance Criteria
  • Consistent API responses (e.g., {:ok, entity} or {:error, reason}).  
  • All new functionalities are verified against defined acceptance tests and meet the performance budget before deployment.
 
+**Encryption-Specific Testing Strategy**  
+ • All tests must validate encryption/decryption cycles  
+ • Negative testing for tampered ciphertext detection  
+ • Performance testing for crypto operations under load  
+
 ─────────────────────────────  
 6. User Onboarding & Change Management
 
 Onboarding Experience Overview  
  • The onboarding flow is designed to be intuitive and family–focused.  
  • Key steps include account creation, profile setup, and guided tour of key features (Letters inbox, Calls, Family Space).  
- • Supplemental features, such as "phone bumping," are investigated to offer a cool, frictionless way to add contacts.
+ • Supplemental features, such as "phone bumping," are investigated to offer a cool, frictionless way to add contacts. "fingers touching" adds a to merge families, where one family can merge with another by touching a spot on the UI at the same time where it vibrates.
 
 Onboarding Flow & Innovations  
  • Explore iOS Native Nearby Interaction for "phone bump" onboarding.  
@@ -285,7 +308,10 @@ Change Management & Documentation Updates
 + – Verified end-to-end functionality through updated test suite  
 + – Added API Design Principles section
 +
- [Future updates should include a detailed list of changes, contributor names, and review dates.]
++Version 1.3 (Proposed Encryption Update)  
++ – Integrated E2EE roadmap into sprint planning  
++ – Added security testing requirements  
++ – Updated telemetry guidelines for crypto operations
  
  ─────────────────────────────  
  Final Notes

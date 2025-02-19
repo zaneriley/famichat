@@ -4,7 +4,7 @@ defmodule Famichat.Chat.MessageService do
   1. Validation -> 2. Authorization -> 3. Persistence -> 4. Notification
   """
   import Ecto.Query, warn: false
-  alias Famichat.{Repo, Telemetry}
+  alias Famichat.Repo
   alias Famichat.Chat.{Message, Conversation}
 
   @max_limit 100

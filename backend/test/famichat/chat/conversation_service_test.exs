@@ -1,8 +1,7 @@
 defmodule Famichat.Chat.ConversationServiceTest do
   use Famichat.DataCase
 
-  alias Famichat.Chat.{ConversationService, Conversation}
-  alias Famichat.Repo
+  alias Famichat.Chat.{ConversationService}
   import Famichat.ChatFixtures
 
   describe "create_direct_conversation/2 self conversations" do

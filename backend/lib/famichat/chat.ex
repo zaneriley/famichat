@@ -5,7 +5,7 @@ defmodule Famichat.Chat do
 
   import Ecto.Query, warn: false
   alias Famichat.Repo
-  alias Famichat.Chat.{User, Family, Conversation, Message}
+  alias Famichat.Chat.{User, Family}
 
   @doc """
   Returns the list of families.

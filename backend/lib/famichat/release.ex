@@ -4,9 +4,6 @@ defmodule Famichat.Release do
   """
 
   @app :famichat
-  alias Famichat.Content
-  alias Famichat.Content.FileManagement.Reader
-  alias Famichat.Content.Remote.GitRepoSyncer
   require Logger
 
   def migrate do

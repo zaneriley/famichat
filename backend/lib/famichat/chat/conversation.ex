@@ -36,15 +36,24 @@ defmodule Famichat.Chat.Conversation do
     many_to_many :users, Famichat.Chat.User,
       join_through: Famichat.Chat.ConversationParticipant
 
+    has_many :participants, Famichat.Chat.ConversationParticipant,
+      foreign_key: :conversation_id
+
     timestamps(type: :utc_datetime_usec)
   end
 
   @doc false
-  @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
+  @spec changeset(
+          t() | Ecto.Changeset.t(),
+          %{
+            :family_id => binary(),
+            optional(:conversation_type) => :letter | :direct | :group | :self,
+            optional(:metadata) => map()
+          }
+        ) :: Ecto.Changeset.t()
   def changeset(conversation, attrs) do
     conversation
     |> cast(attrs, [:family_id, :conversation_type, :metadata])
-    # Only require family_id
     |> validate_required([:family_id])
     |> validate_metadata()
     |> validate_conversation_type()
@@ -85,14 +94,5 @@ defmodule Famichat.Chat.Conversation do
     else
       add_error(changeset, :metadata, "group conversations require a name")
     end
-  end
-
-  @doc false
-  @spec user_changeset(Famichat.Chat.User.t(), map()) :: Ecto.Changeset.t()
-  # Dummy user changeset, adapt if needed for associations
-  defp user_changeset(user, attrs) do
-    user
-    # assuming User has its own changeset
-    |> Famichat.Chat.User.changeset(attrs)
   end
 end
