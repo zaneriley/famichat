@@ -1,24 +1,57 @@
 defmodule Famichat.ChatFixtures do
   @moduledoc """
-  Test fixtures for Chat context entities
+  Test fixture factory for chat-related schemas.
+
+  Provides functions to generate:
+  - Families
+  - Users (with automatic family association)
+  - Conversations (with participants)
+  - Timestamp helpers
+
+  ## Usage
+
+      alias Famichat.ChatFixtures
+
+      family = ChatFixtures.family_fixture()
+      user = ChatFixtures.user_fixture()
+      conv = ChatFixtures.conversation_fixture()
   """
-  alias Famichat.Chat.{Conversation, ConversationParticipant}
+
+  alias Famichat.Chat.{Conversation}
   alias Famichat.Repo
 
   @doc """
-  Generate a unique user username.
+  Generates a unique username with random suffix.
+
+  ## Examples
+
+      unique_user_username() # => "some username123"
   """
   def unique_user_username,
     do: "some username#{System.unique_integer([:positive])}"
 
   @doc """
-  Generate a unique family name.
+  Generates a unique family name with random suffix.
+
+  ## Examples
+
+      unique_family_name() # => "Family 456"
   """
   def unique_family_name,
     do: "Family #{System.unique_integer([:positive])}"
 
   @doc """
-  Generate a family.
+  Creates a family fixture with valid attributes.
+
+  ## Parameters
+    - attrs: Optional map to override default attributes
+
+  ## Returns
+    - `Famichat.Chat.Family` struct
+
+  ## Examples
+
+      family_fixture(%{name: "Custom Family"})
   """
   def family_fixture(attrs \\ %{}) do
     {:ok, family} =
@@ -32,7 +65,23 @@ defmodule Famichat.ChatFixtures do
   end
 
   @doc """
-  Generate a user.
+  Creates a user fixture associated with a family.
+
+  ## Parameters
+    - attrs: Optional map to override:
+      - `username`
+      - `family_id`
+      - `role`
+
+  ## Returns
+    - `Famichat.Chat.User` struct
+
+  ## Side Effects
+    - Automatically creates a family if not provided
+
+  ## Examples
+
+      user_fixture(%{username: "special_user"})
   """
   def user_fixture(attrs \\ %{}) do
     family = family_fixture()
@@ -50,7 +99,24 @@ defmodule Famichat.ChatFixtures do
   end
 
   @doc """
-  Generate a conversation.
+  Creates a conversation fixture with participants.
+
+  ## Parameters
+    - attrs: Optional map to override:
+      - `family_id`
+      - `conversation_type`
+      - `metadata`
+
+  ## Returns
+    - `Famichat.Chat.Conversation` struct
+
+  ## Side Effects
+    - Creates associated family and user
+    - Adds participant record via `ConversationParticipant`
+
+  ## Examples
+
+      conversation_fixture(%{conversation_type: :group})
   """
   def conversation_fixture(attrs \\ %{}) do
     family = family_fixture()
@@ -81,8 +147,18 @@ defmodule Famichat.ChatFixtures do
   end
 
   @doc """
-  Returns a current UTC DateTime with microsecond precision,
-  offset by the given number of seconds.
+  Generates a truncated UTC timestamp for consistent time testing.
+
+  ## Parameters
+    - offset_seconds: Integer seconds to add/subtract from now
+
+  ## Returns
+    - `DateTime.t` with microsecond precision
+
+  ## Examples
+
+      truncated_timestamp()      # Current time
+      truncated_timestamp(-3600) # 1 hour ago
   """
   def truncated_timestamp(offset_seconds \\ 0)
       when is_integer(offset_seconds) do

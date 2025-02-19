@@ -33,6 +33,17 @@
     </instruction>
   </code_writing>
 
+  <commands>
+    <instruction>
+      You need to use ./run commands instead of using purely `mix` because our project is in a docker container. 
+      BAD: `mix test [file]`
+      GOOD: `./run mix test [file]`
+
+      BAD: `mix test`
+      GOOD: `./run elixir:test`
+    </instruction>
+  </commands>
+
   <liveview_optimizations>
     <instruction>
       Optimize Phoenix LiveView components to ensure minimal HTML diffs by adhering to best practices in component rendering and state management.

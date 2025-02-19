@@ -11,7 +11,6 @@ defmodule FamichatWeb.Components.Typography do
   """
 
   use Phoenix.Component
-  import Phoenix.HTML
   require Logger
 
   @doc """

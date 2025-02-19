@@ -82,7 +82,6 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
           end)
 
         case valid_path do
-          # If no valid path is found, log a warning and return the conn without redirecting
           nil ->
             log(:debug, "No valid route found after adding locale.")
 
@@ -90,12 +89,9 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
               conn: conn,
               router: FamichatWeb.Router
 
-          # If a valid path is found, reset the redirect count and perform the redirection
           path ->
-            conn =
-              conn
-              |> put_session(:redirect_count, 0)
-              |> redirect_to_locale(path, user_locale)
+            put_session(conn, :redirect_count, 0)
+            |> redirect_to_locale(path, user_locale)
         end
     end
   end

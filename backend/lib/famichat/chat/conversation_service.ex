@@ -33,16 +33,34 @@ defmodule Famichat.Chat.ConversationService do
   import Ecto.Query, only: [from: 2]
   require Logger
 
-  @moduledoc """
-  Internal state container for conversation creation pipeline.
-
-  This module defines the struct and validation logic used in the multi-step
-  conversation creation process. It helps maintain transaction state between
-  the various validation and creation stages.
-  """
   defmodule ConversationState do
-    @moduledoc false  # Since this is an internal implementation detail
+    # Internal implementation detail
+    @moduledoc false
     @enforce_keys [:user1_id, :user2_id]
+
+    @typedoc """
+    Internal state container for conversation creation pipeline.
+
+    ## Fields
+
+    - user1_id: Initiating user ID
+    - user2_id: Receiving user ID
+    - users: Loaded User structs
+    - family_valid?: Family consistency check
+    - existing_conversation: Pre-existing conversation if found
+    - error: Failure reason
+    - meta: Process metadata for instrumentation
+    """
+    @type t :: %__MODULE__{
+            user1_id: String.t(),
+            user2_id: String.t(),
+            users: [Famichat.Chat.User.t()] | nil,
+            family_valid?: boolean() | nil,
+            existing_conversation: Famichat.Chat.Conversation.t() | nil,
+            error: atom() | nil,
+            meta: map() | nil
+          }
+
     defstruct [
       :user1_id,
       :user2_id,
@@ -153,25 +171,6 @@ defmodule Famichat.Chat.ConversationService do
 
   def list_user_conversations(_), do: {:error, :invalid_user_id}
 
-  @doc false
-  @spec validate_same_family_batch([User.t()]) :: :ok | {:error, :different_families}
-  defp validate_same_family_batch(users) when is_list(users) do
-    case Enum.uniq(Enum.map(users, & &1.family_id)) do
-      [_] -> :ok
-      _ -> {:error, :different_families}
-    end
-  end
-
-  @doc false
-  @spec translate_changeset_errors(Ecto.Changeset.t()) :: map()
-  defp translate_changeset_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {key, value}, acc ->
-        String.replace(acc, "%{#{key}}", to_string(value))
-      end)
-    end)
-  end
-
   defp do_create_conversation(user1_id, user2_id) do
     %ConversationState{user1_id: user1_id, user2_id: user2_id}
     |> load_users()
@@ -244,10 +243,9 @@ defmodule Famichat.Chat.ConversationService do
     existing =
       from(c in Conversation,
         where: c.conversation_type == ^type,
-        join: cp in assoc(c, :participants),
+        join: p in assoc(c, :participants),
         group_by: c.id,
-        having:
-          fragment("COUNT(DISTINCT ?) = ?", cp.user_id, ^participant_count)
+        having: fragment("COUNT(DISTINCT ?) = ?", p.user_id, ^participant_count)
       )
       |> Repo.one()
 
@@ -257,25 +255,38 @@ defmodule Famichat.Chat.ConversationService do
   defp create_if_missing({:existing, conv}), do: {:existing, conv}
 
   defp create_if_missing({:create, state}) do
-    # Unified conversation creation logic
+    family_id = hd(state.users).family_id
+
+    unless Ecto.UUID.cast(family_id) do
+      Logger.error("Invalid family_id format: #{family_id}")
+      Repo.rollback(:invalid_family_id)
+    end
+
     attrs = %{
-      family_id: hd(state.users).family_id,
+      family_id: family_id,
       conversation_type:
         if(state.user1_id == state.user2_id, do: :self, else: :direct),
       metadata: %{}
     }
 
-    %Conversation{}
-    |> Conversation.changeset(attrs)
-    |> Ecto.Changeset.put_assoc(:users, state.users)
-    |> Repo.insert()
-    |> case do
-      {:ok, conv} ->
-        {:new, conv}
-
+    # credo:disable-for-next-line Credo.Check.Readability.WithSingleClause
+    with {:ok, conv} <-
+           %Conversation{}
+           |> Conversation.changeset(attrs)
+           |> Ecto.Changeset.put_assoc(:users, state.users)
+           |> Repo.insert() do
+      {:new, conv}
+    else
       {:error, changeset} ->
         log_changeset_error(changeset)
-        Repo.rollback(translate_changeset_errors(changeset))
+
+        Repo.rollback(
+          Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+            Enum.reduce(opts, msg, fn {key, value}, acc ->
+              String.replace(acc, "%{#{key}}", to_string(value))
+            end)
+          end)
+        )
     end
   end
 
@@ -288,18 +299,15 @@ defmodule Famichat.Chat.ConversationService do
   defp same_family?(users),
     do: Enum.map(users, & &1.family_id) |> Enum.uniq() |> length() == 1
 
+  @dialyzer {:nowarn_function, log_changeset_error: 1}
   defp log_changeset_error(changeset),
     do:
       Logger.error("Conversation creation failed",
         changeset: inspect(changeset, pretty: true)
       )
 
-  defp ok?(result) do
-    case result do
-      {:ok, _} -> true
-      _ -> false
-    end
-  end
+  defp ok?({{:ok, _}, _}), do: true
+  defp ok?(_), do: false
 
   defp get_conversations(user_id) do
     query =

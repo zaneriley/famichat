@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { calculateLineHeight } from "../../tailwind/line-height";
+import { describe, expect, it } from "vitest";
 import type { LineHeightConfig } from "../../tailwind/configs/type-config";
+import { calculateLineHeight } from "../../tailwind/line-height";
 
 // Define minimum line height thresholds per configuration
 const minLineHeightThresholds: { [key: string]: number } = {
