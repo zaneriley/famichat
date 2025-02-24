@@ -2,6 +2,10 @@ defmodule FamichatWeb.UserSocket do
   use Phoenix.Socket
   require Logger
 
+  channel "message:*", FamichatWeb.MessageChannel
+
+  @salt "user_auth"
+
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After
   # verification, you can put default assigns into
@@ -14,25 +18,30 @@ defmodule FamichatWeb.UserSocket do
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
   @impl true
-  def connect(_params, socket, _connect_info) do
-    {:ok, socket}
+  def connect(%{"token" => token}, socket, _connect_info) do
+    case verify_token_and_connect(token, socket) do
+      {:ok, socket} -> {:ok, socket}
+      {:error, _reason} = error -> error
+    end
   end
 
-  # defp verify_token_and_connect(token, socket) do
-  #   salt = @salt
+  def connect(_params, _socket, _connect_info) do
+    {:error, %{reason: "invalid_token"}}
+  end
 
-  #   case Phoenix.Token.verify(FamichatWeb.Endpoint, salt, token,
-  #          max_age: 86_400
-  #        ) do
-  #     {:ok, user_id} ->
-  #       Logger.debug("User connected with user_id: #{user_id}")
-  #       {:ok, assign(socket, :user_id, user_id)}
+  defp verify_token_and_connect(token, socket) do
+    case Phoenix.Token.verify(FamichatWeb.Endpoint, @salt, token,
+           max_age: 86_400
+         ) do
+      {:ok, user_id} ->
+        Logger.debug("User connected with user_id: #{user_id}")
+        {:ok, assign(socket, :user_id, user_id)}
 
-  #     {:error, reason} ->
-  #       Logger.error("User connection failed due to invalid token: #{reason}")
-  #       {:error, %{reason: "invalid_token"}}
-  #   end
-  # end
+      {:error, reason} ->
+        Logger.error("User connection failed due to invalid token: #{reason}")
+        {:error, %{reason: "invalid_token"}}
+    end
+  end
 
   # Socket id's are topics that allow you to identify all sockets for a given user:
   #
@@ -45,5 +54,5 @@ defmodule FamichatWeb.UserSocket do
   #
   # Returning `nil` makes this socket anonymous.
   @impl true
-  def id(_socket), do: nil
+  def id(socket), do: "user_socket:#{socket.assigns.user_id}"
 end

@@ -113,18 +113,55 @@ defmodule Famichat.Chat.ConversationService do
           {:ok, Conversation.t()} | {:error, atom()}
   def create_direct_conversation(user1_id, user2_id)
       when is_binary(user1_id) and is_binary(user2_id) do
-    result = do_create_conversation(user1_id, user2_id)
+    with {:ok, user1} <- get_user(user1_id),
+         {:ok, user2} <- get_user(user2_id),
+         true <- user1.family_id == user2.family_id || {:error, :different_families} do
+      family_id = user1.family_id
+      direct_key = Conversation.compute_direct_key(user1_id, user2_id, family_id)
 
-    # Emit telemetry after processing
-    :telemetry.execute([:famichat, :conversation, :created], %{count: 1}, %{
-      user1_id: user1_id,
-      user2_id: user2_id,
-      result: if(ok?(result), do: :success, else: :error)
-    })
+      multi =
+        Ecto.Multi.new()
+        |> Ecto.Multi.run(:existing, fn repo, _changes ->
+          query =
+            from c in Conversation,
+              where: c.direct_key == ^direct_key and c.conversation_type == ^:direct
 
-    # Unwrap and return only the status tuple.
-    case result do
-      {status, _meta} -> status
+          case repo.one(query) do
+            nil -> {:ok, nil}
+            conv -> {:ok, conv}
+          end
+        end)
+        |> Ecto.Multi.run(:create, fn repo, %{existing: existing} ->
+          if existing do
+            {:ok, existing}
+          else
+            attrs = %{
+              family_id: family_id,
+              conversation_type: :direct,
+              direct_key: direct_key,
+              metadata: %{}
+            }
+
+            changeset = Conversation.changeset(%Conversation{}, attrs)
+            repo.insert(changeset)
+          end
+        end)
+
+      :telemetry.span([:famichat, :conversation_service, :create_direct_conversation], %{}, fn ->
+        case Repo.transaction(multi) do
+          {:ok, %{create: conv}} ->
+            {{:ok, conv}, %{result: "created"}}
+
+          {:error, _op, reason, _changes} ->
+            {{:error, reason}, %{result: "error"}}
+        end
+      end)
+      |> case do
+        {{:ok, conv}, _measurements} -> {:ok, conv}
+        {{:error, reason}, _measurements} -> {:error, reason}
+      end
+    else
+      error -> error
     end
   end
 
@@ -171,143 +208,12 @@ defmodule Famichat.Chat.ConversationService do
 
   def list_user_conversations(_), do: {:error, :invalid_user_id}
 
-  defp do_create_conversation(user1_id, user2_id) do
-    %ConversationState{user1_id: user1_id, user2_id: user2_id}
-    |> load_users()
-    |> validate_pair()
-    |> handle_transaction()
-    |> finalize_result()
-  end
-
-  defp load_users(state) do
-    users =
-      if state.user1_id == state.user2_id do
-        Repo.all(from u in User, where: u.id == ^state.user1_id)
-      else
-        Repo.all(
-          from u in User, where: u.id in ^[state.user1_id, state.user2_id]
-        )
-      end
-
-    %{state | users: users}
-  end
-
-  defp validate_pair(state) do
-    cond do
-      state.user1_id == state.user2_id and length(state.users) != 1 ->
-        %{state | error: :user_not_found, meta: %{error: "User not found"}}
-
-      state.user1_id != state.user2_id and length(state.users) != 2 ->
-        %{
-          state
-          | error: :user_not_found,
-            meta: %{error: "One or both users not found"}
-        }
-
-      state.user1_id != state.user2_id and not same_family?(state.users) ->
-        %{
-          state
-          | error: :different_families,
-            meta: %{error: :different_families}
-        }
-
-      true ->
-        state
+  defp get_user(user_id) do
+    case Repo.get(User, user_id) do
+      nil -> {:error, :user_not_found}
+      user -> {:ok, user}
     end
   end
-
-  defp handle_transaction(%{error: nil} = state) do
-    transaction_result =
-      Repo.transaction(fn ->
-        state
-        |> find_existing_conversation()
-        |> create_if_missing()
-      end)
-
-    case transaction_result do
-      {:ok, {status, conv}} ->
-        %{state | existing_conversation: conv, meta: %{status => true}}
-
-      {:error, reason} ->
-        %{state | error: reason, meta: %{error: reason}}
-    end
-  end
-
-  defp handle_transaction(state), do: state
-
-  defp find_existing_conversation(state) do
-    # Consolidated existing conversation query logic
-    type = if state.user1_id == state.user2_id, do: :self, else: :direct
-    participant_count = if type == :self, do: 1, else: 2
-
-    existing =
-      from(c in Conversation,
-        where: c.conversation_type == ^type,
-        join: p in assoc(c, :participants),
-        group_by: c.id,
-        having: fragment("COUNT(DISTINCT ?) = ?", p.user_id, ^participant_count)
-      )
-      |> Repo.one()
-
-    if existing, do: {:existing, existing}, else: {:create, state}
-  end
-
-  defp create_if_missing({:existing, conv}), do: {:existing, conv}
-
-  defp create_if_missing({:create, state}) do
-    family_id = hd(state.users).family_id
-
-    unless Ecto.UUID.cast(family_id) do
-      Logger.error("Invalid family_id format: #{family_id}")
-      Repo.rollback(:invalid_family_id)
-    end
-
-    attrs = %{
-      family_id: family_id,
-      conversation_type:
-        if(state.user1_id == state.user2_id, do: :self, else: :direct),
-      metadata: %{}
-    }
-
-    # credo:disable-for-next-line Credo.Check.Readability.WithSingleClause
-    with {:ok, conv} <-
-           %Conversation{}
-           |> Conversation.changeset(attrs)
-           |> Ecto.Changeset.put_assoc(:users, state.users)
-           |> Repo.insert() do
-      {:new, conv}
-    else
-      {:error, changeset} ->
-        log_changeset_error(changeset)
-
-        Repo.rollback(
-          Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-            Enum.reduce(opts, msg, fn {key, value}, acc ->
-              String.replace(acc, "%{#{key}}", to_string(value))
-            end)
-          end)
-        )
-    end
-  end
-
-  defp finalize_result(%{error: nil, existing_conversation: conv, meta: meta}),
-    do: {{:ok, conv}, meta}
-
-  defp finalize_result(%{error: error, meta: meta}),
-    do: {{:error, error}, meta}
-
-  defp same_family?(users),
-    do: Enum.map(users, & &1.family_id) |> Enum.uniq() |> length() == 1
-
-  @dialyzer {:nowarn_function, log_changeset_error: 1}
-  defp log_changeset_error(changeset),
-    do:
-      Logger.error("Conversation creation failed",
-        changeset: inspect(changeset, pretty: true)
-      )
-
-  defp ok?({{:ok, _}, _}), do: true
-  defp ok?(_), do: false
 
   defp get_conversations(user_id) do
     query =

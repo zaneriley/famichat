@@ -40,12 +40,17 @@ defmodule Famichat.Repo.Seed do
     end
   end
 
-  defp create_conversation(family_id, conversation_type, metadata \\ %{}) do
-    conversation_attrs = %{
-      family_id: family_id,
-      conversation_type: conversation_type,
-      metadata: metadata
-    }
+  defp create_conversation(family_id, conversation_type, metadata \\ %{}, opts \\ %{}) do
+    conversation_attrs =
+      if conversation_type == :direct do
+        # Expect opts to have :user1_id and :user2_id for direct conversations
+        direct_key =
+          Conversation.compute_direct_key(opts[:user1_id], opts[:user2_id], family_id)
+
+        %{family_id: family_id, conversation_type: conversation_type, direct_key: direct_key, metadata: metadata}
+      else
+        %{family_id: family_id, conversation_type: conversation_type, metadata: metadata}
+      end
 
     case Conversation.changeset(%Conversation{}, conversation_attrs)
          |> Repo.insert() do
@@ -127,56 +132,55 @@ defmodule Famichat.Repo.Seed do
     IO.puts("\n--- Creating Users ---")
 
     {:ok, zane_user} =
-      create_user(homelab_family.id, %{username: "Zane", role: "admin"})
+      create_user(homelab_family.id, %{username: "Zane", role: "admin", email: "zane@example.com"})
 
     {:ok, naho_user} =
-      create_user(homelab_family.id, %{username: "Naho", role: "member"})
+      create_user(homelab_family.id, %{username: "Naho", role: "member", email: "naho@example.com"})
 
     {:ok, jacob_user} =
-      create_user(mclaws_family.id, %{username: "Jacob", role: "admin"})
+      create_user(mclaws_family.id, %{username: "Jacob", role: "admin", email: "jacob@example.com"})
 
     {:ok, shae_user} =
-      create_user(mclaws_family.id, %{username: "Shae", role: "member"})
+      create_user(mclaws_family.id, %{username: "Shae", role: "member", email: "shae@example.com"})
 
     {:ok, katharine_user} =
-      create_user(li_family.id, %{username: "Katharine", role: "admin"})
+      create_user(li_family.id, %{username: "Katharine", role: "admin", email: "katharine@example.com"})
 
     {:ok, yuka_user} =
-      create_user(li_family.id, %{username: "Yuka", role: "member"})
+      create_user(li_family.id, %{username: "Yuka", role: "member", email: "yuka@example.com"})
 
     {:ok, chelsey_user} =
-      create_user(sample_family.id, %{username: "Chelsey", role: "admin"})
+      create_user(sample_family.id, %{username: "Chelsey", role: "admin", email: "chelsey@example.com"})
 
     {:ok, clayton_user} =
-      create_user(sample_family.id, %{username: "Clayton", role: "member"})
+      create_user(sample_family.id, %{username: "Clayton", role: "member", email: "clayton@example.com"})
 
     {:ok, theo_user} =
-      create_user(sample_family.id, %{username: "Theo", role: "member"})
+      create_user(sample_family.id, %{username: "Theo", role: "member", email: "theo@example.com"})
 
     # --- Direct Conversations ---
     IO.puts("\n--- Creating Direct Conversations ---")
-    {:ok, convo_zane_naho} = create_conversation(homelab_family.id, :direct)
+    {:ok, convo_zane_naho} = create_conversation(homelab_family.id, :direct, %{}, %{user1_id: zane_user.id, user2_id: naho_user.id})
     add_users_to_conversation(convo_zane_naho, [zane_user.id, naho_user.id])
 
-    {:ok, convo_jacob_shae} = create_conversation(mclaws_family.id, :direct)
+    {:ok, convo_jacob_shae} = create_conversation(mclaws_family.id, :direct, %{}, %{user1_id: jacob_user.id, user2_id: shae_user.id})
     add_users_to_conversation(convo_jacob_shae, [jacob_user.id, shae_user.id])
 
-    {:ok, convo_katharine_yuka} = create_conversation(li_family.id, :direct)
-
+    {:ok, convo_katharine_yuka} = create_conversation(li_family.id, :direct, %{}, %{user1_id: katharine_user.id, user2_id: yuka_user.id})
     add_users_to_conversation(convo_katharine_yuka, [
       katharine_user.id,
       yuka_user.id
     ])
 
     {:ok, convo_chelsey_clayton} =
-      create_conversation(sample_family.id, :direct)
+      create_conversation(sample_family.id, :direct, %{}, %{user1_id: chelsey_user.id, user2_id: clayton_user.id})
 
     add_users_to_conversation(convo_chelsey_clayton, [
       chelsey_user.id,
       clayton_user.id
     ])
 
-    {:ok, convo_chelsey_theo} = create_conversation(sample_family.id, :direct)
+    {:ok, convo_chelsey_theo} = create_conversation(sample_family.id, :direct, %{}, %{user1_id: chelsey_user.id, user2_id: theo_user.id})
 
     add_users_to_conversation(convo_chelsey_theo, [
       chelsey_user.id,
@@ -189,7 +193,7 @@ defmodule Famichat.Repo.Seed do
     {:ok, convo_sample_group} =
       create_conversation(sample_family.id, :group, %{
         "name" => "Sample Family Group Chat"
-      })
+      }, %{})
 
     add_users_to_conversation(convo_sample_group, [
       chelsey_user.id,
