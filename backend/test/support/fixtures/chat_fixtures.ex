@@ -31,6 +31,16 @@ defmodule Famichat.ChatFixtures do
     do: "some username#{System.unique_integer([:positive])}"
 
   @doc """
+  Generates a unique email with random suffix.
+
+  ## Examples
+
+      unique_user_email() # => "user1234@example.com"
+  """
+  def unique_user_email,
+    do: "user#{System.unique_integer([:positive])}@example.com"
+
+  @doc """
   Generates a unique family name with random suffix.
 
   ## Examples
@@ -90,6 +100,7 @@ defmodule Famichat.ChatFixtures do
       attrs
       |> Enum.into(%{
         username: unique_user_username(),
+        email: unique_user_email(),
         family_id: family.id,
         role: :member
       })
@@ -106,6 +117,9 @@ defmodule Famichat.ChatFixtures do
       - `family_id`
       - `conversation_type`
       - `metadata`
+      - `user1` - (optional) first participant (a %User{} struct)
+      - `user2` - (optional) second participant (a %User{} struct)
+      - `direct_key` - (optional) direct conversation key. If not provided, it is computed.
 
   ## Returns
     - `Famichat.Chat.Conversation` struct
@@ -120,30 +134,78 @@ defmodule Famichat.ChatFixtures do
   """
   def conversation_fixture(attrs \\ %{}) do
     family = family_fixture()
-    user = user_fixture(%{family_id: family.id})
+    conversation_type = Map.get(attrs, :conversation_type, :direct)
 
-    conversation =
-      %Conversation{}
-      |> Conversation.changeset(
-        Map.merge(
-          %{
-            family_id: family.id,
-            conversation_type: :direct,
-            metadata: %{}
-          },
-          attrs
-        )
-      )
-      |> Repo.insert!()
+    cond do
+      conversation_type == :direct ->
+        # Create two distinct users or accept overrides via attrs
+        user1 = Map.get(attrs, :user1) || user_fixture(%{family_id: family.id})
+        user2 = Map.get(attrs, :user2) || user_fixture(%{family_id: family.id})
 
-    %Famichat.Chat.ConversationParticipant{}
-    |> Famichat.Chat.ConversationParticipant.changeset(%{
-      conversation_id: conversation.id,
-      user_id: user.id
-    })
-    |> Repo.insert!()
+        # Compute direct_key if not already provided
+        direct_key = Map.get(attrs, :direct_key) ||
+          Famichat.Chat.Conversation.compute_direct_key(user1.id, user2.id, family.id)
 
-    conversation
+        conversation_attrs =
+          Map.merge(
+            %{
+              family_id: family.id,
+              conversation_type: :direct,
+              metadata: %{},
+              direct_key: direct_key
+            },
+            attrs
+          )
+
+        conversation =
+          %Conversation{}
+          |> Conversation.changeset(conversation_attrs)
+          |> Repo.insert!()
+
+        # Insert participants for both users
+        %Famichat.Chat.ConversationParticipant{}
+        |> Famichat.Chat.ConversationParticipant.changeset(%{
+          conversation_id: conversation.id,
+          user_id: user1.id
+        })
+        |> Repo.insert!()
+
+        %Famichat.Chat.ConversationParticipant{}
+        |> Famichat.Chat.ConversationParticipant.changeset(%{
+          conversation_id: conversation.id,
+          user_id: user2.id
+        })
+        |> Repo.insert!()
+
+        conversation
+
+      true ->
+        # For other conversation types, fallback to creating a single participant.
+        user = user_fixture(%{family_id: family.id})
+        conversation_attrs =
+          Map.merge(
+            %{
+              family_id: family.id,
+              conversation_type: conversation_type,
+              metadata: %{}
+            },
+            attrs
+          )
+
+        conversation =
+          %Conversation{}
+          |> Conversation.changeset(conversation_attrs)
+          |> Repo.insert!()
+
+        %Famichat.Chat.ConversationParticipant{}
+        |> Famichat.Chat.ConversationParticipant.changeset(%{
+          conversation_id: conversation.id,
+          user_id: user.id
+        })
+        |> Repo.insert!()
+
+        conversation
+    end
   end
 
   @doc """

@@ -88,6 +88,24 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
       assert reason == :user_not_found
     end
+
+    test "create_direct_conversation/2 does not allow duplicate records", %{user1: user1, user2: user2, family: family} do
+      {:ok, conversation} = ConversationService.create_direct_conversation(user1.id, user2.id)
+
+      # Immediately after creation, run a query to see how many direct conversations exist for this user pair.
+      duplicate_check_query =
+        from c in Conversation,
+          join: p in assoc(c, :participants),
+          where: c.conversation_type == ^:direct,
+          group_by: c.id,
+          having: fragment("COUNT(DISTINCT ?) = ?", p.user_id, ^2)
+
+      conversations = Repo.all(duplicate_check_query)
+      Logger.debug("Found #{length(conversations)} direct conversation(s) for provided user pair")
+
+      # Assert that there is exactly one conversation.
+      assert length(conversations) == 1
+    end
   end
 
   describe "list_user_conversations/1" do

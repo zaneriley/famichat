@@ -23,6 +23,29 @@ defmodule FamichatWeb.Telemetry do
 
   def metrics do
     [
+      # Message Channel Metrics
+      summary("famichat.message_channel.join.duration",
+        unit: {:native, :millisecond},
+        description: "The time spent processing a channel join"
+      ),
+      counter("famichat.message_channel.join.total",
+        event_name: [:famichat, :message_channel, :join],
+        description: "Total number of channel joins"
+      ),
+      distribution("famichat.message_channel.join.status",
+        event_name: [:famichat, :message_channel, :join],
+        measurement: :status,
+        description: "Distribution of channel join statuses"
+      ),
+      counter("famichat.message_channel.broadcast.total",
+        event_name: [:famichat, :message_channel, :broadcast],
+        description: "Total number of messages broadcast"
+      ),
+      summary("famichat.message_channel.broadcast.duration",
+        unit: {:native, :millisecond},
+        description: "The time spent broadcasting a message"
+      ),
+
       # SetLocale Plug Metrics
       summary("famichat.plug.set_locale.call.duration",
         unit: {:native, :millisecond},
@@ -84,10 +107,6 @@ defmodule FamichatWeb.Telemetry do
   end
 
   defp periodic_measurements do
-    [
-      # A module, function and arguments to be invoked periodically.
-      # This function must call :telemetry.execute/3 and a metric must be added above.
-      # {FamichatWeb, :count_users, []}
-    ]
+    []
   end
 end

@@ -107,6 +107,15 @@ defmodule FamichatWeb.Router do
     end
   end
 
+  # Other scopes may use custom stacks.
+  scope "/api", FamichatWeb do
+    pipe_through :api
+
+    scope "/test" do
+      post "/broadcast", MessageTestController, :broadcast
+    end
+  end
+
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:new, :dev_routes) do
     # If you want to use the LiveDashboard in production, you should put

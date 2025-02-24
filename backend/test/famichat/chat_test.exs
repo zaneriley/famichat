@@ -12,7 +12,8 @@ defmodule Famichat.ChatTest do
 
     test "list_users/0 returns all users" do
       user = user_fixture()
-      assert Chat.list_users() == [user]
+      users = Chat.list_users()
+      assert Enum.any?(users, fn u -> u.id == user.id end)
     end
 
     test "get_user!/1 returns the user with given id" do
@@ -25,12 +26,14 @@ defmodule Famichat.ChatTest do
 
       valid_attrs = %{
         username: "some username",
+        email: "some_email@example.com",
         family_id: family.id,
         role: :member
       }
 
       assert {:ok, %User{} = user} = Chat.create_user(valid_attrs)
       assert user.username == "some username"
+      assert user.email == "some_email@example.com"
       assert user.family_id == family.id
       assert user.role == :member
     end

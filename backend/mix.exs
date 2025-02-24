@@ -41,6 +41,7 @@ defmodule Famichat.MixProject do
 
   defp deps do
     [
+      {:bcrypt_elixir, "~> 3.0"},
       {:cachex, "~> 3.6"},
       {:cowboy, "~> 2.11.0"},
       {:credo, "~> 1.7.7", only: [:dev, :test], runtime: false},
@@ -48,6 +49,7 @@ defmodule Famichat.MixProject do
       {:dns_cluster, "~> 0.1.3"},
       {:earmark, "~> 1.4"},
       {:ecto_sql, "3.11.3"},
+      {:ex_machina, "~> 2.7.0", only: :test},
       {:excoveralls, "0.18.1", only: [:dev, :test]},
       {:finch, "0.18.0"},
       {:file_system, "~> 1.0.0"},

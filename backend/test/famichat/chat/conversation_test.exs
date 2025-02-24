@@ -1,7 +1,7 @@
 defmodule Famichat.Chat.ConversationTest do
   use Famichat.DataCase
 
-  alias Famichat.Chat.{Conversation, User}
+  alias Famichat.Chat.{Conversation}
   import Famichat.ChatFixtures
 
   describe "conversation schema" do
@@ -73,20 +73,8 @@ defmodule Famichat.Chat.ConversationTest do
   describe "conversation with users" do
     setup do
       family = family_fixture()
-
-      {:ok, user1} =
-        Repo.insert(%User{
-          username: "user1",
-          family_id: family.id,
-          role: :member
-        })
-
-      {:ok, user2} =
-        Repo.insert(%User{
-          username: "user2",
-          family_id: family.id,
-          role: :member
-        })
+      user1 = user_fixture(%{family_id: family.id})
+      user2 = user_fixture(%{family_id: family.id})
 
       {:ok, user1: user1, user2: user2, family: family}
     end
@@ -184,13 +172,7 @@ defmodule Famichat.Chat.ConversationTest do
   describe "conversation constraints" do
     setup do
       family = family_fixture()
-
-      {:ok, user} =
-        Repo.insert(%User{
-          username: "test_user",
-          family_id: family.id,
-          role: :member
-        })
+      user = user_fixture(%{family_id: family.id})
 
       {:ok, user: user, family: family}
     end
