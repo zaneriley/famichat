@@ -17,10 +17,10 @@ defmodule Famichat.Chat.ConversationService do
 
   ## Telemetry Events
 
-  Emits events via `[:famichat, :conversation, :created]` with measurements:
-  - `:count` (integer) - Always 1 per creation attempt
+  Emits events via `[:famichat, :conversation_service, :create_direct_conversation]` with measurements:
+  - `:duration` - Time taken to execute the operation
   Metadata:
-  - `:result` - :success or :error
+  - `:result` - "created" or "error"
   - `:user1_id`, `:user2_id` - Participant IDs
 
   ## Example Usage
@@ -29,7 +29,7 @@ defmodule Famichat.Chat.ConversationService do
       {:ok, conversations} = ConversationService.list_user_conversations(user_id)
   """
 
-  alias Famichat.{Repo, Chat.Conversation, Chat.User}
+  alias Famichat.{Repo, Chat.Conversation, Chat.User, Chat.ConversationParticipant}
   import Ecto.Query, only: [from: 2]
   require Logger
 
@@ -81,6 +81,8 @@ defmodule Famichat.Chat.ConversationService do
   2. Verify family membership
   3. Check for existing conversation
   4. Create new conversation if needed
+  5. Create participants if needed
+  6. Preload associations
 
   ## Parameters
 
@@ -89,7 +91,7 @@ defmodule Famichat.Chat.ConversationService do
 
   ## Returns
 
-    - `{:ok, Conversation.t()}` - Created/existing conversation
+    - `{:ok, Conversation.t()}` - Created/existing conversation with users preloaded
     - `{:error, reason}` - Tuple with error atom
 
   ## Errors
@@ -113,12 +115,36 @@ defmodule Famichat.Chat.ConversationService do
           {:ok, Conversation.t()} | {:error, atom()}
   def create_direct_conversation(user1_id, user2_id)
       when is_binary(user1_id) and is_binary(user2_id) do
+    metadata = %{user1_id: user1_id, user2_id: user2_id}
+
+    # Execute the operation within a telemetry span
+    :telemetry.span(
+      [:famichat, :conversation_service, :create_direct_conversation],
+      metadata,
+      fn ->
+        result = do_create_direct_conversation(user1_id, user2_id)
+
+        # Determine the result status for metadata
+        metadata_with_result = case result do
+          {:ok, _} -> Map.put(metadata, :result, "created")
+          {:error, _} -> Map.put(metadata, :result, "error")
+        end
+
+        # Return the result and the metadata
+        {result, metadata_with_result}
+      end
+    )
+  end
+
+  # Private implementation of create_direct_conversation without telemetry
+  defp do_create_direct_conversation(user1_id, user2_id) do
     with {:ok, user1} <- get_user(user1_id),
          {:ok, user2} <- get_user(user2_id),
          true <- user1.family_id == user2.family_id || {:error, :different_families} do
       family_id = user1.family_id
       direct_key = Conversation.compute_direct_key(user1_id, user2_id, family_id)
 
+      # Create a new Multi for the transaction
       multi =
         Ecto.Multi.new()
         |> Ecto.Multi.run(:existing, fn repo, _changes ->
@@ -146,19 +172,50 @@ defmodule Famichat.Chat.ConversationService do
             repo.insert(changeset)
           end
         end)
+        |> Ecto.Multi.run(:participants, fn repo, %{create: conversation} ->
+          # Check if participants already exist
+          query =
+            from p in ConversationParticipant,
+              where: p.conversation_id == ^conversation.id,
+              select: p.user_id
 
-      :telemetry.span([:famichat, :conversation_service, :create_direct_conversation], %{}, fn ->
-        case Repo.transaction(multi) do
-          {:ok, %{create: conv}} ->
-            {{:ok, conv}, %{result: "created"}}
+          existing_participant_ids = repo.all(query)
 
-          {:error, _op, reason, _changes} ->
-            {{:error, reason}, %{result: "error"}}
-        end
-      end)
-      |> case do
-        {{:ok, conv}, _measurements} -> {:ok, conv}
-        {{:error, reason}, _measurements} -> {:error, reason}
+          # Create participants for each user not already in the conversation
+          user_ids = [user1_id, user2_id] |> Enum.uniq()
+
+          result =
+            user_ids
+            |> Enum.reject(fn user_id -> user_id in existing_participant_ids end)
+            |> Enum.map(fn user_id ->
+              %ConversationParticipant{}
+              |> ConversationParticipant.changeset(%{
+                conversation_id: conversation.id,
+                user_id: user_id
+              })
+              |> repo.insert()
+            end)
+            |> Enum.all?(fn
+              {:ok, _participant} -> true
+              _ -> false
+            end)
+
+          if result do
+            {:ok, conversation}
+          else
+            {:error, :participant_creation_failed}
+          end
+        end)
+        |> Ecto.Multi.run(:preload, fn repo, %{participants: conversation} ->
+          {:ok, repo.preload(conversation, :users)}
+        end)
+
+      case Repo.transaction(multi) do
+        {:ok, %{preload: conversation}} ->
+          {:ok, conversation}
+
+        {:error, _op, reason, _changes} ->
+          {:error, reason}
       end
     else
       error -> error

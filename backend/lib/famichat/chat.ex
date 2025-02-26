@@ -165,4 +165,59 @@ defmodule Famichat.Chat do
   def change_user(%User{} = user, attrs \\ %{}) do
     User.changeset(user, attrs)
   end
+
+  ## Conversation Visibility
+
+  alias Famichat.Chat.Conversation
+  alias Famichat.Chat.ConversationVisibilityService
+
+  @doc """
+  Hides a conversation for a specific user.
+
+  ## Parameters
+    - conversation_id: The ID of the conversation to hide
+    - user_id: The ID of the user hiding the conversation
+
+  ## Returns
+    - {:ok, %Conversation{}} - The updated conversation with the user added to hidden_by_users
+    - {:error, :not_found} - If the conversation doesn't exist
+    - {:error, %Ecto.Changeset{}} - If the update failed
+  """
+  @spec hide_conversation(Ecto.UUID.t(), Ecto.UUID.t()) :: {:ok, Conversation.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def hide_conversation(conversation_id, user_id) do
+    ConversationVisibilityService.hide_conversation(conversation_id, user_id)
+  end
+
+  @doc """
+  Unhides a conversation for a specific user.
+
+  ## Parameters
+    - conversation_id: The ID of the conversation to unhide
+    - user_id: The ID of the user unhiding the conversation
+
+  ## Returns
+    - {:ok, %Conversation{}} - The updated conversation with the user removed from hidden_by_users
+    - {:error, :not_found} - If the conversation doesn't exist
+    - {:error, %Ecto.Changeset{}} - If the update failed
+  """
+  @spec unhide_conversation(Ecto.UUID.t(), Ecto.UUID.t()) :: {:ok, Conversation.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def unhide_conversation(conversation_id, user_id) do
+    ConversationVisibilityService.unhide_conversation(conversation_id, user_id)
+  end
+
+  @doc """
+  Lists all non-hidden conversations for a specific user.
+
+  ## Parameters
+    - user_id: The ID of the user
+    - opts: Optional parameters
+      - :preload - List of associations to preload
+
+  ## Returns
+    - List of conversations that aren't hidden by the user
+  """
+  @spec list_visible_conversations(Ecto.UUID.t(), keyword()) :: [Conversation.t()]
+  def list_visible_conversations(user_id, opts \\ []) do
+    ConversationVisibilityService.list_visible_conversations(user_id, opts)
+  end
 end

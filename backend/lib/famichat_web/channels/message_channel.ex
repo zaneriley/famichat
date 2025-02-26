@@ -209,6 +209,28 @@ defmodule FamichatWeb.MessageChannel do
     Logger.debug("Topic parts: #{inspect(topic_parts)}")
 
     case topic_parts do
+      ["message", room_id] ->
+        measurements = %{
+          start_time: start_time,
+          system_time: System.system_time(),
+          monotonic_time: System.monotonic_time()
+        }
+
+        metadata = %{
+          user_id: socket.assigns.user_id,
+          room_id: room_id,
+          encryption_status: if(Map.get(payload, "encryption_flag"), do: "enabled", else: "disabled")
+        }
+
+        :telemetry.execute(
+          [:famichat, :message_channel, :broadcast],
+          measurements,
+          metadata
+        )
+
+        broadcast!(socket, "new_msg", broadcast_payload)
+
+        {:noreply, socket}
       ["message", room_id, _extra] ->
         measurements = %{
           start_time: start_time,
@@ -233,7 +255,7 @@ defmodule FamichatWeb.MessageChannel do
         {:noreply, socket}
       _ ->
         Logger.error("Unexpected topic format: #{inspect(topic_parts)}")
-        {:error, %{reason: "invalid_topic_format"}}
+        {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
     end
   end
 

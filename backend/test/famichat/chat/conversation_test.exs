@@ -16,14 +16,10 @@ defmodule Famichat.Chat.ConversationTest do
     }
     @invalid_attrs %{conversation_type: nil, metadata: nil}
 
-    test "changeset with valid attributes", %{family: family} do
-      changeset =
-        Conversation.changeset(
-          %Conversation{},
-          Map.put(@valid_attrs, :family_id, family.id)
-        )
-
-      assert changeset.valid?
+    test "creates valid direct conversation using fixture", %{family: family} do
+      conversation = conversation_fixture(%{family_id: family.id, metadata: @valid_attrs.metadata})
+      assert conversation.conversation_type == :direct
+      assert conversation.direct_key != nil
     end
 
     test "changeset with invalid attributes" do
@@ -79,18 +75,8 @@ defmodule Famichat.Chat.ConversationTest do
       {:ok, user1: user1, user2: user2, family: family}
     end
 
-    test "can create conversation with users", %{
-      user1: user1,
-      user2: user2,
-      family: family
-    } do
-      changeset =
-        %Conversation{}
-        |> Conversation.changeset(Map.put(@valid_attrs, :family_id, family.id))
-        |> Ecto.Changeset.put_assoc(:users, [user1, user2])
-
-      assert changeset.valid?
-      {:ok, conversation} = Repo.insert(changeset)
+    test "can create conversation with users using fixture", %{user1: user1, user2: user2, family: family} do
+      conversation = conversation_fixture(%{family_id: family.id, user1: user1, user2: user2})
       conversation = Repo.preload(conversation, :users)
 
       assert length(conversation.users) == 2
@@ -99,22 +85,11 @@ defmodule Famichat.Chat.ConversationTest do
       assert user2.id in user_ids
     end
 
-    test "supports different conversation types", %{
-      user1: user1,
-      user2: user2,
-      family: family
-    } do
-      # Test direct conversation
-      direct_changeset =
-        %Conversation{}
-        |> Conversation.changeset(%{
-          conversation_type: :direct,
-          metadata: %{},
-          family_id: family.id
-        })
-        |> Ecto.Changeset.put_assoc(:users, [user1, user2])
-
-      assert direct_changeset.valid?
+    test "supports different conversation types", %{user1: user1, user2: user2, family: family} do
+      # Test direct conversation using fixture
+      direct = conversation_fixture(%{family_id: family.id, user1: user1, user2: user2, conversation_type: :direct})
+      assert direct.conversation_type == :direct
+      assert direct.direct_key != nil
 
       # Test group conversation
       group_changeset =
@@ -152,17 +127,7 @@ defmodule Famichat.Chat.ConversationTest do
         "last_active" => "2024-01-25T12:00:00Z"
       }
 
-      changeset =
-        %Conversation{}
-        |> Conversation.changeset(%{
-          conversation_type: :direct,
-          metadata: complex_metadata,
-          family_id: family.id
-        })
-        |> Ecto.Changeset.put_assoc(:users, [user1])
-
-      assert changeset.valid?
-      {:ok, conversation} = Repo.insert(changeset)
+      conversation = conversation_fixture(%{family_id: family.id, conversation_type: :direct, metadata: complex_metadata, user1: user1})
 
       assert conversation.metadata["settings"]["theme"] == "dark"
       assert conversation.metadata["settings"]["notifications"] == true
@@ -199,12 +164,16 @@ defmodule Famichat.Chat.ConversationTest do
     end
 
     test "handles empty users list", %{family: family} do
+      # Generate a dummy direct key for testing
+      direct_key = "test_direct_key_#{:rand.uniform(1000)}"
+
       changeset =
         %Conversation{}
-        |> Conversation.changeset(%{
+        |> Conversation.create_changeset(%{
           conversation_type: :direct,
           metadata: %{},
-          family_id: family.id
+          family_id: family.id,
+          direct_key: direct_key
         })
         |> Ecto.Changeset.put_assoc(:users, [])
 
@@ -216,13 +185,17 @@ defmodule Famichat.Chat.ConversationTest do
       user: user,
       family: family
     } do
+      # Generate a dummy direct key for testing
+      direct_key = "test_direct_key_#{:rand.uniform(1000)}"
+
       # Direct conversation should have exactly two users
       direct_changeset =
         %Conversation{}
-        |> Conversation.changeset(%{
+        |> Conversation.create_changeset(%{
           conversation_type: :direct,
           metadata: %{},
-          family_id: family.id
+          family_id: family.id,
+          direct_key: direct_key
         })
         |> Ecto.Changeset.put_assoc(:users, [user])
 
@@ -232,7 +205,7 @@ defmodule Famichat.Chat.ConversationTest do
       # Self conversation should have exactly one user
       self_changeset =
         %Conversation{}
-        |> Conversation.changeset(%{
+        |> Conversation.create_changeset(%{
           conversation_type: :self,
           metadata: %{},
           family_id: family.id
@@ -244,7 +217,7 @@ defmodule Famichat.Chat.ConversationTest do
       # Group conversation should have at least one user
       group_changeset =
         %Conversation{}
-        |> Conversation.changeset(%{
+        |> Conversation.create_changeset(%{
           conversation_type: :group,
           metadata: %{"name" => "Test Group"},
           family_id: family.id
