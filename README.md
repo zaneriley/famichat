@@ -122,6 +122,7 @@ For now, this repo is mainly a playground to test out:
 *   **Code Formatting:** `cd backend && ./run mix format`
 *   **Code Analysis (Credo):** `cd backend && ./run mix credo`
 *   **Running Migrations:** `cd backend && ./run mix ecto.migrate`
+*   **Rollback Migrations:** `cd backend && ./run mix ecto.rollback`
 
 ### Frontend (Flutter)
 

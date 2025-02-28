@@ -53,6 +53,88 @@ Security & Performance Considerations
  • Database indexing and caching strategies to support performance at scale.  
  • Containerization for easier deployment and scalability.
 
+## 2.3 Conversation Types & Data Model
+
+Our security model is built on a hybrid encryption approach:
++ - Client-Side End-to-End Encryption (E2EE): Message content is encrypted on user devices such that only intended 
+recipients can decrypt the messages.
++ - Field-Level Encryption: Sensitive user data (e.g., email, phone numbers, authentication tokens) will be encrypted 
+using libraries like Cloak.Ecto to ensure privacy while still supporting necessary queries.
++ - Infrastructure/Database Encryption: Database-level or disk encryption provides a blanket safeguard for all data 
+at rest.
++
++Key Management:
++ - A dedicated key management system will handle secure key storage, automatic key rotation, and auditing.
++ - Telemetry instrumentation (using :telemetry.span/3 in critical operations) will monitor encryption tasks to 
+ensure performance and detect anomalies.
+
+### Conversation Types
+Famichat implements distinct conversation types with clear boundaries:
+- **`:self`** - Personal note-taking conversations (single user)
+- **`:direct`** - One-to-one conversations between users (exactly 2 users)
+- **`:group`** - Multi-user conversations (3+ users)
+- **`:family`** - Special group for family-wide communication (all family members)
+
+### Implementation Principles
+- **Type Immutability**: Conversation types are immutable after creation
+- **Specialized Creation**: Type-specific creation functions enforce appropriate validation
+- **Concurrency Protection**: Race conditions handled via database constraints and serializable transactions
+- **Role Management**: Group conversations track member roles (admin vs. member)
+- **Data Preservation**: Conversations can be "hidden" by users but data is preserved
+
+### Technical Implementation
+- Separate changesets for creation vs. updating (enforcing type immutability)
+- Unique constraints for direct conversations to prevent duplicates
+- Transaction isolation for concurrent operations
+- Metadata field supports type-specific attributes
+
+These implementation decisions align with industry standards while supporting our specific product requirements for family communication.
+
+### Channel Topics & Authorization
+- Channel topics follow the format `message:<type>:<id>` (e.g., `message:direct:123`)
+- Authorization rules are type-specific:
+  - **`:self`**: Only the creator can access
+  - **`:direct`**: Only the two participants can access
+  - **`:group`**: Only active members can access
+  - **`:family`**: All family members have access
+- Channel join attempts by unauthorized users are rejected with appropriate error codes
+- Telemetry events track authorization failures without exposing sensitive information
+
+This structured approach to conversation types and channels simplifies client implementations and improves security by enforcing clear boundaries at the database, API, and channel levels.
+
+
+## 2.5 Concurrency & Race Condition Handling
+
+Famichat implements robust strategies to handle concurrent operations:
+
+### Direct Conversation Creation
+- Uses database-level constraints to prevent duplicate direct conversations
+- Implements upsert operations with ON CONFLICT clauses to return existing conversations
+- Uses serializable transaction isolation for critical operations
+
+### Group Membership Management
+- Tracks original members (esp. creators/admins) to handle ownership transitions
+- Implements proper locking strategies for concurrent membership changes
+- Ensures at least one admin remains in group conversations
+- Handles the "last member leaves" scenario gracefully
+
+### Message Delivery & Acknowledgements
+- Implements client acknowledgement (ACK) mechanisms for critical messages
+- Uses optimistic concurrency control with version fields where appropriate
+- Tracks message delivery status at the database level
+
+These strategies ensure data consistency and prevent common race conditions while maintaining application responsiveness.
+
+─────────────────────────────  
+## 2.2 Database Schema and Encryption Considerations
+Our current migration files provide important insights into our data structure and future encryption needs:
+ - **Users Table:** Initially created with a binary_id, unique username, role, and family_id. As we add sensitive fields (such as email and password_hash), these will be enhanced with field-level encryption and associated encryption metadata.
+ - **Families Table:** Contains family names and settings. Depending on the sensitivity of the settings data, encryption may be applied to preserve family privacy.
+ - **Conversations Table:** Designed to manage conversation metadata. This schema can be extended to include encryption flags or version identifiers, ensuring support for end-to-end encryption metadata.
+ - **Messages Table:** The primary candidate for client-side E2EE. In the future, the 'content' field will store ciphertext, and additional columns (e.g., encryption version tags) may be added to facilitate secure message handling.
+
+These schema considerations ensure that our database remains flexible and secure, supporting the seamless integration of advanced encryption features while maintaining performance and data integrity.
+
 ─────────────────────────────  
 3. Feature Roadmap & Sprint Planning
 
@@ -222,15 +304,15 @@ Notes
 4. UI/UX & Design Guidelines
 
 Product Aesthetic & Customization  
- • The visual identity is “family–centric” with custom branding and easily switched themes.  
+ • The visual identity is "family–centric" with custom branding and easily switched themes.  
  • Administrators have the ability to upload custom icons, colors, and overall look–and–feel for their family instance.
 
 Information Architecture (IA) with Bottom Tab Navigation  
  a. Letters (Default Overview Screen)  
   – Inbox displaying a list of letters (messages), each styled with sender avatars, timestamps, preview snippets, and unread indicators.  
-  – “Write a Letter” action is prominently displayed.  
+  – "Write a Letter" action is prominently displayed.  
  b. Calls  
-  – Call history and an option to start a new call with quick access to family members’ status.  
+  – Call history and an option to start a new call with quick access to family members' status.  
  c. Family Space  
   – A dedicated area for shared calendars, photo albums, and cozy community features.  
  d. Search  
@@ -239,7 +321,7 @@ Information Architecture (IA) with Bottom Tab Navigation
   – User and family settings (including language selection, notification preferences, and admin–only controls for user management and aesthetic customization).
 
 Letters Inbox Screen – Detailed Layout  
- • App Header: Displays a family crest/icon, a personalized title (e.g., “[Family Name] Home”), and a “Write a Letter” action button.  
+ • App Header: Displays a family crest/icon, a personalized title (e.g., "[Family Name] Home"), and a "Write a Letter" action button.  
  • Main Content: A scrollable list of letters presented in chronological order, with elements such as sender avatar, sender name, message preview, timestamp, and media indicator if applicable.  
  • Empty State: Friendly placeholder messaging prompting the user to write a letter if the inbox is empty.
 
@@ -320,7 +402,20 @@ Change Management & Documentation Updates
 • Team members should refer to the appropriate section for details relevant to their role while cross–referencing the sprint roadmap for current priorities.  
 • Regular audits and reviews will help ensure this document remains error–free and fully aligned with evolving project requirements.
 
-By establishing this clear, modular, and regularly updated structure, the team—from product management through design to backend and frontend engineering—will have a single reference point that promotes transparency, accountability, and progress toward delivering a robust, family–oriented communication platform.
+## Open Questions
+
+This section contains topics that require further discussion and exploration in future sprints and technical reviews.
+
+### Topics to Explore:
+ - How should we handle membership updates in group chats? Should a change in membership result in a new conversation, or should the existing conversation be updated?
+ - What additional business and UX rules should govern the creation and management of direct and group chats to prevent duplication and confusion?
+ - What are the best strategies to monitor and enforce security policies related to computed keys and metadata protection without impacting performance?
+ - Are there alternative mechanisms for enforcing conversation uniqueness that might better accommodate dynamic participant lists in evolving product requirements?
+ - How can we better integrate this discussion with our encryption and key management strategy, ensuring that our computed key approach scales securely with changes?
+
+Please add any new questions or considerations as research and product requirements evolve.
+
+
 
 ## API Design Principles (Updated)
 
