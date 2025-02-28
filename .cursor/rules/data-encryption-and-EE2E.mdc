@@ -1,0 +1,61 @@
+---
+description: ensure that all encryption-related changes in Famichat follow a consistent, secure, and robust hybrid encryption model. The model combines client-side end-to-end encryption (E2EE) for message content, field-level encryption for sensitive application data, and infrastructure-level encryption for data at rest.
+globs: 
+---
+## Key Management and Operational Guidelines
+
+1. **Key Storage:**
+   - All encryption keys MUST be sourced exclusively from runtime environment variables using System.fetch_env!/1.
+   - Encryption keys MUST NOT be hardcoded in any source files or configuration files checked into version control.
+   - In production, keys MUST be maintained by an approved secrets management service (e.g., AWS Secrets Manager, HashiCorp Vault).
+
+2. **Key Specifications:**
+   - All encryption keys MUST be at least 256 bits in length and generated using a cryptographically secure random number generator.
+   - Prefer HMAC over SHA, where appropriate.
+   - Each encryption key MUST have an associated Key ID following a predefined format (e.g., KEY_<MODULE>_v<VERSION>). Documentation of the key identifiers is required.
+
+3. **Key Rotation:**
+   - Encryption keys MUST be rotated at intervals not exceeding 90 days.
+   - Automated reminders or scripts MUST be utilized to enforce key rotation schedules.
+   - A record of key rotation events MUST be maintained in the audit logs.
+
+4. **Telemetry and Monitoring for Key Operations:**
+   - All key loading, rotation, and decryption error events MUST be recorded via telemetry (using :telemetry.span/3) without logging actual key material.
+   - Any decryption failure MUST trigger a standardized error event with an error code for further investigation.
+
+
+
+## Data Encryption Rules
+
+### A. End-to-End Encryption (E2EE) Guidelines
+
+1. **Client Encryption Requirements:**
+   - All message content MUST be encrypted on the client side using approved cryptographic libraries (e.g., libsodium or equivalent) with AES-256-GCM or an equivalent cipher.
+   - Clients MUST perform key exchange using a secure protocol (e.g., X3DH for key agreement followed by the Double Ratchet algorithm) so that session keys remain exclusively on client devices.
+   - The application server MUST store only the resulting ciphertext and MUST never log or persist any plaintext message content.
+
+2. **Verification and Testing:**
+   - Unit and integration tests MUST verify that all outgoing messages are encrypted before being sent to the server.
+   - Decryption routines MUST be tested to ensure that only clients with the correct key can retrieve and decrypt message content.
+
+### B. Field-Level Encryption Guidelines
+
+1. **Sensitive Data Encryption:**
+   - All personally identifiable information (PII) fields (e.g., email, phone number, address, authentication tokens, etc) in Ecto schemas MUST be wrapped with an encryption library such as Cloak.Ecto.
+   - The encryption mechanism for these fields MUST use AES-256 with a secure mode (e.g., GCM or CBC with HMAC) and MUST generate a unique IV per encryption operation.
+   - If search or indexing is required on encrypted fields, deterministic encryption MUST be used only with full awareness of the trade-offs (i.e., potential exposure to frequency analysis).
+
+2. **Schema Compliance:**
+   - Each Ecto schema containing sensitive fields MUST include tests verifying that data is stored as ciphertext in the database.
+   - Database migrations and schema definitions MUST be reviewed to ensure that encrypted fields include additional metadata (e.g., encryption version, key ID) where applicable.
+
+### C. Infrastructure/Database Encryption Guidelines
+
+1. **Storage Encryption:**
+   - All data at rest in the production database MUST be protected by disk-level or file-system-level encryption as provided by the hosting environment (e.g., AWS RDS encryption, Azure SQL Transparent Data Encryption).
+   - Backups and snapshots of the database MUST also be encrypted using the same or a higher standard of encryption.
+
+2. **Configuration and Verification:**
+   - Deployment scripts and configuration files MUST verify that encryption is enabled on database volumes and during backup procedures.
+
+─────────────────────────────
