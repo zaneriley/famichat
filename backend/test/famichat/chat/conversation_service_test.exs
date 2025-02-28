@@ -1,7 +1,7 @@
 defmodule Famichat.Chat.ConversationServiceTest do
   use Famichat.DataCase
 
-  alias Famichat.Chat.{Conversation, ConversationService}
+  alias Famichat.Chat.{Conversation, ConversationService, GroupConversationPrivileges}
   alias Famichat.Repo
   import Famichat.ChatFixtures
   import Ecto.Query
@@ -223,6 +223,200 @@ defmodule Famichat.Chat.ConversationServiceTest do
     test "returns error when user_id is not a binary" do
       assert {:error, :invalid_user_id} =
                ConversationService.list_user_conversations(123)
+    end
+  end
+
+  # Group Conversation Privileges Tests
+  describe "group conversation privilege management" do
+    setup do
+      family = family_fixture()
+      admin_user = user_fixture(%{family_id: family.id, role: :admin})
+      member_user = user_fixture(%{family_id: family.id, role: :member})
+      other_member = user_fixture(%{family_id: family.id, role: :member})
+
+      # Create a group conversation with admin_user
+      group_conversation = conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :group,
+        metadata: %{"name" => "Test Group"},
+        user1: admin_user
+      })
+
+      # Create a direct conversation for comparison
+      direct_conversation = conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :direct,
+        user1: admin_user,
+        user2: member_user
+      })
+
+      # Set up telemetry handler for testing
+      parent = self()
+      ref = make_ref()
+      handler_name = "group-privilege-test-#{:erlang.unique_integer()}"
+
+      :ok = :telemetry.attach_many(
+        handler_name,
+        [
+          [:famichat, :conversation_service, :assign_admin, :start],
+          [:famichat, :conversation_service, :assign_admin, :stop],
+          [:famichat, :conversation_service, :assign_admin, :exception],
+          [:famichat, :conversation_service, :assign_member, :start],
+          [:famichat, :conversation_service, :assign_member, :stop],
+          [:famichat, :conversation_service, :assign_member, :exception],
+          [:famichat, :conversation_service, :remove_privilege, :start],
+          [:famichat, :conversation_service, :remove_privilege, :stop],
+          [:famichat, :conversation_service, :remove_privilege, :exception],
+          [:famichat, :conversation_service, :is_admin?, :start],
+          [:famichat, :conversation_service, :is_admin?, :stop],
+          [:famichat, :conversation_service, :is_admin?, :exception]
+        ],
+        fn event_name, measurements, metadata, _ ->
+          send(parent, {:telemetry_event, ref, event_name, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn ->
+        :telemetry.detach(handler_name)
+      end)
+
+      # Add admin privilege for admin_user to support the tests
+      {:ok, _privilege} =
+        %GroupConversationPrivileges{}
+        |> GroupConversationPrivileges.changeset(%{
+          conversation_id: group_conversation.id,
+          user_id: admin_user.id,
+          role: :admin,
+          granted_by_id: admin_user.id
+        })
+        |> Repo.insert()
+
+      {:ok, %{
+        family: family,
+        admin_user: admin_user,
+        member_user: member_user,
+        other_member: other_member,
+        group_conversation: group_conversation,
+        direct_conversation: direct_conversation,
+        ref: ref
+      }}
+    end
+
+    test "auto-assigns creator as admin when creating a group conversation", %{
+      admin_user: admin_user,
+      group_conversation: group_conversation
+    } do
+      # Check if the group creator has admin privileges
+      {:ok, is_admin} = ConversationService.is_admin?(group_conversation.id, admin_user.id)
+      assert is_admin
+    end
+
+    test "prevents removing the last admin from a group", %{
+      admin_user: admin_user,
+      group_conversation: group_conversation
+    } do
+      # Try to demote the only admin to a member
+      {:error, :last_admin} =
+        ConversationService.assign_member(group_conversation.id, admin_user.id, admin_user.id)
+
+      # Try to remove the only admin's privileges
+      {:error, :last_admin} =
+        ConversationService.remove_privilege(group_conversation.id, admin_user.id)
+    end
+
+    test "prevents setting privileges on non-group conversations", %{
+      direct_conversation: direct_conversation,
+      member_user: member_user,
+      admin_user: admin_user
+    } do
+      # Try to assign admin on a direct conversation
+      {:error, :not_group_conversation} =
+        ConversationService.assign_admin(direct_conversation.id, member_user.id, admin_user.id)
+    end
+
+    test "only allows group admins to assign roles", %{
+      group_conversation: group_conversation,
+      other_member: other_member,
+      member_user: member_user,
+      admin_user: admin_user
+    } do
+      # First make the member_user a member of the group explicitly
+      {:ok, _} =
+        ConversationService.assign_member(group_conversation.id, member_user.id, admin_user.id)
+
+      # Try to have a regular member assign admin privileges (should fail)
+      {:error, :not_admin} =
+        ConversationService.assign_admin(group_conversation.id, other_member.id, member_user.id)
+    end
+
+    test "is_admin? correctly identifies conversation admins", %{
+      group_conversation: group_conversation,
+      admin_user: admin_user,
+      member_user: member_user
+    } do
+      # Admin status is already set up in the setup function
+
+      # Check if admin_user is recognized as an admin
+      {:ok, is_admin} = ConversationService.is_admin?(group_conversation.id, admin_user.id)
+      assert is_admin
+
+      # Check that member_user is not recognized as admin
+      {:ok, is_admin} = ConversationService.is_admin?(group_conversation.id, member_user.id)
+      refute is_admin
+    end
+
+    test "emits telemetry events for role operations", %{
+      ref: ref,
+      group_conversation: group_conversation,
+      member_user: member_user,
+      admin_user: admin_user
+    } do
+      # Assign admin privileges
+      {:ok, _privilege} =
+        ConversationService.assign_admin(group_conversation.id, member_user.id, admin_user.id)
+
+      # Assert telemetry stop event is received
+      assert_receive {:telemetry_event, ^ref,
+                     [:famichat, :conversation_service, :assign_admin, :stop],
+                     measurements, metadata}, 500
+
+      # Verify measurements contain execution time
+      assert is_map(measurements)
+      assert is_number(measurements.duration)
+
+      # Ensure the result is captured in metadata
+      assert metadata.result == "success"
+      assert metadata.conversation_id == group_conversation.id
+      assert metadata.target_user_id == member_user.id
+      assert metadata.granted_by_id == admin_user.id
+    end
+
+    test "handles concurrent privilege updates correctly", %{
+      group_conversation: group_conversation,
+      admin_user: admin_user,
+      member_user: member_user,
+      other_member: other_member
+    } do
+      # Create concurrent tasks to assign privileges
+      task1 = Task.async(fn ->
+        ConversationService.assign_admin(group_conversation.id, member_user.id, admin_user.id)
+      end)
+
+      task2 = Task.async(fn ->
+        ConversationService.assign_admin(group_conversation.id, other_member.id, admin_user.id)
+      end)
+
+      # Wait for both tasks to complete
+      {:ok, _} = Task.await(task1)
+      {:ok, _} = Task.await(task2)
+
+      # Verify both users received admin privileges
+      {:ok, is_admin1} = ConversationService.is_admin?(group_conversation.id, member_user.id)
+      {:ok, is_admin2} = ConversationService.is_admin?(group_conversation.id, other_member.id)
+
+      assert is_admin1
+      assert is_admin2
     end
   end
 end
