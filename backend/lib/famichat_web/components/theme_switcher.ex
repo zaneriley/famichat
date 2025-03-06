@@ -50,6 +50,7 @@ defmodule FamichatWeb.Components.ThemeSwitcher do
       phx-hook="ThemeSwitcher"
     >
       <legend class="sr-only"><%= gettext("Theme") %></legend>
+
       <form id="theme-switcher-form">
         <%= for theme <- @themes do %>
           <% theme_id = "theme_#{theme.value}" %>
@@ -60,8 +61,7 @@ defmodule FamichatWeb.Components.ThemeSwitcher do
               name="theme"
               value={theme.value}
               checked={theme.value == "system"}
-            />
-            <%= theme.label %>
+            /> <%= theme.label %>
           </label>
         <% end %>
       </form>

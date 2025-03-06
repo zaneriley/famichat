@@ -43,16 +43,23 @@ defmodule Famichat.Chat.GroupConversationPrivileges do
   - granted_at (when the privilege was granted, defaults to now)
   """
   def changeset(privilege, attrs) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = DateTime.utc_now(:second)
     attrs = Map.put_new(attrs, :granted_at, now)
 
     privilege
-    |> cast(attrs, [:conversation_id, :user_id, :role, :granted_by_id, :granted_at])
+    |> cast(attrs, [
+      :conversation_id,
+      :user_id,
+      :role,
+      :granted_by_id,
+      :granted_at
+    ])
     |> validate_required([:conversation_id, :user_id, :role, :granted_at])
     |> validate_inclusion(:role, [:admin, :member])
     |> unique_constraint([:conversation_id, :user_id],
-        name: :group_conversation_privileges_conversation_id_user_id_index,
-        message: "has already been taken",
-        error_key: :conversation_id_user_id)
+      name: :group_conversation_privileges_conversation_id_user_id_index,
+      message: "has already been taken",
+      error_key: :conversation_id_user_id
+    )
   end
 end

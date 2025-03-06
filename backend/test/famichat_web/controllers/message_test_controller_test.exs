@@ -13,12 +13,17 @@ defmodule FamichatWeb.MessageTestControllerTest do
   describe "broadcast" do
     test "broadcasts a plain text message", %{conn: conn} do
       params = %{
-        "room" => "lobby",
+        "type" => "legacy",
+        "id" => "lobby",
         "body" => "Test message"
       }
 
       conn = post(conn, ~p"/api/test/broadcast", params)
-      assert json_response(conn, 200) == %{"status" => "ok", "message" => "Broadcast sent"}
+
+      assert json_response(conn, 200) == %{
+               "status" => "ok",
+               "message" => "Broadcast sent to message:lobby"
+             }
 
       assert_broadcast "new_msg", %{
         "body" => "Test message",
@@ -28,13 +33,18 @@ defmodule FamichatWeb.MessageTestControllerTest do
 
     test "broadcasts an encrypted message", %{conn: conn} do
       params = %{
-        "room" => "lobby",
+        "type" => "legacy",
+        "id" => "lobby",
         "body" => "Encrypted content",
         "encryption" => true
       }
 
       conn = post(conn, ~p"/api/test/broadcast", params)
-      assert json_response(conn, 200) == %{"status" => "ok", "message" => "Broadcast sent"}
+
+      assert json_response(conn, 200) == %{
+               "status" => "ok",
+               "message" => "Broadcast sent to message:lobby"
+             }
 
       assert_broadcast "new_msg", %{
         "body" => "Encrypted content",
@@ -47,10 +57,12 @@ defmodule FamichatWeb.MessageTestControllerTest do
 
     test "returns error for missing parameters", %{conn: conn} do
       conn = post(conn, ~p"/api/test/broadcast", %{})
+
       assert json_response(conn, 400) == %{
-        "status" => "error",
-        "message" => "Required parameters: room, body. Optional: encryption (boolean)"
-      }
+               "status" => "error",
+               "message" =>
+                 "Required parameters: type, id, body. Optional: encryption (boolean)"
+             }
 
       refute_broadcast "new_msg", _
     end

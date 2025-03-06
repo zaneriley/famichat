@@ -183,7 +183,8 @@ defmodule Famichat.Chat do
     - {:error, :not_found} - If the conversation doesn't exist
     - {:error, %Ecto.Changeset{}} - If the update failed
   """
-  @spec hide_conversation(Ecto.UUID.t(), Ecto.UUID.t()) :: {:ok, Conversation.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  @spec hide_conversation(Ecto.UUID.t(), Ecto.UUID.t()) ::
+          {:ok, Conversation.t()} | {:error, :not_found | Ecto.Changeset.t()}
   def hide_conversation(conversation_id, user_id) do
     ConversationVisibilityService.hide_conversation(conversation_id, user_id)
   end
@@ -200,7 +201,8 @@ defmodule Famichat.Chat do
     - {:error, :not_found} - If the conversation doesn't exist
     - {:error, %Ecto.Changeset{}} - If the update failed
   """
-  @spec unhide_conversation(Ecto.UUID.t(), Ecto.UUID.t()) :: {:ok, Conversation.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  @spec unhide_conversation(Ecto.UUID.t(), Ecto.UUID.t()) ::
+          {:ok, Conversation.t()} | {:error, :not_found | Ecto.Changeset.t()}
   def unhide_conversation(conversation_id, user_id) do
     ConversationVisibilityService.unhide_conversation(conversation_id, user_id)
   end
@@ -216,7 +218,9 @@ defmodule Famichat.Chat do
   ## Returns
     - List of conversations that aren't hidden by the user
   """
-  @spec list_visible_conversations(Ecto.UUID.t(), keyword()) :: [Conversation.t()]
+  @spec list_visible_conversations(Ecto.UUID.t(), keyword()) :: [
+          Conversation.t()
+        ]
   def list_visible_conversations(user_id, opts \\ []) do
     ConversationVisibilityService.list_visible_conversations(user_id, opts)
   end

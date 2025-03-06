@@ -34,10 +34,11 @@ defmodule Famichat.Chat.ConversationVisibilityService do
 
         end_time = System.monotonic_time()
 
-        {result, %{
-          duration: end_time - start_time,
-          result: result_to_telemetry_value(result)
-        }}
+        {result,
+         %{
+           duration: end_time - start_time,
+           result: result_to_telemetry_value(result)
+         }}
       end
     )
   end
@@ -54,8 +55,8 @@ defmodule Famichat.Chat.ConversationVisibilityService do
         else
           conversation
           |> Conversation.update_changeset(%{
-              hidden_by_users: conversation.hidden_by_users ++ [user_id]
-            })
+            hidden_by_users: conversation.hidden_by_users ++ [user_id]
+          })
           |> Repo.update()
         end
     end
@@ -84,10 +85,11 @@ defmodule Famichat.Chat.ConversationVisibilityService do
 
         end_time = System.monotonic_time()
 
-        {result, %{
-          duration: end_time - start_time,
-          result: result_to_telemetry_value(result)
-        }}
+        {result,
+         %{
+           duration: end_time - start_time,
+           result: result_to_telemetry_value(result)
+         }}
       end
     )
   end
@@ -102,8 +104,9 @@ defmodule Famichat.Chat.ConversationVisibilityService do
         if user_id in conversation.hidden_by_users do
           conversation
           |> Conversation.update_changeset(%{
-              hidden_by_users: Enum.reject(conversation.hidden_by_users, &(&1 == user_id))
-            })
+            hidden_by_users:
+              Enum.reject(conversation.hidden_by_users, &(&1 == user_id))
+          })
           |> Repo.update()
         else
           {:ok, conversation}
@@ -127,7 +130,11 @@ defmodule Famichat.Chat.ConversationVisibilityService do
     user_id = ensure_binary_uuid(user_id)
 
     :telemetry.span(
-      [:famichat, :conversation_visibility_service, :list_visible_conversations],
+      [
+        :famichat,
+        :conversation_visibility_service,
+        :list_visible_conversations
+      ],
       %{user_id: user_id},
       fn ->
         start_time = System.monotonic_time()
@@ -136,18 +143,20 @@ defmodule Famichat.Chat.ConversationVisibilityService do
 
         end_time = System.monotonic_time()
 
-        {result, %{
-          duration: end_time - start_time,
-          conversation_count: length(result)
-        }}
+        {result,
+         %{
+           duration: end_time - start_time,
+           conversation_count: length(result)
+         }}
       end
     )
   end
 
   defp do_list_visible_conversations(user_id, opts) do
-    query = from c in Conversation,
-            where: fragment("? != ALL(?)", ^user_id, c.hidden_by_users),
-            select: c
+    query =
+      from c in Conversation,
+        where: fragment("? != ALL(?)", ^user_id, c.hidden_by_users),
+        select: c
 
     query
     |> maybe_preload(opts[:preload])
@@ -170,5 +179,6 @@ defmodule Famichat.Chat.ConversationVisibilityService do
       :error -> raise ArgumentError, "Invalid UUID format: #{inspect(uuid)}"
     end
   end
+
   defp ensure_binary_uuid(uuid), do: uuid
 end

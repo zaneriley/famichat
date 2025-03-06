@@ -7,8 +7,8 @@ defmodule Famichat.Repo.Migrations.AddDirectKeyToConversations do
     end
 
     create unique_index(:conversations, [:direct_key],
-      name: :unique_direct_key_index,
-      where: "conversation_type = 'direct'"
-    )
+             name: :unique_direct_key_index,
+             where: "conversation_type = 'direct'"
+           )
   end
 end

@@ -2,6 +2,8 @@ defmodule FamichatWeb.UserSocket do
   use Phoenix.Socket
   require Logger
 
+  # Update channel pattern to support conversation-type-aware topic formats
+  # Format: message:<type>:<id> where type is one of: self, direct, group, family
   channel "message:*", FamichatWeb.MessageChannel
 
   @salt "user_auth"

@@ -5,7 +5,6 @@
       <%= assigns[:page_title] ||
         "Zane Riley | Product Designer (Tokyo) | 10+ Years Experience" %>
     </.live_title>
-
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
@@ -16,7 +15,6 @@
           ~c"Zane Riley: Tokyo Product Designer. 10+ yrs experience. Currently at Google. Worked in e-commerce, healthcare, and finance. Designed and built products for Google, Google Maps, and Google Search."
       }
     />
-
     <link
       rel="apple-touch-icon"
       sizes="180x180"
@@ -38,8 +36,7 @@
       rel="mask-icon"
       href={url(~p"/safari-pinned-tab.svg")}
       color="#597099"
-    />
-    <link rel="manifest" href={url(~p"/site.webmanifest")} />
+    /> <link rel="manifest" href={url(~p"/site.webmanifest")} />
     <!-- Color definitions -->
     <meta name="msapplication-TileColor" content="#2b5797" />
     <meta name="theme-color" content="#343334" />
@@ -52,6 +49,7 @@
       <meta property="og:image" content={assigns[:og_meta][:image]} />
       <meta property="og:description" content={assigns[:og_meta][:description]} />
     <% end %>
+
     <link phx-track-static rel="stylesheet" href={url(~p"/css/critical.css")} />
     <!-- FUll CSS -->
     <link phx-track-static rel="stylesheet" href={url(~p"/css/app.css")} />
@@ -62,10 +60,12 @@
       src={url(~p"/js/app.js")}
     />
   </head>
+
   <body class="min-h-screen text-md">
     <a href="#main-content" class="sr-only" tabindex="0">
       <%= gettext("Skip to main content") %>
     </a>
+
     <div class="min-h-screen flex items-center justify-center">
       <div
         class=""
@@ -75,17 +75,17 @@
         <a href="/" class="" aria-label="Return to homepage">
           <%= dynamic_home_url() %>
         </a>
+
         <h1>ERROR 500 <br /> INTERNAL SERVER ERROR</h1>
         * SYSTEM: Zane's Design Famichat <br />
         * STATUS: [SOMETHING WENT WRONG, BUT DON'T PANIC] <br />
-        ***********************************************/ <br />
-        <br /> GREETINGS,<br />
-        <br /> THIS TERMINAL REGRETS TO INFORM YOU <br />
-        THAT A CRITICAL ERROR HAS OCCURRED <br />
-        <br /> RESILIENCE IS KEY, BUT EVEN MACHINES FALTER.<br />
+        ***********************************************/ <br /> <br />
+        GREETINGS,<br /> <br /> THIS TERMINAL REGRETS TO INFORM YOU <br />
+        THAT A CRITICAL ERROR HAS OCCURRED <br /> <br />
+        RESILIENCE IS KEY, BUT EVEN MACHINES FALTER.<br />
         THIS TERMINAL WISHES YOU LUCK ON <br />
-        YOUR CONTINUED EXPLORATION.<br />
-        <br /> ≺system initiating self-reflection protocol≻<br />
+        YOUR CONTINUED EXPLORATION.<br /> <br />
+        ≺system initiating self-reflection protocol≻<br />
         <p class=""><a href="/" class="pb-6 block">RETURN TO HOME</a></p>
 
         <svg
@@ -102,6 +102,7 @@
                 seed="2"
               >
               </feturbulence>
+
               <fedisplacementmap
                 id="displacement"
                 in="SourceGraphic"

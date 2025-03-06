@@ -36,7 +36,7 @@ defmodule Famichat.Chat.ConversationParticipant do
     * `participant` - The current participant struct
     * `attrs` - The attributes to validate
   """
-  @spec changeset(t() | Ecto.Changeset.t(), map()) :: Ecto.Changeset.t()
+  @spec changeset(t() | Ecto.Changeset.t(), any()) :: Ecto.Changeset.t()
   def changeset(participant, attrs) do
     participant
     |> cast(attrs, [:conversation_id, :user_id])

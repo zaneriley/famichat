@@ -29,7 +29,13 @@ defmodule Famichat.Chat.ConversationService do
       {:ok, conversations} = ConversationService.list_user_conversations(user_id)
   """
 
-  alias Famichat.{Repo, Chat.Conversation, Chat.User, Chat.ConversationParticipant}
+  alias Famichat.{
+    Repo,
+    Chat.Conversation,
+    Chat.User,
+    Chat.ConversationParticipant
+  }
+
   import Ecto.Query, only: [from: 2]
   require Logger
 
@@ -125,10 +131,11 @@ defmodule Famichat.Chat.ConversationService do
         result = do_create_direct_conversation(user1_id, user2_id)
 
         # Determine the result status for metadata
-        metadata_with_result = case result do
-          {:ok, _} -> Map.put(metadata, :result, "created")
-          {:error, _} -> Map.put(metadata, :result, "error")
-        end
+        metadata_with_result =
+          case result do
+            {:ok, _} -> Map.put(metadata, :result, "created")
+            {:error, _} -> Map.put(metadata, :result, "error")
+          end
 
         # Return the result and the metadata
         {result, metadata_with_result}
@@ -140,9 +147,12 @@ defmodule Famichat.Chat.ConversationService do
   defp do_create_direct_conversation(user1_id, user2_id) do
     with {:ok, user1} <- get_user(user1_id),
          {:ok, user2} <- get_user(user2_id),
-         true <- user1.family_id == user2.family_id || {:error, :different_families} do
+         true <-
+           user1.family_id == user2.family_id || {:error, :different_families} do
       family_id = user1.family_id
-      direct_key = Conversation.compute_direct_key(user1_id, user2_id, family_id)
+
+      direct_key =
+        Conversation.compute_direct_key(user1_id, user2_id, family_id)
 
       # Create a new Multi for the transaction
       multi =
@@ -150,7 +160,8 @@ defmodule Famichat.Chat.ConversationService do
         |> Ecto.Multi.run(:existing, fn repo, _changes ->
           query =
             from c in Conversation,
-              where: c.direct_key == ^direct_key and c.conversation_type == ^:direct
+              where:
+                c.direct_key == ^direct_key and c.conversation_type == ^:direct
 
           case repo.one(query) do
             nil -> {:ok, nil}
@@ -168,7 +179,7 @@ defmodule Famichat.Chat.ConversationService do
               metadata: %{}
             }
 
-            changeset = Conversation.changeset(%Conversation{}, attrs)
+            changeset = Conversation.create_changeset(%Conversation{}, attrs)
             repo.insert(changeset)
           end
         end)
@@ -186,7 +197,9 @@ defmodule Famichat.Chat.ConversationService do
 
           result =
             user_ids
-            |> Enum.reject(fn user_id -> user_id in existing_participant_ids end)
+            |> Enum.reject(fn user_id ->
+              user_id in existing_participant_ids
+            end)
             |> Enum.map(fn user_id ->
               %ConversationParticipant{}
               |> ConversationParticipant.changeset(%{
@@ -302,34 +315,55 @@ defmodule Famichat.Chat.ConversationService do
     - {:error, :not_group_conversation} - If the conversation is not a group
     - {:error, changeset} - If the operation failed due to validation errors
   """
-  @spec assign_admin(binary(), binary(), binary()) :: {:ok, any()} | {:error, any()}
+  @spec assign_admin(binary(), binary(), binary()) ::
+          {:ok, any()} | {:error, any()}
   def assign_admin(conversation_id, target_user_id, granted_by_id) do
-    metadata = %{conversation_id: conversation_id, target_user_id: target_user_id, granted_by_id: granted_by_id}
-    :telemetry.span([:famichat, :conversation_service, :assign_admin], metadata, fn ->
-      conversation = Repo.get(Conversation, conversation_id)
+    metadata = %{
+      conversation_id: conversation_id,
+      target_user_id: target_user_id,
+      granted_by_id: granted_by_id
+    }
 
-      result =
-        cond do
-          is_nil(conversation) ->
-            {:error, :conversation_not_found}
-          conversation.conversation_type != :group ->
-            {:error, :not_group_conversation}
-          conversation_id != nil && granted_by_id != nil ->
-            case is_admin?(conversation_id, granted_by_id) do
-              {:ok, true} ->
-                attrs = %{conversation_id: conversation_id, user_id: target_user_id, role: :admin, granted_by_id: granted_by_id}
-                changeset = Famichat.Chat.GroupConversationPrivileges.changeset(%Famichat.Chat.GroupConversationPrivileges{}, attrs)
-                Repo.insert(changeset)
-              {:ok, false} ->
-                {:error, :not_admin}
-              error ->
-                error
-            end
-          true ->
-            {:error, :invalid_parameters}
+    :telemetry.span(
+      [:famichat, :conversation_service, :assign_admin],
+      metadata,
+      fn ->
+        with {:ok, _conversation} <- fetch_group_conversation(conversation_id),
+             {:ok, true} <- admin?(conversation_id, granted_by_id),
+             result <-
+               insert_admin_privilege(
+                 conversation_id,
+                 target_user_id,
+                 granted_by_id
+               ) do
+          {result, Map.put(metadata, :result, result_status(result))}
+        else
+          {:ok, false} ->
+            {{:error, :not_admin}, Map.put(metadata, :result, "error")}
+
+          error ->
+            {error, Map.put(metadata, :result, result_status(error))}
         end
-      {result, Map.put(metadata, :result, result_status(result))}
-    end)
+      end
+    )
+  end
+
+  # Helper function to insert admin privilege
+  defp insert_admin_privilege(conversation_id, target_user_id, granted_by_id) do
+    attrs = %{
+      conversation_id: conversation_id,
+      user_id: target_user_id,
+      role: :admin,
+      granted_by_id: granted_by_id
+    }
+
+    changeset =
+      Famichat.Chat.GroupConversationPrivileges.changeset(
+        %Famichat.Chat.GroupConversationPrivileges{},
+        attrs
+      )
+
+    Repo.insert(changeset)
   end
 
   @doc """
@@ -349,50 +383,98 @@ defmodule Famichat.Chat.ConversationService do
     - {:error, :not_group_conversation} - If the conversation is not a group
     - {:error, changeset} - If the operation failed due to validation errors
   """
-  @spec assign_member(binary(), binary(), binary()) :: {:ok, any()} | {:error, any()}
+  @spec assign_member(binary(), binary(), binary()) ::
+          {:ok, any()} | {:error, any()}
   def assign_member(conversation_id, target_user_id, granted_by_id) do
-    metadata = %{conversation_id: conversation_id, target_user_id: target_user_id, granted_by_id: granted_by_id}
-    :telemetry.span([:famichat, :conversation_service, :assign_member], metadata, fn ->
-      conversation = Repo.get(Conversation, conversation_id)
+    metadata = %{
+      conversation_id: conversation_id,
+      target_user_id: target_user_id,
+      granted_by_id: granted_by_id
+    }
 
-      result =
-        cond do
-          is_nil(conversation) ->
-            {:error, :conversation_not_found}
-          conversation.conversation_type != :group ->
-            {:error, :not_group_conversation}
-          granted_by_id != nil ->
-            case is_admin?(conversation_id, granted_by_id) do
-              {:ok, true} ->
-                privilege = Repo.get_by(Famichat.Chat.GroupConversationPrivileges, conversation_id: conversation_id, user_id: target_user_id)
-                cond do
-                  privilege && privilege.role == :admin ->
-                    # Check if this is the last admin
-                    admin_count = Repo.aggregate(from(g in Famichat.Chat.GroupConversationPrivileges, where: g.conversation_id == ^conversation_id and g.role == :admin), :count, :id)
-                    if admin_count <= 1 do
-                      {:error, :last_admin}
-                    else
-                      changeset = Ecto.Changeset.change(privilege, role: :member)
-                      Repo.update(changeset)
-                    end
-                  privilege ->
-                    # Already a member
-                    {:ok, privilege}
-                  true ->
-                    attrs = %{conversation_id: conversation_id, user_id: target_user_id, role: :member, granted_by_id: granted_by_id}
-                    changeset = Famichat.Chat.GroupConversationPrivileges.changeset(%Famichat.Chat.GroupConversationPrivileges{}, attrs)
-                    Repo.insert(changeset)
-                end
-              {:ok, false} ->
-                {:error, :not_admin}
-              error ->
-                error
-            end
-          true ->
-            {:error, :invalid_parameters}
+    :telemetry.span(
+      [:famichat, :conversation_service, :assign_member],
+      metadata,
+      fn ->
+        with {:ok, conversation} <- fetch_group_conversation(conversation_id),
+             {:ok, true} <- admin?(conversation_id, granted_by_id),
+             result <-
+               update_or_insert_member(
+                 conversation,
+                 target_user_id,
+                 granted_by_id
+               ) do
+          {result, Map.put(metadata, :result, result_status(result))}
+        else
+          error -> {error, Map.put(metadata, :result, result_status(error))}
         end
-      {result, Map.put(metadata, :result, result_status(result))}
-    end)
+      end
+    )
+  end
+
+  # Private helper functions
+  defp fetch_group_conversation(conversation_id) do
+    case Repo.get(Conversation, conversation_id) do
+      nil ->
+        {:error, :conversation_not_found}
+
+      %Conversation{conversation_type: :group} = conversation ->
+        {:ok, conversation}
+
+      _ ->
+        {:error, :not_group_conversation}
+    end
+  end
+
+  defp update_or_insert_member(conversation, target_user_id, granted_by_id) do
+    privilege =
+      Repo.get_by(Famichat.Chat.GroupConversationPrivileges,
+        conversation_id: conversation.id,
+        user_id: target_user_id
+      )
+
+    cond do
+      privilege && privilege.role == :admin ->
+        demote_admin_if_possible(privilege, conversation.id)
+
+      privilege ->
+        {:ok, privilege}
+
+      true ->
+        insert_member_privilege(conversation.id, target_user_id, granted_by_id)
+    end
+  end
+
+  defp demote_admin_if_possible(privilege, conversation_id) do
+    admin_count =
+      Repo.aggregate(
+        from(g in Famichat.Chat.GroupConversationPrivileges,
+          where: g.conversation_id == ^conversation_id and g.role == :admin
+        ),
+        :count,
+        :id
+      )
+
+    if admin_count <= 1 do
+      {:error, :last_admin}
+    else
+      privilege
+      |> Ecto.Changeset.change(role: :member)
+      |> Repo.update()
+    end
+  end
+
+  defp insert_member_privilege(conversation_id, target_user_id, granted_by_id) do
+    attrs = %{
+      conversation_id: conversation_id,
+      user_id: target_user_id,
+      role: :member,
+      granted_by_id: granted_by_id
+    }
+
+    %Famichat.Chat.GroupConversationPrivileges{}
+    |> Famichat.Chat.GroupConversationPrivileges.changeset(attrs)
+    |> Repo.insert()
   end
 
   @doc """
@@ -407,26 +489,51 @@ defmodule Famichat.Chat.ConversationService do
     - {:ok, false} - If the user is not an admin
     - {:error, :conversation_not_found} - If the conversation doesn't exist
   """
-  @spec is_admin?(binary(), binary()) :: {:ok, boolean()} | {:error, any()}
-  def is_admin?(conversation_id, user_id) do
+  @spec admin?(binary(), binary()) :: {:ok, boolean()} | {:error, any()}
+  def admin?(conversation_id, user_id) do
     metadata = %{conversation_id: conversation_id, user_id: user_id}
-    :telemetry.span([:famichat, :conversation_service, :is_admin?], metadata, fn ->
-      conversation = Repo.get(Conversation, conversation_id)
-      result =
-        cond do
-          is_nil(conversation) ->
-            {:error, :conversation_not_found}
-          true ->
-            privilege = Repo.get_by(Famichat.Chat.GroupConversationPrivileges, conversation_id: conversation_id, user_id: user_id)
-            case privilege do
-              %Famichat.Chat.GroupConversationPrivileges{role: :admin} -> {:ok, true}
-              %Famichat.Chat.GroupConversationPrivileges{} -> {:ok, false}
-              nil -> {:ok, false}
-            end
-        end
-      {result, Map.put(metadata, :result, result_status(result))}
-    end)
+
+    :telemetry.span(
+      [:famichat, :conversation_service, :admin?],
+      metadata,
+      fn ->
+        result = admin_in_conversation?(conversation_id, user_id)
+        {result, Map.put(metadata, :result, result_status(result))}
+      end
+    )
   end
+
+  # Checks if a user has admin privileges in a conversation
+  defp admin_in_conversation?(conversation_id, user_id) do
+    with {:ok, _conversation} <- conversation_exists?(conversation_id) do
+      privilege = user_conversation_privilege(conversation_id, user_id)
+      admin_from_privilege?(privilege)
+    end
+  end
+
+  # Validates that a conversation exists
+  defp conversation_exists?(conversation_id) do
+    case Repo.get(Conversation, conversation_id) do
+      nil -> {:error, :conversation_not_found}
+      conversation -> {:ok, conversation}
+    end
+  end
+
+  # Retrieves a user's privilege record for a conversation
+  defp user_conversation_privilege(conversation_id, user_id) do
+    Repo.get_by(Famichat.Chat.GroupConversationPrivileges,
+      conversation_id: conversation_id,
+      user_id: user_id
+    )
+  end
+
+  # Determines admin status from a privilege record
+  defp admin_from_privilege?(%Famichat.Chat.GroupConversationPrivileges{
+         role: :admin
+       }),
+       do: {:ok, true}
+
+  defp admin_from_privilege?(_), do: {:ok, false}
 
   @doc """
   Removes a privilege from a group conversation. Prevents removal if it is the last admin.
@@ -442,32 +549,90 @@ defmodule Famichat.Chat.ConversationService do
     - {:error, :last_admin} - If trying to remove the last admin
     - {:error, :not_found} - If the privilege doesn't exist
   """
-  @spec remove_privilege(binary(), binary(), binary() | nil) :: {:ok, any()} | {:error, any()}
+  @spec remove_privilege(binary(), binary(), binary() | nil) ::
+          {:ok, any()} | {:error, any()}
   def remove_privilege(conversation_id, user_id, removed_by_id \\ nil) do
-    metadata = %{conversation_id: conversation_id, user_id: user_id, removed_by_id: removed_by_id}
-    :telemetry.span([:famichat, :conversation_service, :remove_privilege], metadata, fn ->
-      privilege = Repo.get_by(Famichat.Chat.GroupConversationPrivileges, conversation_id: conversation_id, user_id: user_id)
-      result =
-        cond do
-          is_nil(privilege) ->
-            {:error, :not_found}
-          removed_by_id && removed_by_id != user_id ->
-            case is_admin?(conversation_id, removed_by_id) do
-              {:ok, true} -> do_remove_privilege(privilege, conversation_id)
-              {:ok, false} -> {:error, :not_admin}
-              error -> error
-            end
-          true ->
-            # Self-removal or system action
-            do_remove_privilege(privilege, conversation_id)
-        end
-      {result, Map.put(metadata, :result, result_status(result))}
-    end)
+    metadata = %{
+      conversation_id: conversation_id,
+      user_id: user_id,
+      removed_by_id: removed_by_id
+    }
+
+    :telemetry.span(
+      [:famichat, :conversation_service, :remove_privilege],
+      metadata,
+      fn ->
+        privilege =
+          Repo.get_by(Famichat.Chat.GroupConversationPrivileges,
+            conversation_id: conversation_id,
+            user_id: user_id
+          )
+
+        result =
+          process_privilege_removal(
+            privilege,
+            conversation_id,
+            user_id,
+            removed_by_id
+          )
+
+        {result, Map.put(metadata, :result, result_status(result))}
+      end
+    )
+  end
+
+  # Helper functions for privilege removal logic
+
+  # Handle case when privilege doesn't exist
+  defp process_privilege_removal(
+         nil,
+         _conversation_id,
+         _user_id,
+         _removed_by_id
+       ),
+       do: {:error, :not_found}
+
+  # Handle case when user is being removed by someone else (not themselves)
+  defp process_privilege_removal(
+         privilege,
+         conversation_id,
+         user_id,
+         removed_by_id
+       )
+       when not is_nil(removed_by_id) and removed_by_id != user_id do
+    check_admin_privileges(privilege, conversation_id, removed_by_id)
+  end
+
+  # Handle self-removal or system action
+  defp process_privilege_removal(
+         privilege,
+         conversation_id,
+         _user_id,
+         _removed_by_id
+       ) do
+    do_remove_privilege(privilege, conversation_id)
+  end
+
+  # Check if the user removing privileges has admin rights
+  defp check_admin_privileges(privilege, conversation_id, removed_by_id) do
+    case admin?(conversation_id, removed_by_id) do
+      {:ok, true} -> do_remove_privilege(privilege, conversation_id)
+      {:ok, false} -> {:error, :not_admin}
+      error -> error
+    end
   end
 
   defp do_remove_privilege(privilege, conversation_id) do
     if privilege.role == :admin do
-      admin_count = Repo.aggregate(from(g in Famichat.Chat.GroupConversationPrivileges, where: g.conversation_id == ^conversation_id and g.role == :admin), :count, :id)
+      admin_count =
+        Repo.aggregate(
+          from(g in Famichat.Chat.GroupConversationPrivileges,
+            where: g.conversation_id == ^conversation_id and g.role == :admin
+          ),
+          :count,
+          :id
+        )
+
       if admin_count <= 1 do
         {:error, :last_admin}
       else

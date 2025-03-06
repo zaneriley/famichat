@@ -81,29 +81,33 @@ defmodule Famichat.ChatTest do
       user3 = user_fixture(family_id: family.id)
 
       # Generate a direct key for direct conversations
-      direct_key = Conversation.compute_direct_key(user1.id, user2.id, family.id)
+      direct_key =
+        Conversation.compute_direct_key(user1.id, user2.id, family.id)
 
-      conv1 = conversation_fixture(%{
-        family_id: family.id,
-        conversation_type: "direct",
-        direct_key: direct_key
-      })
+      conv1 =
+        conversation_fixture(%{
+          family_id: family.id,
+          conversation_type: :direct,
+          direct_key: direct_key
+        })
 
-      conv2 = conversation_fixture(%{
-        family_id: family.id,
-        conversation_type: "group",
-        metadata: %{
-          "name" => "Test Group"
-        }
-      })
+      conv2 =
+        conversation_fixture(%{
+          family_id: family.id,
+          conversation_type: :group,
+          metadata: %{
+            "name" => "Test Group"
+          }
+        })
 
-      conv3 = conversation_fixture(%{
-        family_id: family.id,
-        conversation_type: "letter",
-        metadata: %{
-          "subject" => "Test Letter"
-        }
-      })
+      conv3 =
+        conversation_fixture(%{
+          family_id: family.id,
+          conversation_type: :family,
+          metadata: %{
+            "name" => "Family Chat"
+          }
+        })
 
       %{
         family: family,
@@ -116,13 +120,19 @@ defmodule Famichat.ChatTest do
       }
     end
 
-    test "hide_conversation/2 adds user to hidden_by_users", %{conv1: conv, user1: user} do
+    test "hide_conversation/2 adds user to hidden_by_users", %{
+      conv1: conv,
+      user1: user
+    } do
       assert {:ok, updated_conv} = Chat.hide_conversation(conv.id, user.id)
       assert user.id in updated_conv.hidden_by_users
     end
 
-    test "hide_conversation/2 returns error for non-existent conversation", %{user1: user} do
-      assert {:error, :not_found} = Chat.hide_conversation(Ecto.UUID.generate(), user.id)
+    test "hide_conversation/2 returns error for non-existent conversation", %{
+      user1: user
+    } do
+      assert {:error, :not_found} =
+               Chat.hide_conversation(Ecto.UUID.generate(), user.id)
     end
 
     test "hide_conversation/2 is idempotent", %{conv1: conv, user1: user} do
@@ -131,7 +141,10 @@ defmodule Famichat.ChatTest do
       assert conv1.hidden_by_users == conv2.hidden_by_users
     end
 
-    test "unhide_conversation/2 removes user from hidden_by_users", %{conv1: conv, user1: user} do
+    test "unhide_conversation/2 removes user from hidden_by_users", %{
+      conv1: conv,
+      user1: user
+    } do
       {:ok, hidden_conv} = Chat.hide_conversation(conv.id, user.id)
       assert user.id in hidden_conv.hidden_by_users
 
@@ -162,7 +175,9 @@ defmodule Famichat.ChatTest do
     end
 
     test "list_visible_conversations/2 preloads associations", %{user1: user} do
-      conversations = Chat.list_visible_conversations(user.id, preload: [:participants])
+      conversations =
+        Chat.list_visible_conversations(user.id, preload: [:participants])
+
       assert hd(conversations).participants != nil
     end
   end
