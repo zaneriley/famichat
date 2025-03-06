@@ -99,14 +99,9 @@ defmodule FamichatWeb.MessageChannel do
   - On failure: %{}
   """
   @impl true
-  def join("message:" <> room_id, params, socket) do
+  def join("message:" <> rest, _payload, socket) do
+    user_id = socket.assigns[:user_id]
     start_time = System.monotonic_time()
-    Logger.debug("""
-    MessageChannel join called:
-    - room_id: #{inspect(room_id)}
-    - params: #{inspect(params)}
-    - socket assigns: #{inspect(socket.assigns)}
-    """)
 
     measurements = %{
       start_time: start_time,
@@ -114,58 +109,163 @@ defmodule FamichatWeb.MessageChannel do
       monotonic_time: System.monotonic_time()
     }
 
-    try do
-      if socket.assigns[:user_id] do
-        Logger.debug("User authorized, joining channel with user_id: #{socket.assigns.user_id}")
+    if is_nil(user_id) do
+      Logger.debug("User ID missing from socket assigns, rejecting join")
 
-        metadata = %{
-          user_id: socket.assigns.user_id,
-          room_id: room_id,
-          encryption_status: "enabled",
-          status: :success
-        }
+      emit_join_telemetry(measurements, %{
+        status: :error,
+        error_reason: :unauthorized
+      })
 
-        Logger.debug("Emitting telemetry event with metadata: #{inspect(metadata)}")
-        :telemetry.execute(
-          [:famichat, :message_channel, :join],
-          measurements,
-          metadata
-        )
+      {:error, %{reason: "unauthorized"}}
+    else
+      topic_parts = String.split(rest, ":")
+      Logger.debug("Topic parts: #{inspect(topic_parts)}")
 
-        {:ok, socket}
-      else
-        Logger.debug("User unauthorized, rejecting join - no user_id in socket assigns")
+      case topic_parts do
+        # Legacy format - just a room ID
+        [room_id] when room_id not in ["invalid"] ->
+          handle_legacy_join(socket, room_id, user_id, measurements)
 
-        metadata = %{
-          room_id: room_id,
-          status: :error,
-          error_reason: :unauthorized
-        }
+        # Type-aware format - conversation type and ID
+        [type, id] when type in ["self", "direct", "group", "family"] ->
+          handle_type_aware_join(socket, type, id, user_id, measurements)
 
-        Logger.debug("Emitting telemetry event with metadata: #{inspect(metadata)}")
-        :telemetry.execute(
-          [:famichat, :message_channel, :join],
-          measurements,
-          metadata
-        )
+        # Invalid format
+        _ ->
+          Logger.warning("Invalid topic format: #{inspect(topic_parts)}")
 
-        {:error, %{reason: "unauthorized"}}
+          emit_join_telemetry(measurements, %{
+            user_id: user_id,
+            status: :error,
+            error_reason: :invalid_topic_format
+          })
+
+          {:error, %{reason: "invalid_topic_format"}}
       end
-    rescue
-      error ->
-        Logger.error("Error in channel join: #{inspect(error)}")
-        metadata = %{
-          room_id: room_id,
-          status: :error,
-          error_reason: :internal_error,
-          error_details: inspect(error)
-        }
-        :telemetry.execute(
-          [:famichat, :message_channel, :join],
-          measurements,
-          metadata
-        )
-        {:error, %{reason: "internal_error"}}
+    end
+  end
+
+  # Helper function to handle legacy topic format
+  defp handle_legacy_join(socket, room_id, user_id, measurements) do
+    # For legacy format, we don't do type-specific authorization
+    Logger.debug(
+      "User authorized for legacy room, joining channel with user_id: #{user_id}"
+    )
+
+    emit_join_telemetry(measurements, %{
+      user_id: user_id,
+      room_id: room_id,
+      encryption_status: "enabled",
+      status: :success
+    })
+
+    {:ok, socket}
+  end
+
+  # Helper function to authorize and join based on conversation type
+  defp handle_type_aware_join(socket, type, id, user_id, measurements) do
+    # Perform type-specific authorization checks
+    authorized =
+      case type do
+        "self" ->
+          # For self conversations, only the creator can access
+          # In a real implementation, this would query the database
+          # For now, we'll assume the ID contains the user_id for demo purposes
+          id == user_id
+
+        "direct" ->
+          # For direct conversations, only the two participants can access
+          # In a real implementation, this would query the database
+          # For now, we'll authorize all for demo purposes
+          true
+
+        "group" ->
+          # For group conversations, only active members can access
+          # In a real implementation, this would query the database
+          # For now, we'll authorize all for demo purposes
+          true
+
+        "family" ->
+          # For family conversations, all family members have access
+          # In a real implementation, this would query the database
+          # For now, we'll authorize all for demo purposes
+          true
+      end
+
+    if authorized do
+      Logger.debug(
+        "User authorized for #{type} conversation, joining channel with user_id: #{user_id}"
+      )
+
+      emit_join_telemetry(measurements, %{
+        user_id: user_id,
+        conversation_type: type,
+        conversation_id: id,
+        encryption_status: "enabled",
+        status: :success
+      })
+
+      {:ok, socket}
+    else
+      Logger.debug(
+        "User not authorized for #{type} conversation, rejecting join"
+      )
+
+      emit_join_telemetry(measurements, %{
+        user_id: user_id,
+        conversation_type: type,
+        conversation_id: id,
+        status: :error,
+        error_reason: :unauthorized
+      })
+
+      {:error, %{reason: "unauthorized"}}
+    end
+  end
+
+  # Helper function to emit join telemetry
+  defp emit_join_telemetry(measurements, metadata) do
+    Logger.debug("Emitting telemetry event with metadata: #{inspect(metadata)}")
+
+    # Calculate duration in milliseconds
+    duration_ms =
+      System.convert_time_unit(
+        System.monotonic_time() - measurements.start_time,
+        :native,
+        :millisecond
+      )
+
+    # Add duration to measurements
+    measurements = Map.put(measurements, :duration_ms, duration_ms)
+
+    # Add timestamp to metadata
+    metadata = Map.put(metadata, :timestamp, DateTime.utc_now())
+
+    # Filter out sensitive encryption metadata fields
+    # For failed joins, remove all encryption-related fields
+    # For successful joins, only keep the encryption_status field
+    filtered_metadata =
+      if metadata[:status] == :success do
+        # For successful joins, only keep encryption_status
+        Map.drop(metadata, @encryption_metadata_fields)
+      else
+        # For failed joins, remove all encryption-related fields including encryption_status
+        Map.drop(metadata, @encryption_metadata_fields ++ ["encryption_status"])
+      end
+
+    # Emit telemetry event with filtered metadata
+    :telemetry.execute(
+      [:famichat, :message_channel, :join],
+      measurements,
+      filtered_metadata
+    )
+
+    # Log performance budget warning if join takes too long
+    if duration_ms > 200 do
+      Logger.warning(
+        "Channel join exceeded performance budget: #{duration_ms}ms"
+      )
     end
   end
 
@@ -209,6 +309,7 @@ defmodule FamichatWeb.MessageChannel do
     Logger.debug("Topic parts: #{inspect(topic_parts)}")
 
     case topic_parts do
+      # Legacy format
       ["message", room_id] ->
         measurements = %{
           start_time: start_time,
@@ -219,19 +320,23 @@ defmodule FamichatWeb.MessageChannel do
         metadata = %{
           user_id: socket.assigns.user_id,
           room_id: room_id,
-          encryption_status: if(Map.get(payload, "encryption_flag"), do: "enabled", else: "disabled")
+          encryption_status:
+            if(Map.get(payload, "encryption_flag"),
+              do: "enabled",
+              else: "disabled"
+            )
         }
 
-        :telemetry.execute(
-          [:famichat, :message_channel, :broadcast],
-          measurements,
-          metadata
-        )
-
+        # Broadcast the message
         broadcast!(socket, "new_msg", broadcast_payload)
 
+        # Emit telemetry for the broadcast
+        emit_broadcast_telemetry(measurements, metadata)
+
         {:noreply, socket}
-      ["message", room_id, _extra] ->
+
+      # Type-aware format
+      ["message", type, id] when type in ["self", "direct", "group", "family"] ->
         measurements = %{
           start_time: start_time,
           system_time: System.system_time(),
@@ -240,19 +345,24 @@ defmodule FamichatWeb.MessageChannel do
 
         metadata = %{
           user_id: socket.assigns.user_id,
-          room_id: room_id,
-          encryption_status: if(Map.get(payload, "encryption_flag"), do: "enabled", else: "disabled")
+          conversation_type: type,
+          conversation_id: id,
+          encryption_status:
+            if(Map.get(payload, "encryption_flag"),
+              do: "enabled",
+              else: "disabled"
+            )
         }
 
-        :telemetry.execute(
-          [:famichat, :message_channel, :broadcast],
-          measurements,
-          metadata
-        )
-
+        # Broadcast the message
         broadcast!(socket, "new_msg", broadcast_payload)
 
+        # Emit telemetry for the broadcast
+        emit_broadcast_telemetry(measurements, metadata)
+
         {:noreply, socket}
+
+      # Invalid format
       _ ->
         Logger.error("Unexpected topic format: #{inspect(topic_parts)}")
         {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
@@ -261,5 +371,52 @@ defmodule FamichatWeb.MessageChannel do
 
   def handle_in("new_msg", _invalid_payload, socket) do
     {:reply, {:error, %{reason: "invalid_message"}}, socket}
+  end
+
+  # Helper function to emit broadcast telemetry
+  defp emit_broadcast_telemetry(measurements, metadata) do
+    Logger.debug(
+      "Emitting broadcast telemetry event with metadata: #{inspect(metadata)}"
+    )
+
+    # Calculate duration in milliseconds
+    duration_ms =
+      System.convert_time_unit(
+        System.monotonic_time() - measurements.start_time,
+        :native,
+        :millisecond
+      )
+
+    # Add duration to measurements
+    measurements = Map.put(measurements, :duration_ms, duration_ms)
+
+    # Add timestamp to metadata
+    metadata = Map.put(metadata, :timestamp, DateTime.utc_now())
+
+    # Add message size to metadata if available
+    metadata =
+      if Map.has_key?(metadata, :message_size) do
+        metadata
+      else
+        Map.put(metadata, :message_size, 0)
+      end
+
+    # Filter out sensitive encryption metadata fields
+    # Only keep the encryption_status field, remove all other encryption-related fields
+    filtered_metadata = Map.drop(metadata, @encryption_metadata_fields)
+
+    # Emit telemetry event with filtered metadata
+    :telemetry.execute(
+      [:famichat, :message_channel, :broadcast],
+      measurements,
+      filtered_metadata
+    )
+
+    # Log performance budget warning if broadcast takes too long
+    if duration_ms > 200 do
+      Logger.warning(
+        "Channel broadcast exceeded performance budget: #{duration_ms}ms"
+      )
+    end
   end
 end

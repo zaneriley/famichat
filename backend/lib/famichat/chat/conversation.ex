@@ -27,7 +27,7 @@ defmodule Famichat.Chat.Conversation do
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
           family_id: Ecto.UUID.t(),
-          conversation_type: :letter | :direct | :group | :self,
+          conversation_type: :direct | :group | :self | :family,
           direct_key: String.t() | nil,
           metadata: map(),
           messages: [Famichat.Chat.Message.t()] | nil,
@@ -43,7 +43,7 @@ defmodule Famichat.Chat.Conversation do
     field :family_id, :binary_id
 
     field :conversation_type, Ecto.Enum,
-      values: [:letter, :direct, :group, :self],
+      values: [:direct, :group, :self, :family],
       default: :direct
 
     # For enforcing uniqueness in direct conversations
@@ -79,18 +79,16 @@ defmodule Famichat.Chat.Conversation do
       iex> create_changeset(%Conversation{}, %{family_id: uuid, conversation_type: :direct})
       %Ecto.Changeset{...}
   """
-  @spec create_changeset(
-          t() | Ecto.Changeset.t(),
-          %{
-            :family_id => binary(),
-            optional(:conversation_type) => :letter | :direct | :group | :self,
-            optional(:metadata) => map(),
-            optional(:direct_key) => String.t()
-          }
-        ) :: Ecto.Changeset.t()
+  @spec create_changeset(t() | Ecto.Changeset.t(), any()) :: Ecto.Changeset.t()
   def create_changeset(conversation, attrs) do
     conversation
-    |> cast(attrs, [:family_id, :conversation_type, :metadata, :direct_key, :hidden_by_users])
+    |> cast(attrs, [
+      :family_id,
+      :conversation_type,
+      :metadata,
+      :direct_key,
+      :hidden_by_users
+    ])
     |> validate_required([:family_id, :conversation_type])
     |> validate_direct_key()
     |> validate_metadata()
@@ -108,13 +106,7 @@ defmodule Famichat.Chat.Conversation do
       iex> update_changeset(conversation, %{metadata: %{name: "New Name"}})
       %Ecto.Changeset{...}
   """
-  @spec update_changeset(
-          t() | Ecto.Changeset.t(),
-          %{
-            optional(:metadata) => map(),
-            optional(:hidden_by_users) => [binary()]
-          }
-        ) :: Ecto.Changeset.t()
+  @spec update_changeset(t() | Ecto.Changeset.t(), any()) :: Ecto.Changeset.t()
   def update_changeset(conversation, attrs) do
     conversation
     |> cast(attrs, [:metadata, :hidden_by_users])
@@ -122,22 +114,21 @@ defmodule Famichat.Chat.Conversation do
   end
 
   @doc false
-  @spec changeset(
-          t() | Ecto.Changeset.t(),
-          %{
-            :family_id => binary(),
-            optional(:conversation_type) => :letter | :direct | :group | :self,
-            optional(:metadata) => map(),
-            optional(:direct_key) => String.t(),
-            optional(:hidden_by_users) => [binary()]
-          }
-        ) :: Ecto.Changeset.t()
+  @spec changeset(t() | Ecto.Changeset.t(), any()) :: Ecto.Changeset.t()
   def changeset(conversation, attrs) do
     # For backwards compatibility
-    Logger.warning("Using deprecated generic changeset. Use create_changeset/2 or update_changeset/2 instead")
+    Logger.warning(
+      "Using deprecated generic changeset. Use create_changeset/2 or update_changeset/2 instead"
+    )
 
     conversation
-    |> cast(attrs, [:family_id, :conversation_type, :metadata, :direct_key, :hidden_by_users])
+    |> cast(attrs, [
+      :family_id,
+      :conversation_type,
+      :metadata,
+      :direct_key,
+      :hidden_by_users
+    ])
     |> validate_required([:family_id])
     |> validate_conversation_type()
     |> validate_direct_key()
@@ -147,7 +138,11 @@ defmodule Famichat.Chat.Conversation do
   defp validate_direct_key(changeset) do
     if get_field(changeset, :conversation_type) == :direct do
       if is_nil(get_field(changeset, :direct_key)) do
-        add_error(changeset, :direct_key, "must be set for direct conversations")
+        add_error(
+          changeset,
+          :direct_key,
+          "must be set for direct conversations"
+        )
       else
         changeset
       end
@@ -166,26 +161,16 @@ defmodule Famichat.Chat.Conversation do
 
   defp validate_type_specific_metadata(changeset) do
     case get_field(changeset, :conversation_type) do
-      :letter -> validate_letter_metadata(changeset)
       :direct -> changeset
       :group -> validate_group_metadata(changeset)
       :self -> changeset
+      :family -> changeset
       _ -> add_error(changeset, :conversation_type, "is invalid")
     end
   end
 
   defp validate_conversation_type(changeset) do
     changeset
-  end
-
-  defp validate_letter_metadata(changeset) do
-    metadata = get_field(changeset, :metadata)
-
-    if is_map(metadata) && Map.has_key?(metadata, "subject") do
-      changeset
-    else
-      add_error(changeset, :metadata, "letters require a subject")
-    end
   end
 
   defp validate_group_metadata(changeset) do
@@ -221,28 +206,62 @@ defmodule Famichat.Chat.Conversation do
     users = get_field(changeset, :users) || []
     user_count = length(users)
 
-    cond do
-      is_nil(conversation_type) ->
-        add_error(changeset, :conversation_type, "must be set for user count validation")
-
-      user_count == 0 ->
-        # Allows creating a conversation without users initially
-        changeset
-
-      true ->
-        case {conversation_type, user_count} do
-          {:direct, 2} -> changeset
-          {:letter, 2} -> changeset
-          {:direct, n} when n != 2 -> add_error(changeset, :users, "direct conversations require exactly 2 users")
-          {:letter, n} when n != 2 -> add_error(changeset, :users, "letter conversations require exactly 2 users")
-          {:self, 1} -> changeset
-          {:self, n} when n != 1 -> add_error(changeset, :users, "self conversations require exactly 1 user")
-          {:group, n} when n >= 1 -> changeset
-          {:group, 0} -> add_error(changeset, :users, "group conversations require at least 1 user")
-          _ -> changeset
-        end
-    end
+    changeset
+    |> validate_conversation_type_presence(conversation_type)
+    |> validate_user_count_by_type(conversation_type, user_count)
   end
+
+  defp validate_conversation_type_presence(changeset, nil),
+    do:
+      add_error(
+        changeset,
+        :conversation_type,
+        "must be set for user count validation"
+      )
+
+  defp validate_conversation_type_presence(changeset, _), do: changeset
+
+  defp validate_user_count_by_type(changeset, _, 0), do: changeset
+
+  defp validate_user_count_by_type(changeset, :direct, 2), do: changeset
+
+  defp validate_user_count_by_type(changeset, :direct, _),
+    do:
+      add_error(
+        changeset,
+        :users,
+        "direct conversations require exactly 2 users"
+      )
+
+  defp validate_user_count_by_type(changeset, :self, 1), do: changeset
+
+  defp validate_user_count_by_type(changeset, :self, _),
+    do:
+      add_error(changeset, :users, "self conversations require exactly 1 user")
+
+  defp validate_user_count_by_type(changeset, :group, n) when n >= 3,
+    do: changeset
+
+  defp validate_user_count_by_type(changeset, :group, _),
+    do:
+      add_error(
+        changeset,
+        :users,
+        "group conversations require at least 3 users"
+      )
+
+  defp validate_user_count_by_type(changeset, :family, n) when n >= 1,
+    do: changeset
+
+  defp validate_user_count_by_type(changeset, :family, _),
+    do:
+      add_error(
+        changeset,
+        :users,
+        "family conversations require at least 1 user"
+      )
+
+  defp validate_user_count_by_type(changeset, _, _), do: changeset
 
   @doc """
   Computes a unique key for direct conversations based on the sorted user IDs,

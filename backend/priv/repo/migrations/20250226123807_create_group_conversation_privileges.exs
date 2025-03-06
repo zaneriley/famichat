@@ -4,7 +4,10 @@ defmodule Famichat.Repo.Migrations.CreateGroupConversationPrivileges do
   def change do
     create table(:group_conversation_privileges, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :conversation_id, references(:conversations, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :conversation_id, references(:conversations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false
       add :granted_by_id, references(:users, type: :binary_id, on_delete: :nilify_all)
       add :role, :string, null: false

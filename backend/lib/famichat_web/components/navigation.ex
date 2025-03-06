@@ -72,6 +72,7 @@ defmodule FamichatWeb.Navigation do
               </.typography>
             </.link>
           </li>
+
           <li>
             <.link
               navigate={Routes.note_index_path(@socket, :index, @user_locale)}
@@ -82,6 +83,7 @@ defmodule FamichatWeb.Navigation do
               </.typography>
             </.link>
           </li>
+
           <li>
             <.link
               navigate={Routes.about_path(@socket, :index, @user_locale)}
@@ -114,6 +116,7 @@ defmodule FamichatWeb.Navigation do
               </.typography>
             </.link>
           </li>
+
           <li>
             <.link
               href={@ja_path}

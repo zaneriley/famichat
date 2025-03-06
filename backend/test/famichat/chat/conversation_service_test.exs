@@ -1,7 +1,12 @@
 defmodule Famichat.Chat.ConversationServiceTest do
   use Famichat.DataCase
 
-  alias Famichat.Chat.{Conversation, ConversationService, GroupConversationPrivileges}
+  alias Famichat.Chat.{
+    Conversation,
+    ConversationService,
+    GroupConversationPrivileges
+  }
+
   alias Famichat.Repo
   import Famichat.ChatFixtures
   import Ecto.Query
@@ -15,7 +20,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
       {:ok, conversation} =
         ConversationService.create_direct_conversation(user.id, user.id)
 
-      assert conversation.conversation_type == :direct # Implementation uses direct instead of self
+      # Implementation uses direct instead of self
+      assert conversation.conversation_type == :direct
       assert conversation.family_id == user.family_id
       assert Enum.any?(conversation.users, fn u -> u.id == user.id end)
     end
@@ -49,18 +55,37 @@ defmodule Famichat.Chat.ConversationServiceTest do
       handler_id = System.unique_integer([:positive])
       handler_name = "test-telemetry-handler-#{handler_id}"
 
-      :ok = :telemetry.attach_many(
-        handler_name,
-        [
-          [:famichat, :conversation_service, :create_direct_conversation, :start],
-          [:famichat, :conversation_service, :create_direct_conversation, :stop],
-          [:famichat, :conversation_service, :create_direct_conversation, :exception]
-        ],
-        fn event_name, measurements, metadata, _ ->
-          send(parent, {:telemetry_event, ref, event_name, measurements, metadata})
-        end,
-        nil
-      )
+      :ok =
+        :telemetry.attach_many(
+          handler_name,
+          [
+            [
+              :famichat,
+              :conversation_service,
+              :create_direct_conversation,
+              :start
+            ],
+            [
+              :famichat,
+              :conversation_service,
+              :create_direct_conversation,
+              :stop
+            ],
+            [
+              :famichat,
+              :conversation_service,
+              :create_direct_conversation,
+              :exception
+            ]
+          ],
+          fn event_name, measurements, metadata, _ ->
+            send(
+              parent,
+              {:telemetry_event, ref, event_name, measurements, metadata}
+            )
+          end,
+          nil
+        )
 
       on_exit(fn ->
         :telemetry.detach(handler_name)
@@ -69,7 +94,11 @@ defmodule Famichat.Chat.ConversationServiceTest do
       {:ok, family: family, user1: user1, user2: user2, ref: ref}
     end
 
-    test "creates a direct conversation for users in the same family", %{family: family, user1: user1, user2: user2} do
+    test "creates a direct conversation for users in the same family", %{
+      family: family,
+      user1: user1,
+      user2: user2
+    } do
       {:ok, conversation} =
         ConversationService.create_direct_conversation(user1.id, user2.id)
 
@@ -81,7 +110,10 @@ defmodule Famichat.Chat.ConversationServiceTest do
       assert user2.id in user_ids
     end
 
-    test "returns existing direct conversation when already created", %{user1: user1, user2: user2} do
+    test "returns existing direct conversation when already created", %{
+      user1: user1,
+      user2: user2
+    } do
       {:ok, conv1} =
         ConversationService.create_direct_conversation(user1.id, user2.id)
 
@@ -104,8 +136,15 @@ defmodule Famichat.Chat.ConversationServiceTest do
       assert reason == :different_families
 
       # Assert telemetry stop event is received
-      assert_receive {:telemetry_event, ^ref, [:famichat, :conversation_service, :create_direct_conversation, :stop],
-                     _measurements, metadata}, 500
+      assert_receive {:telemetry_event, ^ref,
+                      [
+                        :famichat,
+                        :conversation_service,
+                        :create_direct_conversation,
+                        :stop
+                      ], _measurements, metadata},
+                     500
+
       assert metadata.result == "error"
     end
 
@@ -122,26 +161,39 @@ defmodule Famichat.Chat.ConversationServiceTest do
       assert reason == :user_not_found
 
       # Assert telemetry stop event is received
-      assert_receive {:telemetry_event, ^ref, [:famichat, :conversation_service, :create_direct_conversation, :stop],
-                     _measurements, metadata}, 500
+      assert_receive {:telemetry_event, ^ref,
+                      [
+                        :famichat,
+                        :conversation_service,
+                        :create_direct_conversation,
+                        :stop
+                      ], _measurements, metadata},
+                     500
+
       assert metadata.result == "error"
     end
 
-    test "create_direct_conversation/2 does not allow duplicate records", %{user1: user1, user2: user2} do
-      {:ok, conversation} = ConversationService.create_direct_conversation(user1.id, user2.id)
+    test "create_direct_conversation/2 does not allow duplicate records", %{
+      user1: user1,
+      user2: user2
+    } do
+      {:ok, conversation} =
+        ConversationService.create_direct_conversation(user1.id, user2.id)
 
       # Try to create the same conversation again
-      {:ok, conversation2} = ConversationService.create_direct_conversation(user1.id, user2.id)
+      {:ok, conversation2} =
+        ConversationService.create_direct_conversation(user1.id, user2.id)
 
       # Assert that we got the same conversation back
       assert conversation.id == conversation2.id
 
       # Query for direct conversations with the given direct_key
-      direct_key = Conversation.compute_direct_key(user1.id, user2.id, user1.family_id)
+      direct_key =
+        Conversation.compute_direct_key(user1.id, user2.id, user1.family_id)
 
       query =
         from c in Conversation,
-        where: c.direct_key == ^direct_key and c.conversation_type == :direct
+          where: c.direct_key == ^direct_key and c.conversation_type == :direct
 
       # Count the conversations
       conversations = Repo.all(query)
@@ -156,12 +208,20 @@ defmodule Famichat.Chat.ConversationServiceTest do
       assert user2.id in user_ids
     end
 
-    test "create_direct_conversation/2 emits telemetry events for success case", %{user1: user1, user2: user2, ref: ref} do
-      {:ok, _conversation} = ConversationService.create_direct_conversation(user1.id, user2.id)
+    test "create_direct_conversation/2 emits telemetry events for success case",
+         %{user1: user1, user2: user2, ref: ref} do
+      {:ok, _conversation} =
+        ConversationService.create_direct_conversation(user1.id, user2.id)
 
       # Assert telemetry stop event is received
-      assert_receive {:telemetry_event, ^ref, [:famichat, :conversation_service, :create_direct_conversation, :stop],
-                     measurements, metadata}, 500
+      assert_receive {:telemetry_event, ^ref,
+                      [
+                        :famichat,
+                        :conversation_service,
+                        :create_direct_conversation,
+                        :stop
+                      ], measurements, metadata},
+                     500
 
       # Verify measurements contain execution time
       assert is_map(measurements)
@@ -169,7 +229,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
       # Verify execution time stays within performance budget
       assert is_number(measurements.duration)
-      assert measurements.duration < 500_000_000 # 500ms in nanoseconds
+      # 500ms in nanoseconds
+      assert measurements.duration < 500_000_000
 
       # Ensure user IDs are included in metadata
       assert metadata.user1_id
@@ -179,13 +240,24 @@ defmodule Famichat.Chat.ConversationServiceTest do
       assert metadata.result == "created"
     end
 
-    test "create_direct_conversation/2 emits telemetry events for error case", %{user1: user1, ref: ref} do
+    test "create_direct_conversation/2 emits telemetry events for error case",
+         %{user1: user1, ref: ref} do
       # Try to create a conversation with a non-existent user
-      {:error, _reason} = ConversationService.create_direct_conversation(user1.id, Ecto.UUID.generate())
+      {:error, _reason} =
+        ConversationService.create_direct_conversation(
+          user1.id,
+          Ecto.UUID.generate()
+        )
 
       # Assert telemetry stop event is received
-      assert_receive {:telemetry_event, ^ref, [:famichat, :conversation_service, :create_direct_conversation, :stop],
-                     measurements, metadata}, 500
+      assert_receive {:telemetry_event, ^ref,
+                      [
+                        :famichat,
+                        :conversation_service,
+                        :create_direct_conversation,
+                        :stop
+                      ], measurements, metadata},
+                     500
 
       # Verify measurements and metadata
       assert is_map(measurements)
@@ -235,47 +307,53 @@ defmodule Famichat.Chat.ConversationServiceTest do
       other_member = user_fixture(%{family_id: family.id, role: :member})
 
       # Create a group conversation with admin_user
-      group_conversation = conversation_fixture(%{
-        family_id: family.id,
-        conversation_type: :group,
-        metadata: %{"name" => "Test Group"},
-        user1: admin_user
-      })
+      group_conversation =
+        conversation_fixture(%{
+          family_id: family.id,
+          conversation_type: :group,
+          metadata: %{"name" => "Test Group"},
+          user1: admin_user
+        })
 
       # Create a direct conversation for comparison
-      direct_conversation = conversation_fixture(%{
-        family_id: family.id,
-        conversation_type: :direct,
-        user1: admin_user,
-        user2: member_user
-      })
+      direct_conversation =
+        conversation_fixture(%{
+          family_id: family.id,
+          conversation_type: :direct,
+          user1: admin_user,
+          user2: member_user
+        })
 
       # Set up telemetry handler for testing
       parent = self()
       ref = make_ref()
       handler_name = "group-privilege-test-#{:erlang.unique_integer()}"
 
-      :ok = :telemetry.attach_many(
-        handler_name,
-        [
-          [:famichat, :conversation_service, :assign_admin, :start],
-          [:famichat, :conversation_service, :assign_admin, :stop],
-          [:famichat, :conversation_service, :assign_admin, :exception],
-          [:famichat, :conversation_service, :assign_member, :start],
-          [:famichat, :conversation_service, :assign_member, :stop],
-          [:famichat, :conversation_service, :assign_member, :exception],
-          [:famichat, :conversation_service, :remove_privilege, :start],
-          [:famichat, :conversation_service, :remove_privilege, :stop],
-          [:famichat, :conversation_service, :remove_privilege, :exception],
-          [:famichat, :conversation_service, :is_admin?, :start],
-          [:famichat, :conversation_service, :is_admin?, :stop],
-          [:famichat, :conversation_service, :is_admin?, :exception]
-        ],
-        fn event_name, measurements, metadata, _ ->
-          send(parent, {:telemetry_event, ref, event_name, measurements, metadata})
-        end,
-        nil
-      )
+      :ok =
+        :telemetry.attach_many(
+          handler_name,
+          [
+            [:famichat, :conversation_service, :assign_admin, :start],
+            [:famichat, :conversation_service, :assign_admin, :stop],
+            [:famichat, :conversation_service, :assign_admin, :exception],
+            [:famichat, :conversation_service, :assign_member, :start],
+            [:famichat, :conversation_service, :assign_member, :stop],
+            [:famichat, :conversation_service, :assign_member, :exception],
+            [:famichat, :conversation_service, :remove_privilege, :start],
+            [:famichat, :conversation_service, :remove_privilege, :stop],
+            [:famichat, :conversation_service, :remove_privilege, :exception],
+            [:famichat, :conversation_service, :admin?, :start],
+            [:famichat, :conversation_service, :admin?, :stop],
+            [:famichat, :conversation_service, :admin?, :exception]
+          ],
+          fn event_name, measurements, metadata, _ ->
+            send(
+              parent,
+              {:telemetry_event, ref, event_name, measurements, metadata}
+            )
+          end,
+          nil
+        )
 
       on_exit(fn ->
         :telemetry.detach(handler_name)
@@ -292,15 +370,16 @@ defmodule Famichat.Chat.ConversationServiceTest do
         })
         |> Repo.insert()
 
-      {:ok, %{
-        family: family,
-        admin_user: admin_user,
-        member_user: member_user,
-        other_member: other_member,
-        group_conversation: group_conversation,
-        direct_conversation: direct_conversation,
-        ref: ref
-      }}
+      {:ok,
+       %{
+         family: family,
+         admin_user: admin_user,
+         member_user: member_user,
+         other_member: other_member,
+         group_conversation: group_conversation,
+         direct_conversation: direct_conversation,
+         ref: ref
+       }}
     end
 
     test "auto-assigns creator as admin when creating a group conversation", %{
@@ -308,7 +387,9 @@ defmodule Famichat.Chat.ConversationServiceTest do
       group_conversation: group_conversation
     } do
       # Check if the group creator has admin privileges
-      {:ok, is_admin} = ConversationService.is_admin?(group_conversation.id, admin_user.id)
+      {:ok, is_admin} =
+        ConversationService.admin?(group_conversation.id, admin_user.id)
+
       assert is_admin
     end
 
@@ -318,11 +399,18 @@ defmodule Famichat.Chat.ConversationServiceTest do
     } do
       # Try to demote the only admin to a member
       {:error, :last_admin} =
-        ConversationService.assign_member(group_conversation.id, admin_user.id, admin_user.id)
+        ConversationService.assign_member(
+          group_conversation.id,
+          admin_user.id,
+          admin_user.id
+        )
 
       # Try to remove the only admin's privileges
       {:error, :last_admin} =
-        ConversationService.remove_privilege(group_conversation.id, admin_user.id)
+        ConversationService.remove_privilege(
+          group_conversation.id,
+          admin_user.id
+        )
     end
 
     test "prevents setting privileges on non-group conversations", %{
@@ -332,7 +420,11 @@ defmodule Famichat.Chat.ConversationServiceTest do
     } do
       # Try to assign admin on a direct conversation
       {:error, :not_group_conversation} =
-        ConversationService.assign_admin(direct_conversation.id, member_user.id, admin_user.id)
+        ConversationService.assign_admin(
+          direct_conversation.id,
+          member_user.id,
+          admin_user.id
+        )
     end
 
     test "only allows group admins to assign roles", %{
@@ -343,26 +435,45 @@ defmodule Famichat.Chat.ConversationServiceTest do
     } do
       # First make the member_user a member of the group explicitly
       {:ok, _} =
-        ConversationService.assign_member(group_conversation.id, member_user.id, admin_user.id)
+        ConversationService.assign_member(
+          group_conversation.id,
+          member_user.id,
+          admin_user.id
+        )
 
       # Try to have a regular member assign admin privileges (should fail)
       {:error, :not_admin} =
-        ConversationService.assign_admin(group_conversation.id, other_member.id, member_user.id)
+        ConversationService.assign_admin(
+          group_conversation.id,
+          other_member.id,
+          member_user.id
+        )
     end
 
-    test "is_admin? correctly identifies conversation admins", %{
+    test "admin? correctly identifies conversation admins", %{
       group_conversation: group_conversation,
       admin_user: admin_user,
-      member_user: member_user
+      member_user: member_user,
+      other_member: other_member
     } do
       # Admin status is already set up in the setup function
 
       # Check if admin_user is recognized as an admin
-      {:ok, is_admin} = ConversationService.is_admin?(group_conversation.id, admin_user.id)
+      {:ok, is_admin} =
+        ConversationService.admin?(group_conversation.id, admin_user.id)
+
       assert is_admin
 
       # Check that member_user is not recognized as admin
-      {:ok, is_admin} = ConversationService.is_admin?(group_conversation.id, member_user.id)
+      {:ok, is_admin} =
+        ConversationService.admin?(group_conversation.id, member_user.id)
+
+      refute is_admin
+
+      # Check that other_member is not recognized as admin
+      {:ok, is_admin} =
+        ConversationService.admin?(group_conversation.id, other_member.id)
+
       refute is_admin
     end
 
@@ -374,12 +485,17 @@ defmodule Famichat.Chat.ConversationServiceTest do
     } do
       # Assign admin privileges
       {:ok, _privilege} =
-        ConversationService.assign_admin(group_conversation.id, member_user.id, admin_user.id)
+        ConversationService.assign_admin(
+          group_conversation.id,
+          member_user.id,
+          admin_user.id
+        )
 
       # Assert telemetry stop event is received
       assert_receive {:telemetry_event, ^ref,
-                     [:famichat, :conversation_service, :assign_admin, :stop],
-                     measurements, metadata}, 500
+                      [:famichat, :conversation_service, :assign_admin, :stop],
+                      measurements, metadata},
+                     500
 
       # Verify measurements contain execution time
       assert is_map(measurements)
@@ -399,21 +515,34 @@ defmodule Famichat.Chat.ConversationServiceTest do
       other_member: other_member
     } do
       # Create concurrent tasks to assign privileges
-      task1 = Task.async(fn ->
-        ConversationService.assign_admin(group_conversation.id, member_user.id, admin_user.id)
-      end)
+      task1 =
+        Task.async(fn ->
+          ConversationService.assign_admin(
+            group_conversation.id,
+            member_user.id,
+            admin_user.id
+          )
+        end)
 
-      task2 = Task.async(fn ->
-        ConversationService.assign_admin(group_conversation.id, other_member.id, admin_user.id)
-      end)
+      task2 =
+        Task.async(fn ->
+          ConversationService.assign_admin(
+            group_conversation.id,
+            other_member.id,
+            admin_user.id
+          )
+        end)
 
       # Wait for both tasks to complete
       {:ok, _} = Task.await(task1)
       {:ok, _} = Task.await(task2)
 
       # Verify both users received admin privileges
-      {:ok, is_admin1} = ConversationService.is_admin?(group_conversation.id, member_user.id)
-      {:ok, is_admin2} = ConversationService.is_admin?(group_conversation.id, other_member.id)
+      {:ok, is_admin1} =
+        ConversationService.admin?(group_conversation.id, member_user.id)
+
+      {:ok, is_admin2} =
+        ConversationService.admin?(group_conversation.id, other_member.id)
 
       assert is_admin1
       assert is_admin2

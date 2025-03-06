@@ -37,6 +37,13 @@ defmodule Famichat.Repo.Migrations.CreateConversations do
     create index(:conversations, [:conversation_type])
     IO.puts("Migration: CreateConversations - Index on conversation_type created.")
 
+    # Add the constraint here with the correct values
+    create constraint(:conversations, :conversation_type_must_be_valid,
+             check: "conversation_type IN ('direct', 'group', 'self', 'family')"
+           )
+
+    IO.puts("Migration: CreateConversations - Added constraint for valid conversation types")
+
     # Create the conversation_users join table
     create table(:conversation_users, primary_key: false) do
       add :conversation_id, references(:conversations, type: :binary_id, on_delete: :delete_all),

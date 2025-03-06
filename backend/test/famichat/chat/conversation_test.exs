@@ -17,18 +17,23 @@ defmodule Famichat.Chat.ConversationTest do
     @invalid_attrs %{conversation_type: nil, metadata: nil}
 
     test "creates valid direct conversation using fixture", %{family: family} do
-      conversation = conversation_fixture(%{family_id: family.id, metadata: @valid_attrs.metadata})
+      conversation =
+        conversation_fixture(%{
+          family_id: family.id,
+          metadata: @valid_attrs.metadata
+        })
+
       assert conversation.conversation_type == :direct
       assert conversation.direct_key != nil
     end
 
     test "changeset with invalid attributes" do
-      changeset = Conversation.changeset(%Conversation{}, @invalid_attrs)
+      changeset = Conversation.create_changeset(%Conversation{}, @invalid_attrs)
       refute changeset.valid?
     end
 
     test "changeset enforces required fields" do
-      changeset = Conversation.changeset(%Conversation{}, %{})
+      changeset = Conversation.create_changeset(%Conversation{}, %{})
       errors = errors_on(changeset)
       assert errors.family_id == ["can't be blank"]
     end
@@ -36,13 +41,13 @@ defmodule Famichat.Chat.ConversationTest do
     test "conversation_type must be one of allowed values", %{family: family} do
       attrs = Map.put(@valid_attrs, :conversation_type, :invalid_type)
       attrs = Map.put(attrs, :family_id, family.id)
-      changeset = Conversation.changeset(%Conversation{}, attrs)
+      changeset = Conversation.create_changeset(%Conversation{}, attrs)
       assert "is invalid" in errors_on(changeset).conversation_type
     end
 
     test "default conversation_type is :direct", %{family: family} do
       changeset =
-        Conversation.changeset(%Conversation{}, %{
+        Conversation.create_changeset(%Conversation{}, %{
           metadata: %{},
           family_id: family.id
         })
@@ -52,7 +57,7 @@ defmodule Famichat.Chat.ConversationTest do
 
     test "conversation_type has default value" do
       changeset =
-        Conversation.changeset(%Conversation{}, %{
+        Conversation.create_changeset(%Conversation{}, %{
           family_id: Ecto.UUID.generate()
         })
 
@@ -61,7 +66,7 @@ defmodule Famichat.Chat.ConversationTest do
     end
 
     test "requires family_id" do
-      changeset = Conversation.changeset(%Conversation{}, %{})
+      changeset = Conversation.create_changeset(%Conversation{}, %{})
       assert "can't be blank" in errors_on(changeset).family_id
     end
   end
@@ -75,8 +80,18 @@ defmodule Famichat.Chat.ConversationTest do
       {:ok, user1: user1, user2: user2, family: family}
     end
 
-    test "can create conversation with users using fixture", %{user1: user1, user2: user2, family: family} do
-      conversation = conversation_fixture(%{family_id: family.id, user1: user1, user2: user2})
+    test "can create conversation with users using fixture", %{
+      user1: user1,
+      user2: user2,
+      family: family
+    } do
+      conversation =
+        conversation_fixture(%{
+          family_id: family.id,
+          user1: user1,
+          user2: user2
+        })
+
       conversation = Repo.preload(conversation, :users)
 
       assert length(conversation.users) == 2
@@ -85,16 +100,27 @@ defmodule Famichat.Chat.ConversationTest do
       assert user2.id in user_ids
     end
 
-    test "supports different conversation types", %{user1: user1, user2: user2, family: family} do
+    test "supports different conversation types", %{
+      user1: user1,
+      user2: user2,
+      family: family
+    } do
       # Test direct conversation using fixture
-      direct = conversation_fixture(%{family_id: family.id, user1: user1, user2: user2, conversation_type: :direct})
+      direct =
+        conversation_fixture(%{
+          family_id: family.id,
+          user1: user1,
+          user2: user2,
+          conversation_type: :direct
+        })
+
       assert direct.conversation_type == :direct
       assert direct.direct_key != nil
 
       # Test group conversation
       group_changeset =
         %Conversation{}
-        |> Conversation.changeset(%{
+        |> Conversation.create_changeset(%{
           conversation_type: :group,
           metadata: %{"name" => "Group Chat"},
           family_id: family.id
@@ -106,7 +132,7 @@ defmodule Famichat.Chat.ConversationTest do
       # Test self conversation
       self_changeset =
         %Conversation{}
-        |> Conversation.changeset(%{
+        |> Conversation.create_changeset(%{
           conversation_type: :self,
           metadata: %{},
           family_id: family.id
@@ -127,7 +153,13 @@ defmodule Famichat.Chat.ConversationTest do
         "last_active" => "2024-01-25T12:00:00Z"
       }
 
-      conversation = conversation_fixture(%{family_id: family.id, conversation_type: :direct, metadata: complex_metadata, user1: user1})
+      conversation =
+        conversation_fixture(%{
+          family_id: family.id,
+          conversation_type: :direct,
+          metadata: complex_metadata,
+          user1: user1
+        })
 
       assert conversation.metadata["settings"]["theme"] == "dark"
       assert conversation.metadata["settings"]["notifications"] == true
@@ -148,7 +180,7 @@ defmodule Famichat.Chat.ConversationTest do
     } do
       changeset =
         %Conversation{}
-        |> Conversation.changeset(%{
+        |> Conversation.create_changeset(%{
           conversation_type: :self,
           metadata: %{},
           family_id: family.id

@@ -17,7 +17,7 @@ defmodule Famichat.ChatFixtures do
       conv = ChatFixtures.conversation_fixture()
   """
 
-  alias Famichat.Chat.{Conversation}
+  alias Famichat.Chat.{Conversation, ConversationParticipant}
   alias Famichat.Repo
 
   @doc """
@@ -115,7 +115,7 @@ defmodule Famichat.ChatFixtures do
   ## Parameters
     - attrs: Optional map to override:
       - `family_id`
-      - `conversation_type`
+      - `conversation_type` - Defaults to :direct
       - `metadata`
       - `user1` - (optional) first participant (a %User{} struct)
       - `user2` - (optional) second participant (a %User{} struct)
@@ -124,88 +124,85 @@ defmodule Famichat.ChatFixtures do
   ## Returns
     - `Famichat.Chat.Conversation` struct
 
-  ## Side Effects
-    - Creates associated family and user
-    - Adds participant record via `ConversationParticipant`
-
   ## Examples
 
       conversation_fixture(%{conversation_type: :group})
+      conversation_fixture(%{conversation_type: :direct})
   """
   def conversation_fixture(attrs \\ %{}) do
-    family = family_fixture()
-    conversation_type = Map.get(attrs, :conversation_type, :direct)
+    attrs = prepare_conversation_attrs(attrs)
+    create_conversation_by_type(attrs)
+  end
 
-    cond do
-      conversation_type == :direct ->
-        # Create two distinct users or accept overrides via attrs
-        user1 = Map.get(attrs, :user1) || user_fixture(%{family_id: family.id})
-        user2 = Map.get(attrs, :user2) || user_fixture(%{family_id: family.id})
+  # Private helper functions
 
-        # Compute direct_key if not already provided
-        direct_key = Map.get(attrs, :direct_key) ||
-          Famichat.Chat.Conversation.compute_direct_key(user1.id, user2.id, family.id)
+  defp prepare_conversation_attrs(attrs) do
+    family = Map.get(attrs, :family) || family_fixture()
 
-        conversation_attrs =
-          Map.merge(
-            %{
-              family_id: family.id,
-              conversation_type: :direct,
-              metadata: %{},
-              direct_key: direct_key
-            },
-            attrs
-          )
+    attrs
+    |> Map.put_new(:family_id, family.id)
+    |> Map.put_new(:conversation_type, :direct)
+    |> Map.put_new(:metadata, %{})
+    |> Map.put(:family, family)
+  end
 
-        conversation =
-          %Conversation{}
-          |> Conversation.changeset(conversation_attrs)
-          |> Repo.insert!()
+  defp create_conversation_by_type(%{conversation_type: :direct} = attrs) do
+    # Create two distinct users or accept overrides via attrs
+    user1 =
+      Map.get(attrs, :user1) || user_fixture(%{family_id: attrs.family_id})
 
-        # Insert participants for both users
-        %Famichat.Chat.ConversationParticipant{}
-        |> Famichat.Chat.ConversationParticipant.changeset(%{
-          conversation_id: conversation.id,
-          user_id: user1.id
-        })
-        |> Repo.insert!()
+    user2 =
+      Map.get(attrs, :user2) || user_fixture(%{family_id: attrs.family_id})
 
-        %Famichat.Chat.ConversationParticipant{}
-        |> Famichat.Chat.ConversationParticipant.changeset(%{
-          conversation_id: conversation.id,
-          user_id: user2.id
-        })
-        |> Repo.insert!()
+    # Compute direct_key if not already provided
+    direct_key =
+      Map.get(attrs, :direct_key) ||
+        Famichat.Chat.Conversation.compute_direct_key(
+          user1.id,
+          user2.id,
+          attrs.family_id
+        )
 
-        conversation
+    attrs = Map.put(attrs, :direct_key, direct_key)
 
-      true ->
-        # For other conversation types, fallback to creating a single participant.
-        user = user_fixture(%{family_id: family.id})
-        conversation_attrs =
-          Map.merge(
-            %{
-              family_id: family.id,
-              conversation_type: conversation_type,
-              metadata: %{}
-            },
-            attrs
-          )
+    conversation = create_base_conversation(attrs)
 
-        conversation =
-          %Conversation{}
-          |> Conversation.changeset(conversation_attrs)
-          |> Repo.insert!()
+    # Add both participants
+    add_participant(conversation.id, user1.id)
+    add_participant(conversation.id, user2.id)
 
-        %Famichat.Chat.ConversationParticipant{}
-        |> Famichat.Chat.ConversationParticipant.changeset(%{
-          conversation_id: conversation.id,
-          user_id: user.id
-        })
-        |> Repo.insert!()
+    conversation
+  end
 
-        conversation
-    end
+  defp create_conversation_by_type(attrs) do
+    # For other conversation types (group, etc.)
+    user = user_fixture(%{family_id: attrs.family_id})
+
+    conversation = create_base_conversation(attrs)
+    add_participant(conversation.id, user.id)
+
+    conversation
+  end
+
+  defp create_base_conversation(attrs) do
+    # Extract only the needed attributes for conversation creation
+    conversation_attrs =
+      attrs
+      |> Map.take([:family_id, :conversation_type, :metadata, :direct_key])
+      |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+    %Conversation{}
+    |> Conversation.create_changeset(conversation_attrs)
+    |> Repo.insert!()
+  end
+
+  defp add_participant(conversation_id, user_id) do
+    %ConversationParticipant{}
+    |> ConversationParticipant.changeset(%{
+      conversation_id: conversation_id,
+      user_id: user_id
+    })
+    |> Repo.insert!()
   end
 
   @doc """
