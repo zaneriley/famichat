@@ -19,7 +19,7 @@ defmodule FamichatWeb.MessageChannel do
 
   3. Join the message channel:
      ```javascript
-     let channel = socket.channel("message:lobby");
+     let channel = socket.channel("message:direct:user123");
      channel.join()
        .receive("ok", resp => console.log("Joined successfully", resp))
        .receive("error", resp => console.log("Join failed", resp));
@@ -89,8 +89,8 @@ defmodule FamichatWeb.MessageChannel do
 
   ## Examples
 
-      {:ok, socket} = join("message:lobby", %{}, socket)
-      {:error, %{reason: "unauthorized"}} = join("message:lobby", %{}, socket_without_user)
+      {:ok, socket} = join("message:direct:123", %{}, socket)
+      {:error, %{reason: "unauthorized"}} = join("message:direct:123", %{}, socket_without_user)
 
   ## Telemetry
 
@@ -123,10 +123,6 @@ defmodule FamichatWeb.MessageChannel do
       Logger.debug("Topic parts: #{inspect(topic_parts)}")
 
       case topic_parts do
-        # Legacy format - just a room ID
-        [room_id] when room_id not in ["invalid"] ->
-          handle_legacy_join(socket, room_id, user_id, measurements)
-
         # Type-aware format - conversation type and ID
         [type, id] when type in ["self", "direct", "group", "family"] ->
           handle_type_aware_join(socket, type, id, user_id, measurements)
@@ -144,23 +140,6 @@ defmodule FamichatWeb.MessageChannel do
           {:error, %{reason: "invalid_topic_format"}}
       end
     end
-  end
-
-  # Helper function to handle legacy topic format
-  defp handle_legacy_join(socket, room_id, user_id, measurements) do
-    # For legacy format, we don't do type-specific authorization
-    Logger.debug(
-      "User authorized for legacy room, joining channel with user_id: #{user_id}"
-    )
-
-    emit_join_telemetry(measurements, %{
-      user_id: user_id,
-      room_id: room_id,
-      encryption_status: "enabled",
-      status: :success
-    })
-
-    {:ok, socket}
   end
 
   # Helper function to authorize and join based on conversation type
@@ -293,7 +272,8 @@ defmodule FamichatWeb.MessageChannel do
 
   Emits [:famichat, :message_channel, :broadcast] event with the following metadata:
   - user_id: The ID of the user sending the message
-  - room_id: The room the message was sent to
+  - conversation_type: The type of conversation (direct, group, etc.)
+  - conversation_id: The ID of the conversation
   - encryption_status: Whether the message was encrypted
   """
   @impl true
@@ -309,32 +289,6 @@ defmodule FamichatWeb.MessageChannel do
     Logger.debug("Topic parts: #{inspect(topic_parts)}")
 
     case topic_parts do
-      # Legacy format
-      ["message", room_id] ->
-        measurements = %{
-          start_time: start_time,
-          system_time: System.system_time(),
-          monotonic_time: System.monotonic_time()
-        }
-
-        metadata = %{
-          user_id: socket.assigns.user_id,
-          room_id: room_id,
-          encryption_status:
-            if(Map.get(payload, "encryption_flag"),
-              do: "enabled",
-              else: "disabled"
-            )
-        }
-
-        # Broadcast the message
-        broadcast!(socket, "new_msg", broadcast_payload)
-
-        # Emit telemetry for the broadcast
-        emit_broadcast_telemetry(measurements, metadata)
-
-        {:noreply, socket}
-
       # Type-aware format
       ["message", type, id] when type in ["self", "direct", "group", "family"] ->
         measurements = %{
