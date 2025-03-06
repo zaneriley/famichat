@@ -47,6 +47,7 @@ For now, this repo is mainly a playground to test out:
 
 *   [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/)
 *   [Flutter SDK](https://docs.flutter.dev/get-started/install) (latest stable version)
+*   [Lefthook](https://github.com/evilmartians/lefthook) for Git hooks management
 
 ## Getting Started
 
@@ -57,7 +58,17 @@ For now, this repo is mainly a playground to test out:
     cd famichat
     ```
 
-2.  **Start the Docker containers:**
+2.  **Set up Lefthook for Git hooks:**
+
+    ```bash
+    # Install Lefthook globally (if not already installed)
+    npm install -g lefthook
+
+    # Initialize Lefthook in the repository
+    lefthook install
+    ```
+
+3.  **Start the Docker containers:**
 
     ```bash
     docker-compose up --build
@@ -67,11 +78,11 @@ For now, this repo is mainly a playground to test out:
     *   Build and launch a PostgreSQL database container on port `5432`.
     *   Build and launch the Phoenix backend container, accessible on port `4000`.
 
-3.  **Verify the Backend:**
+4.  **Verify the Backend:**
 
     Open your web browser and navigate to [http://localhost:4000](http://localhost:4000). You should see the default Phoenix "Welcome to Phoenix!" page or a "Hello from Famichat!" message if you've customized the root route.
 
-4.  **Set up Flutter Web Development (if needed):**
+5.  **Set up Flutter Web Development (if needed):**
 
     If you want to run the Flutter web client, ensure web support is enabled in your Flutter installation:
 
@@ -80,7 +91,7 @@ For now, this repo is mainly a playground to test out:
     flutter devices # Verify 'Chrome' or 'Web Server' is listed
     ```
 
-5.  **Run the Flutter App:**
+6.  **Run the Flutter App:**
 
     Navigate to the Flutter project directory:
 
@@ -113,6 +124,26 @@ For now, this repo is mainly a playground to test out:
     Flutter will attempt to build and run the app on your connected device/emulator.
 
 ## Development
+
+### Git Hooks with Lefthook
+
+Famichat uses [Lefthook](https://github.com/evilmartians/lefthook) to manage Git hooks, which automate checks and tasks before commits and pushes. This helps maintain code quality and prevent issues from being committed or pushed.
+
+*   **Pre-commit Hook:** Runs automatically before each commit and:
+    *   Starts Docker containers
+    *   Waits for the web service to be available
+    *   Formats Elixir and JavaScript files that are staged for commit
+
+*   **Pre-push Hook:** Runs automatically before each push and:
+    *   Runs a series of checks including format verification, linting, and tests
+    *   Provides feedback if any checks fail, but allows the push to proceed
+
+*   **Installation:**
+    *   Global: `npm install -g lefthook`
+    *   Local (alternative): Add to package.json and install with npm/yarn
+    *   After installation: `lefthook install` to initialize the Git hooks
+
+*   **Configuration:** The hooks are configured in `.lefthook.yml` files in the root and backend directories.
 
 ### Backend (Phoenix/Elixir)
 
