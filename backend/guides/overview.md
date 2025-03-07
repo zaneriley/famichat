@@ -167,7 +167,6 @@ Famichat uses [Lefthook](https://github.com/evilmartians/lefthook) to manage Git
 *   **Code Analysis (Credo):** `cd backend && ./run mix credo`
 *   **Running Migrations:** `cd backend && ./run mix ecto.migrate`
 *   **Rollback Migrations:** `cd backend && ./run mix ecto.rollback`
-*   **Generate Documentation:** `cd backend && ./run docs` (HTML docs will be available at `backend/doc/index.html`)
 
 ### Frontend (Flutter)
 
