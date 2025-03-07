@@ -158,38 +158,6 @@ Famichat uses [Lefthook](https://github.com/evilmartians/lefthook) to manage Git
 
 *   **Configuration:** The hooks are configured in `.lefthook.yml` files in the root and backend directories.
 
-*   **Windows Troubleshooting:**
-    *   If lefthook fails with "broken pipe" errors on Windows:
-        1. Try running `lefthook install -f` to force reinstall hooks
-        2. If still having issues, you can use one of the provided Windows scripts to run checks manually:
-           
-           For Command Prompt/PowerShell:
-           ```
-           cd backend
-           setup-format-check.bat
-           ```
-           
-           For Git Bash:
-           ```bash
-           cd backend
-           chmod +x setup-format-check.sh  # First time only
-           ./setup-format-check.sh
-           ```
-           
-           Then commit and push with `--no-verify` flag:
-           ```bash
-           git commit --no-verify -m "your commit message"
-           git push --no-verify
-           ```
-        3. Alternatively, run these commands manually:
-           ```bash
-           cd backend
-           ./run format:all
-           ./run lint:all
-           ./run test:all
-           ```
-    *   The Windows scripts ensure your code meets quality standards even when lefthook isn't functioning properly
-
 ### Backend (Phoenix/Elixir)
 
 *   **Directory:** `backend/`
@@ -199,7 +167,6 @@ Famichat uses [Lefthook](https://github.com/evilmartians/lefthook) to manage Git
 *   **Code Analysis (Credo):** `cd backend && ./run mix credo`
 *   **Running Migrations:** `cd backend && ./run mix ecto.migrate`
 *   **Rollback Migrations:** `cd backend && ./run mix ecto.rollback`
-*   **Generate Documentation:** `cd backend && ./run docs` (HTML docs will be available at `backend/doc/index.html`)
 
 ### Frontend (Flutter)
 
