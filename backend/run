@@ -70,6 +70,14 @@ function secret {
   mix phx.gen.secret
 }
 
+function docs {
+  # Generate ExDoc documentation
+  mix docs
+  echo "Documentation generated successfully!"
+  echo "View HTML docs at 'doc/index.html'"
+  echo "View EPUB docs at 'doc/Famichat.epub'"
+}
+
 function lint:dockerfile {
   # Lint Dockerfile
   docker container run --rm -i \

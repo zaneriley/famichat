@@ -25,7 +25,13 @@ defmodule Famichat.MixProject do
         plt_add_apps: [:ex_unit, :mix],
         ignore_warnings: ".dialyzer_ignore.exs",
         plt_file: {:no_warn, "priv/plts/dialyzer.plt"}
-      ]
+      ],
+
+      # Documentation
+      name: "Famichat",
+      source_url: "https://github.com/your-user/famichat",
+      homepage_url: "https://github.com/your-user/famichat",
+      docs: docs()
     ]
   end
 
@@ -49,6 +55,7 @@ defmodule Famichat.MixProject do
       {:dns_cluster, "~> 0.1.3"},
       {:earmark, "~> 1.4"},
       {:ecto_sql, "3.11.3"},
+      {:ex_doc, "~> 0.37.3", only: :dev, runtime: false},
       {:ex_machina, "~> 2.7.0", only: :test},
       {:excoveralls, "0.18.1", only: [:dev, :test]},
       {:finch, "0.18.0"},
@@ -87,6 +94,35 @@ defmodule Famichat.MixProject do
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "ecto.seed": ["run priv/repo/seeds.exs"]
+    ]
+  end
+
+  defp docs do
+    [
+      # The main page in the docs
+      main: "overview",
+      extras: [
+        "guides/overview.md": [title: "Project Overview"],
+        "guides/messaging.md": [title: "Messaging Implementation"],
+        "guides/telemetry.md": [title: "Telemetry & Performance"]
+      ],
+      groups_for_extras: [
+        "Guides": ~r/guides\/.*/
+      ],
+      groups_for_modules: [
+        "Chat": [
+          Famichat.Chat,
+          ~r/Famichat\.Chat\..*/
+        ],
+        "Accounts": [
+          Famichat.Accounts,
+          ~r/Famichat\.Accounts\..*/
+        ],
+        "Web": [
+          FamichatWeb,
+          ~r/FamichatWeb\..*/
+        ]
+      ]
     ]
   end
 end
