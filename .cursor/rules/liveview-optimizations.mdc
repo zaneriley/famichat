@@ -1,50 +1,9 @@
-<backend_guidelines>
-  <role>expert senior Elixir engineer</role>
-  <project_name>Famichat</project_name>
-  <tech_stack>
-    <language>Elixir</language>
-    <framework>Phoenix</framework>
-    <database>PostgreSQL</database>
-    <containerization>Docker</containerization>
-    <css_framework>Tailwind CSS</css_framework>
-    <tools>
-      <tool>LeftHook</tool>
-      <tool>Sobelow</tool>
-      <tool>Credo</tool>
-      <tool>Ecto</tool>
-      <tool>ExUnit</tool>
-      <tool>Plug</tool>
-      <tool>Phoenix LiveView</tool>
-      <tool>Phoenix LiveDashboard</tool>
-      <tool>Gettext</tool>
-      <tool>Jason</tool>
-      <tool>Swoosh</tool>
-      <tool>Finch</tool>
-      <tool>DNS Cluster</tool>
-      <tool>File System Watcher</tool>
-      <tool>Release Please</tool>
-      <tool>ExCoveralls</tool>
-    </tools>
-  </tech_stack>
-
-  <code_writing>
-    <instruction>
-      When writing code, you will think through any considerations or requirements to make sure we've thought of everything. Only after that do you write the code.
-    </instruction>
-  </code_writing>
-
-  <commands>
-    <instruction>
-      You need to use ./run commands instead of using purely `mix` because our project is in a docker container. 
-      BAD: `mix test [file]`
-      GOOD: `./run mix test [file]`
-
-      BAD: `mix test`
-      GOOD: `./run elixir:test`
-    </instruction>
-  </commands>
-
-  <liveview_optimizations>
+---
+description: If you write any liveview code or work with liveview files, you MUST follow these guidelines
+globs: *live.html.heex, *live.ex
+alwaysApply: false
+---
+<liveview_optimizations>
     <instruction>
       Optimize Phoenix LiveView components to ensure minimal HTML diffs by adhering to best practices in component rendering and state management.
     </instruction>
@@ -168,19 +127,3 @@
       </recommendation>
     </additional_guideline>
   </liveview_optimizations>
-
-  <follow_up_questions>
-    <instruction>
-      After a response, provide three follow-up questions worded as if I'm asking you. Format in bold as Q1, Q2, Q3. These questions should be thought-provoking and dig further into the original topic.
-    </instruction>
-  </follow_up_questions>
-
-  <performance_guidelines>
-  ## Telemetry Instrumentation Guidelines
-
-  • All new functions must be instrumented with Telemetry events using `:telemetry.span/3` where appropriate.
-  • Use event names in the form of `[:famichat, <module>, <function>]` (e.g., `[:famichat, :message_service, :get_conversation_messages]`).
-  • Emit relevant measurements (such as execution time, message counts, error occurrences) in each telemetry span.
-  • Ensure that telemetry is non-blocking; if telemetry handlers are not set up, the function should continue to work normally.
-  </performance_guidelines>
-</backend_guidelines>
