@@ -1,0 +1,474 @@
+<div
+  id="message-test"
+  class="bg-[#f8f6e1] text-[#5c5c3d] w-full h-screen flex flex-col"
+  phx-hook="MessageChannel"
+  data-conversation-type={@conversation_type}
+  data-conversation-id={@conversation_id}
+  data-user-id={@user_id}
+  data-auth-token={@auth_token || "guest-token"}
+  style="font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;"
+>
+  <!-- Debug Scripts -->
+  <script>
+    // More detailed debug for LiveView connection issues
+    console.log("[MessageTest] LiveView debug info", {
+      isWindowDefined: typeof window !== 'undefined',
+      hasPhoenixObj: typeof window.Phoenix !== 'undefined',
+      hasLiveSocket: typeof window.liveSocket !== 'undefined',
+      protocol: window.location.protocol,
+      host: window.location.host,
+      pathname: window.location.pathname
+    });
+
+    // Check if all required JavaScript files are loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      const scripts = Array.from(document.getElementsByTagName('script'))
+        .map(script => script.src)
+        .filter(src => src.length > 0);
+
+      console.log("[MessageTest] Loaded scripts:", scripts);
+
+      // Check LiveSocket initialization
+      if (window.liveSocket) {
+        console.log("[MessageTest] LiveSocket details:", {
+          isConnected: window.liveSocket.isConnected(),
+          connectorsSize: window.liveSocket.connectors.size,
+          main: window.liveSocket.main ? "Exists" : "Missing"
+        });
+      }
+    });
+
+    console.log("[MessageTest] LiveView mounted", {
+      liveSocket: window.liveSocket ? "Connected" : "Not connected",
+      phxVersion: window.Phoenix ? window.Phoenix.version : "Unknown"
+    });
+
+    // Log all LiveView events
+    document.addEventListener("phx:update", (e) => {
+      console.log("[MessageTest] LiveView updated", {
+        type: e.type,
+        target: e.target.id || e.target.tagName,
+        timestamp: new Date().toISOString()
+      });
+    });
+  </script>
+  <!-- Main content: Split into left and right panels -->
+  <div class="flex flex-col h-full">
+    <!-- Header -->
+    <header class="bg-[#f9e8b3] shadow-md z-10 rounded-b-3xl border-2 border-[#cea569] border-t-0">
+      <div class="flex items-center p-5">
+        <div class="flex items-center">
+          <div class="bg-[#94c561] h-8 w-8 rounded-full flex items-center justify-center shadow-md mr-md">
+            <Heroicons.chat_bubble_oval_left_ellipsis
+              solid
+              class="h-1xl w-md text-white"
+            />
+          </div>
+          <div
+            class={"h-md w-md rounded-full mr-md flex-shrink-0 shadow-sm #{if @channel_joined, do: 'bg-[#45bd7f]', else: 'bg-[#ff6b6b]'}"}
+            aria-hidden="true"
+          >
+          </div>
+        </div>
+        <p class="flex-grow text-2xs color-deemphasized flex items-center text-[#ae8c59]">
+          <%= if @channel_joined do %>
+            <Heroicons.signal solid class="h-md w-md mr-1xs text-[#45bd7f]" />
+            Connected to: <%= @topic %>
+          <% else %>
+            <Heroicons.exclamation_circle
+              solid
+              class="h-md w-md mr-1xs text-[#ff6b6b]"
+            />
+            <%= @error_message || "Not connected" %>
+          <% end %>
+        </p>
+      </div>
+    </header>
+    <!-- Two-panel layout -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- Left Panel: Messaging Interface -->
+      <div class="flex flex-col w-1/2 overflow-y-auto p-md">
+        <!-- Conversation Config (Inline) -->
+        <div class="mb-md bg-[#f9e8b3] rounded-md border-2 border-[#cea569] p-md">
+          <div class="flex flex-wrap items-center gap-md">
+            <label class="text-2xs flex items-center mr-1xsxs text-[#825d29] font-medium">
+              Type:
+              <select
+                id="conversation-type"
+                class="rounded-xl border-2 border-[#cea569] p-md bg-[#fdf6e3] text-[#5c5c3d] shadow-sm focus:ring-2 focus:ring-[#94c561] focus:border-[#94c561] outline-none"
+                value={@conversation_type}
+                phx-change="update-conversation-type"
+                data-channel-joined={@channel_joined}
+                onchange="console.log('[MessageTest] Conversation type changed', { value: this.value })"
+              >
+                <option value="self">self</option>
+                <option value="direct">direct</option>
+                <option value="group">group</option>
+                <option value="family">family</option>
+              </select>
+            </label>
+
+            <label class="text-2xs flex items-center mr-1xsxs text-[#825d29] font-medium">
+              ID:
+              <input
+                type="text"
+                id="conversation-id"
+                class="rounded-xl border-2 border-[#cea569] p-md bg-[#fdf6e3] text-[#5c5c3d] shadow-sm focus:ring-2 focus:ring-[#94c561] focus:border-[#94c561] outline-none w-full max-w-xs"
+                value={@conversation_id}
+                phx-blur="update-conversation-id"
+                onblur="console.log('[MessageTest] Conversation ID updated', { value: this.value })"
+              />
+            </label>
+
+            <div class="ml-auto">
+              <button
+                phx-click="connect-channel"
+                data-channel-joined={@channel_joined}
+                onclick="console.log('[MessageTest] Connect button clicked', { channelJoined: this.dataset.channelJoined, timestamp: new Date().toISOString() })"
+                class={"px-4 py-1xs rounded-full font-medium transition-colors shadow-md border-2 text-white #{if @channel_joined, do: 'bg-[#ff6b6b] hover:bg-[#ff5252] border-[#e05151]', else: 'bg-[#45bd7f] hover:bg-[#3daa70] border-[#3a9966]'}"}
+              >
+                <%= if @channel_joined, do: "Disconnect", else: "Connect" %>
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- Messages Container -->
+        <div
+          id="messages-container"
+          class="rounded-3xl p-md border-2 border-[#cea569] bg-[#fdf6e3] flex-grow overflow-y-auto mb-3 shadow-md"
+          style="max-height: calc(100vh - 320px);"
+        >
+          <%= if Enum.empty?(@messages) do %>
+            <div
+              id="empty-state"
+              class="text-[#ae8c59] flex flex-col items-center justify-center h-full"
+            >
+              <div class="bg-[#f9e8b3] p-6 rounded-3xl border-2 border-[#cea569] shadow-md text-center mb-3">
+                <img
+                  src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxMjAiIHJ4PSI2MCIgZmlsbD0iI2Y5ZThiMyIvPjx0ZXh0IHg9IjYwIiB5PSI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgZm9udC1zaXplPSI0MCIgZmlsbD0iI2NlYTU2OSI+PzwvdGV4dD48L3N2Zz4="
+                  alt="Message icon"
+                  style="width: 80px; margin: 0 auto 12px auto;"
+                />
+                <p class="text-[#5c5c3d] font-medium">No messages yet!</p>
+                <p class="text-sm mt-2">
+                  Use the form below to test sending messages.
+                </p>
+              </div>
+            </div>
+          <% else %>
+            <div
+              id="messages"
+              phx-update="append"
+              class="flex flex-col space-y-3"
+            >
+              <%= for message <- @messages do %>
+                <div
+                  id={"message-#{message_id(message)}"}
+                  class="p-md rounded-3xl bg-[#f9e8b3] border-2 border-[#cea569] flex items-stretch shadow-sm"
+                >
+                  <div class="flex-grow">
+                    <p class="text-[#ae8c59] text-xs mb-1">
+                      <%= message.timestamp %>
+                    </p>
+                    <p class="text-[#5c5c3d]"><%= message.body %></p>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+        <!-- Encryption Options -->
+        <div class="mb-3">
+          <details class="group bg-[#f9e8b3] rounded-md border-2 border-[#cea569] shadow-md overflow-hidden">
+            <summary class="flex items-center p-md cursor-pointer hover:bg-[#f7e1a2] focus:outline-none">
+              <Heroicons.lock_closed
+                solid
+                class="h-md w-md text-[#825d29] bg-[#f1c97a] h-6 w-6 rounded-full flex items-center justify-center mr-1xs shadow-sm"
+              />
+              <.typography
+                tag="span"
+                size="1xs"
+                class="text-[#825d29] font-medium"
+              >
+                Encryption Options
+              </.typography>
+            </summary>
+
+            <div class="p-md border-t border-[#e0c69c] bg-[#f9e8b3]">
+              <label class="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  class="form-checkbox h-1xl w-md rounded-md border-2 border-[#cea569] text-[#45bd7f] focus:ring-[#45bd7f]"
+                  checked={@encryption_enabled}
+                  phx-click="toggle-encryption"
+                  onclick="console.log('[MessageTest] Encryption toggled', { enabled: !this.checked })"
+                />
+                <Heroicons.shield_check
+                  solid
+                  class={[
+                    "h-md w-md ml-md mr-1xs",
+                    @encryption_enabled && "text-[#45bd7f]"
+                  ]}
+                />
+                <span class="text-[#825d29] font-medium">Encrypt Messages</span>
+              </label>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-md">
+                <label class="text-2xs block mb-md text-[#825d29] font-medium">
+                  Key ID
+                  <input
+                    type="text"
+                    id="key-id"
+                    class="w-full rounded-xl border-2 border-[#cea569] p-md bg-[#fdf6e3] text-[#5c5c3d] shadow-sm focus:ring-2 focus:ring-[#94c561] focus:border-[#94c561] outline-none disabled:opacity-50 disabled:bg-[#f0ecd8]"
+                    value={@key_id}
+                    disabled={!@encryption_enabled}
+                    phx-blur="update-key-id"
+                    onblur="console.log('[MessageTest] Key ID updated', { value: this.value })"
+                  />
+                </label>
+
+                <label class="text-2xs block mb-md text-[#825d29] font-medium">
+                  Version Tag
+                  <input
+                    type="text"
+                    id="version-tag"
+                    class="w-full rounded-xl border-2 border-[#cea569] p-md bg-[#fdf6e3] text-[#5c5c3d] shadow-sm focus:ring-2 focus:ring-[#94c561] focus:border-[#94c561] outline-none disabled:opacity-50 disabled:bg-[#f0ecd8]"
+                    value={@version_tag}
+                    disabled={!@encryption_enabled}
+                    phx-blur="update-version-tag"
+                    onblur="console.log('[MessageTest] Version tag updated', { value: this.value })"
+                  />
+                </label>
+              </div>
+            </div>
+          </details>
+        </div>
+        <!-- Message Input -->
+        <div class="mb-md p-md bg-[#f9e8b3] rounded-3xl border-2 border-[#cea569] shadow-md flex items-end gap-md">
+          <div class="flex-grow relative">
+            <textarea
+              placeholder="Type a message..."
+              class="w-full rounded-md border-2 border-[#cea569] p-md pr-10 bg-[#fdf6e3] text-[#5c5c3d] min-h-[42px] max-h-md2 resize-y shadow-inner focus:ring-2 focus:ring-[#94c561] focus:border-[#94c561] outline-none disabled:opacity-50 disabled:bg-[#f0ecd8]"
+              value={@current_message}
+              disabled={!@channel_joined}
+              phx-keyup="update-message"
+              phx-key="Enter"
+              style="overflow-y: auto;"
+              onkeyup="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); console.log('[MessageTest] Message sent via Enter key', { message: this.value }); }"
+            ></textarea>
+            <div class="absolute right-3 bottom-3 text-[#ae8c59] bg-[#fdf6e3]/70 rounded-lg px-md py-1xs">
+              <div class="flex items-center">
+                <Heroicons.arrow_up solid class="h-md w-md mr-1xs" />
+                <span class="text-xs">Enter to send</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            phx-click="send-message"
+            onclick="console.log('[MessageTest] Send button clicked', { message: document.querySelector('textarea[phx-key=Enter]').value })"
+            disabled={!@channel_joined || @current_message == ""}
+            class={"p-md rounded-full flex-shrink-0 shadow-md border-2 #{
+              if !@channel_joined || @current_message == "",
+              do: 'bg-[#e0dbc8] text-[#aba994] cursor-not-allowed border-[#d1ccb9]',
+              else: 'bg-[#45bd7f] text-white hover:bg-[#3daa70] transition-colors border-[#3a9966]'
+            }"}
+          >
+            <Heroicons.paper_airplane solid class="h-1xl w-md" />
+          </button>
+        </div>
+      </div>
+      <!-- Right Panel: Encryption Debug Panel -->
+      <div class="flex flex-col w-1/2 overflow-y-auto p-md">
+        <!-- Encryption Status Monitor -->
+        <div class="mb-md bg-[#f9e8b3] rounded-md border-2 border-[#cea569] p-md">
+          <h2 class="text-[#825d29] font-medium text-lg mb-2">
+            Encryption Status Monitor
+          </h2>
+          <div class="bg-[#fdf6e3] rounded-md p-md border border-[#cea569]">
+            <div class="flex items-center mb-2">
+              <div class={"h-md w-md rounded-full mr-md flex-shrink-0 #{if @encryption_enabled, do: 'bg-[#45bd7f]', else: 'bg-[#ff6b6b]'}"}>
+              </div>
+              <span class="font-medium">
+                Status: <%= if @encryption_enabled,
+                  do: "ENABLED ✓",
+                  else: "DISABLED ✗" %>
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <span class="text-xs text-[#ae8c59]">Key ID:</span>
+                <div class="bg-[#f1f0e4] px-2 py-1 rounded text-sm font-mono overflow-x-auto">
+                  <%= @key_id || "N/A" %>
+                </div>
+              </div>
+              <div>
+                <span class="text-xs text-[#ae8c59]">Version Tag:</span>
+                <div class="bg-[#f1f0e4] px-2 py-1 rounded text-sm font-mono overflow-x-auto">
+                  <%= @version_tag || "N/A" %>
+                </div>
+              </div>
+            </div>
+            <div class="mt-2">
+              <span class="text-xs text-[#ae8c59]">Encryption Algorithm:</span>
+              <div class="bg-[#f1f0e4] px-2 py-1 rounded text-sm font-mono">
+                AES-256-GCM
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Message Payload View -->
+        <div class="mb-md bg-[#f9e8b3] rounded-md border-2 border-[#cea569] p-md">
+          <h2 class="text-[#825d29] font-medium text-lg mb-2">
+            Message Payload Inspector
+          </h2>
+
+          <div class="mb-2">
+            <h3 class="text-[#ae8c59] font-medium mb-1">Outgoing Payload:</h3>
+            <pre class="bg-[#fdf6e3] rounded-md p-md border border-[#cea569] text-sm font-mono overflow-x-auto whitespace-pre-wrap"><%=
+              Jason.encode!(%{
+                content: @current_message || "Hello world",
+                timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+                encryption: if @encryption_enabled do
+                  %{
+                    enabled: true,
+                    key_id: @key_id,
+                    version_tag: @version_tag
+                  }
+                else
+                  %{
+                    enabled: false
+                  }
+                end
+              }, pretty: true) %></pre>
+          </div>
+
+          <div>
+            <h3 class="text-[#ae8c59] font-medium mb-1">
+              Last Received Payload:
+            </h3>
+            <pre class="bg-[#fdf6e3] rounded-md p-md border border-[#cea569] text-sm font-mono overflow-x-auto whitespace-pre-wrap"><%=
+              if Enum.empty?(@messages) do
+                "No messages received yet"
+              else
+                last_message = List.first(@messages)
+                Jason.encode!(%{
+                  id: "msg_#{System.unique_integer([:positive])}",
+                  content: last_message.body,
+                  sender_id: @user_id,
+                  timestamp: last_message.timestamp,
+                  encryption: if @encryption_enabled do
+                    %{
+                      enabled: true,
+                      key_id: @key_id,
+                      version_tag: @version_tag
+                    }
+                  else
+                    %{
+                      enabled: false
+                    }
+                  end
+                }, pretty: true)
+              end %></pre>
+          </div>
+        </div>
+        <!-- Telemetry Events Placeholder -->
+        <div class="mb-md bg-[#f9e8b3] rounded-md border-2 border-[#cea569] p-md">
+          <h2 class="text-[#825d29] font-medium text-lg mb-2">
+            Telemetry Events
+          </h2>
+          <div class="bg-[#fdf6e3] rounded-md p-md border border-[#cea569] min-h-[120px] max-h-[200px] overflow-y-auto">
+            <div class="text-sm">
+              <div class="mb-1 pb-1 border-b border-[#e0c69c]">
+                <span class="text-[#ae8c59] text-xs">11:08:15</span>
+                ► <span class="font-medium">CHANNEL_JOIN</span>
+                <div class="ml-4 text-xs">
+                  <span class="text-[#ae8c59]">encryption_status:</span>
+                  <span class="font-mono">
+                    <%= if @encryption_enabled, do: "enabled", else: "disabled" %>
+                  </span>
+                </div>
+              </div>
+
+              <%= if !Enum.empty?(@messages) do %>
+                <div class="mb-1 pb-1 border-b border-[#e0c69c]">
+                  <span class="text-[#ae8c59] text-xs">11:08:28</span>
+                  ► <span class="font-medium">MESSAGE_SENT</span>
+                  <div class="ml-4 text-xs">
+                    <span class="text-[#ae8c59]">encryption_enabled:</span>
+                    <span class="font-mono"><%= @encryption_enabled %></span>
+                  </div>
+                  <%= if @encryption_enabled do %>
+                    <div class="ml-4 text-xs">
+                      <span class="text-[#ae8c59]">key_id:</span>
+                      <span class="font-mono"><%= @key_id %></span>
+                    </div>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+        <!-- Test Actions -->
+        <div class="mb-md bg-[#f9e8b3] rounded-md border-2 border-[#cea569] p-md">
+          <h2 class="text-[#825d29] font-medium text-lg mb-2">Test Actions</h2>
+          <div class="flex flex-wrap gap-2">
+            <button
+              phx-click="test-invalid-key"
+              disabled={!@channel_joined}
+              class="bg-[#f1c97a] text-[#825d29] px-3 py-1 rounded-md border border-[#cea569] hover:bg-[#f0c167] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Test Invalid Key
+            </button>
+            <button
+              phx-click="test-missing-version"
+              disabled={!@channel_joined}
+              class="bg-[#f1c97a] text-[#825d29] px-3 py-1 rounded-md border border-[#cea569] hover:bg-[#f0c167] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Test Missing Version
+            </button>
+            <button
+              phx-click="simulate-decryption-error"
+              disabled={!@channel_joined}
+              class="bg-[#f1c97a] text-[#825d29] px-3 py-1 rounded-md border border-[#cea569] hover:bg-[#f0c167] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Simulate Decryption Error
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Debug LiveView Events -->
+  <script>
+    window.addEventListener('phx:hook:events', e => {
+      console.log('[MessageTest] Phoenix hook event', e.detail);
+    });
+
+    // LiveView Lifecycle events
+    window.addEventListener('phx:page-loading-start', info =>
+      console.log('[MessageTest] LiveView page loading started', info.detail));
+    window.addEventListener('phx:page-loading-stop', info =>
+      console.log('[MessageTest] LiveView page loading stopped', info.detail));
+    window.addEventListener('phx:error', info =>
+      console.error('[MessageTest] LiveView error', info.detail));
+
+    // Inspect socket related info
+    console.log('[MessageTest] Socket inspection', {
+      phoenixSocket: window.liveSocket?.socket?.isConnected?.() || false,
+      channels: window.liveSocket?.channels?.length || 0,
+      pendingDiffs: window.liveSocket?.pendingDiffs || false
+    });
+
+    // Auto-scroll to bottom of messages container when new messages arrive
+    const scrollToBottom = () => {
+      const container = document.getElementById('messages-scroll-container');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    };
+
+    window.addEventListener('phx:update', scrollToBottom);
+    document.addEventListener('DOMContentLoaded', scrollToBottom);
+  </script>
+</div>

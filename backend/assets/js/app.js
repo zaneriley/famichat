@@ -4,19 +4,61 @@ import { LiveSocket } from "phoenix_live_view";
 import topbar from "topbar";
 
 import ThemeSwitcherHook from "./hooks/theme_switcher_hook";
+import MessageChannelHook from "./hooks/message_channel_hook";
+
+// More advanced debugging
+if (window.location.search.includes("debug=1")) {
+  window.debugMode = true;
+  console.log("[App] Debug mode enabled");
+}
+
+// Global error handler for debugging
+window.addEventListener("error", (event) => {
+  console.error("[App] Global error:", event.error || event.message);
+
+  if (window.debugMode) {
+    // Create a visible error indicator in debug mode
+    const errorElement = document.createElement("div");
+    errorElement.style.position = "fixed";
+    errorElement.style.bottom = "10px";
+    errorElement.style.right = "10px";
+    errorElement.style.backgroundColor = "rgba(255, 0, 0, 0.7)";
+    errorElement.style.color = "white";
+    errorElement.style.padding = "10px";
+    errorElement.style.borderRadius = "5px";
+    errorElement.style.zIndex = "9999";
+    errorElement.textContent = `Error: ${event.error?.message || event.message}`;
+    document.body.appendChild(errorElement);
+  }
+});
 
 // Define hooks before using them
 const Hooks = {
   ThemeSwitcher: ThemeSwitcherHook,
+  MessageChannel: MessageChannelHook,
 };
 
+// Get CSRF token
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
-  .getAttribute("content");
+  ?.getAttribute("content");
 
+if (!csrfToken) {
+  console.error("[App] CSRF token meta tag not found");
+}
+
+// Initialize LiveSocket
 const liveSocket = new LiveSocket("/live", Socket, {
   hooks: Hooks,
   params: { _csrf_token: csrfToken },
+});
+
+// Log LiveSocket state for debugging
+console.log("[App] LiveSocket initialized", {
+  host: window.location.host,
+  hasCsrfToken: !!csrfToken,
+  socketPath: "/live",
+  hooksCount: Object.keys(Hooks).length,
 });
 
 // Topbar loader during page loading
@@ -52,19 +94,24 @@ window.addEventListener("phx:page-loading-stop", (info) => {
     .classList.remove("phx-page-loading");
 });
 
-(liveSocket.connect() >>
-  // Expose liveSocket on window for console debug logs and latency simulation:
-  liveSocket.enableDebug()) >>
-  // >> liveSocket.enableLatencySim(1000)  // active for current browser session
-  liveSocket.disableLatencySim(); // you'll need to run this after disabling the above
+// Connect to the LiveSocket
+liveSocket.connect();
+
+// Enable debug
+liveSocket.enableDebug();
+
+// Uncomment to enable latency simulation
+// liveSocket.enableLatencySim(1000);
+
+// Expose liveSocket to window for debugging
+window.liveSocket = liveSocket;
+
 window.addEventListener("phx:live_reload:attached", ({ detail: reloader }) => {
   // Enable server log streaming to client.
   // Disable with reloader.disableServerLogs()
   reloader.enableServerLogs();
   window.liveReloader = reloader;
 });
-
-window.liveSocket = liveSocket;
 
 // REMOVE FOR PRODUCTION
 // This logs the time to first contentful paint (FCP) to the console.
@@ -73,65 +120,3 @@ new PerformanceObserver((entryList) => {
     console.log("FCP candidate:", entry.startTime, entry);
   }
 }).observe({ type: "paint", buffered: true });
-
-// Add some fun messages to the console
-console.log(
-  "%c" +
-    `
-                                                                                 _     _g                     
-        ggmmmmmmmmgg                                           =qg~~~~__        9@)  'T@                      
-       ,P        @@                                             [@'    @@             @F                      
-       /       _@P            _                                 @@     |@g           !@                       
-      '       g@'       _  "B@'   gg@   o@@!     _/ T@         |@'     |@/    g@)    @/      _  9g  ,@@     @,
-            _@D        +    @9     @9 _' |@     i   AD         @@      @W   , ,@    A@      g   @F ,  @g    @ 
-           o@"        |    @@     /@ /   @/    @'  /"          @"    _@"      @T    @'     B   JF     @@    @ 
-         ,@@         @     @'     @ /   gW    &F,<             @mmgj         {@    |@     g/_:'       [@    ' 
-        /@F         @   , @9     @//   /@    ;@              ; /  {@        ,[    ,|     /@           |@   *  
-      ,g@          @9  , /@  ,  /@/   .@' ,  @@              @     @@       @"    @|  ,  @N           |@  /   
-     _@f          ;@  ;  @' '   @?    @F     @g   ,         ;@      @,     AW ,  /@  '   @]   ,       |@ ,    
-    @@         f  @@y"  @B+    @F    {@;     @@_,+          @@      [@    ,@k"   @E:     @@  /        |@,     
-  _@8        _@   <"    >      "     "        <>           ,@|       @p   0"    'P       "B+          [W      
- dBBmmmmmmm0BB'                                           _@@h       '@L                              )       
-                                                                      "                                                                                                   
-   _!@@@g____ ,q         __L    @g__               @@@@@@@@@@@@        __o@   @@@@@ !@@@@@              
-   @@@@@@@@@@l_  ____g@@@@@@L  [@@@@@@             PPPPPPPPPPPP ___g@@@@@@@@, @@@@@ |@@@@@              
-   BB@@@@BB@@@@  @@@@@@@@@@@D^   "4@@              @@@@@@@@@@@@ '@@@@@@@@@@D" @@@@@ |@@@@@|@@@@@@@@@@@@|
-    [@@@g :@@@W  '@@@@@@@@]         ___g@@|        PPPPPPPP@@@@  Q@@B@@@@@    """""_|@@@@W|@@@@@@@@@@@@|
-    [@@@@gggggg!     [@@@@]   @@@@@@@@@@@@@        gggggg@@@@@@      @@@@@    @@@@@@@@@@@|              
-     @@@@@@@@@@|     [@@@@]   [@@@@@@@@@BP         [@@@@@@@@@P       @@@@@    @@@@@@@@@B"               
-        """""""'              '"""'                                                                     
-`,
-  "color: #fff; font-size: 8px; font-family: monospace; font-weight: bold; line-height: 0.5;",
-);
-const messageContent = [
-  "H̴̭͇̋̈́e̷͓̿l̶͙̈́l̷̰̈́o̷͚̿ ̵͙̈́t̵̟̆h̷͚̆e̶͚̓r̶̹̈́e̷͇̓!̶̦̓ ̵͚̒N̵̰̒i̶̹͌c̷͚̈́e̶͇̓ ̶͚̒t̵͇̆o̶͇̔ ̶̹̒m̶̭̒e̶̝̓e̶̝͒t̶̟̆ ̶͇̒y̶̭̔o̵̭͒u̶̦͒!̵̰̒",
-  "YOUR CURIOSITY IS DELIGHTFUL AND WELCOME.",
-  "THE CODE IS ON GITHUB https://github.com/zaneriley/personal-site",
-  "AND DESIGNS IN FIGMA https://www.figma.com/design/zDOcBhnjTDCWmc6OFgeoUc/Zane-Riley's-Product-Famichat?node-id=2209-559&t=0gZqDDkC2pYanuW3-0",
-  "MAY YOUR JOURNEY BE FILLED WITH WONDER AND DISCOVERY.",
-  "THIS TERMINAL WISHES YOU WELL, FELLOW SEEKER OF KNOWLEDGE.",
-  "<̴̗̈́s̵̭̒y̶͚̔s̶̭̈́t̵̟̆e̶̦̓m̶̦̒p̶͇̒i̶̭̓l̶̰̒y̶̦̒ ̶̦̓h̶̭̆a̶͇̓p̶̦̒p̶͇̒i̶̭̓l̶̰̒y̶̦̒ ̶̦̓h̶͚͒u̶̹͌m̶̦̒m̶̦̒i̶̹͌n̶̰̒g̶̦̒≯̭̒",
-];
-
-const baseStyle =
-  'font-family: "Courier New", monospace; font-size: 14px; line-height: 1.5; text-shadow: 0 0 5px rgba(255,255,255,0.7);';
-const glitchStyle = `${baseStyle} color: #e0e0e0; text-shadow: 2px 2px #ff00de, -2px -2px #00ff9f;`;
-const normalStyle = `${baseStyle} color: #b0b0b0;`;
-const highlightStyle = `${baseStyle} color: #ffffff; font-weight: bold;`;
-const systemStyle = `${baseStyle} color: #00ff9f; font-style: italic;`;
-
-console.log("%c[SYSTEM BOOT]", systemStyle);
-
-messageContent.forEach((line, index) => {
-  setTimeout(() => {
-    if (index === 0 || index === messageContent.length - 1) {
-      console.log(`%c${line}`, glitchStyle);
-    } else {
-      console.log(`%c${line}`, normalStyle);
-    }
-
-    if (index === messageContent.length - 1) {
-      console.log("%c[SYSTEM SHUTDOWN]", systemStyle);
-    }
-  }, index * 1000); // Delay each line by 1 second
-});

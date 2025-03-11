@@ -32,7 +32,8 @@ defmodule FamichatWeb.Router do
     plug :protect_from_forgery
 
     plug :put_secure_browser_headers, %{
-      "content-security-policy" => "default-src 'self'"
+      "content-security-policy" =>
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ws: wss:; img-src 'self' data:;"
     }
 
     plug CommonMetadata
@@ -60,14 +61,11 @@ defmodule FamichatWeb.Router do
       pipe_through [:admin]
 
       live_session :admin, on_mount: {FamichatWeb.LiveHelpers, :admin} do
-        live "/notes/new", NoteLive.Index, :new
-        live "/note/:url/edit", NoteLive.Index, :edit
-        live "/note/:url/show/edit", NoteLive.Show, :edit
+        # Add the new message testing route
+        live "/message-test", MessageTestLive, :index
 
-        live "/case-study/new", CaseStudyLive.Index, :new
-        live "/case-study/:url/edit", CaseStudyLive.Index, :edit
-        live "/case-study/:url", CaseStudyLive.Show, :show
-        live "/case-study/:url/show/edit", CaseStudyLive.Show, :edit
+        # Add our Tailwind test route
+        live "/tailwind-test", TailwindTestLive, :index
       end
 
       # Keep non-LiveView routes outside the live_session
@@ -98,12 +96,6 @@ defmodule FamichatWeb.Router do
 
     live_session :default, on_mount: FamichatWeb.LiveHelpers do
       live "/", HomeLive, :index
-      live "/kitchen-sink", KitchenSinkLive, :index
-      live "/case-studies", CaseStudyLive.Index, :index
-      live "/case-study/:url", CaseStudyLive.Show, :show
-      live "/notes", NoteLive.Index, :index
-      live "/note/:url", NoteLive.Show, :show
-      live "/self", AboutLive, :index
     end
   end
 
@@ -113,6 +105,8 @@ defmodule FamichatWeb.Router do
 
     scope "/test" do
       post "/broadcast", MessageTestController, :broadcast
+      # Add new CLI test endpoint for testing channel events
+      post "/test_events", TestBroadcastController, :trigger
     end
   end
 

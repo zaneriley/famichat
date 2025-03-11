@@ -84,11 +84,11 @@ defmodule FamichatWeb.Plugs.CSPHeader do
 
     [
       default_src: "'self' #{all_hosts}",
-      script_src: "'self' #{all_hosts} 'unsafe-inline'",
+      script_src: "'self' #{all_hosts} 'unsafe-inline' 'unsafe-eval'",
       style_src: "'self' #{all_hosts} 'unsafe-inline'",
       img_src: "'self' #{all_hosts} data:",
-      font_src: "'self' #{all_hosts}",
-      connect_src: "'self' #{all_hosts} #{ws_url}",
+      font_src: "'self' #{all_hosts} data:",
+      connect_src: "'self' #{all_hosts} #{ws_url} ws: wss:",
       frame_src: @env_module.frame_src(),
       object_src: "'none'",
       base_uri: "'self'",

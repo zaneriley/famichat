@@ -3,12 +3,53 @@ import { generateAndWriteCSS } from "./tailwind/generate-type-tokens.ts";
 
 generateAndWriteCSS();
 
+// Log when Tailwind is being built to help with debugging
+console.log("Building Tailwind CSS with the following configuration:");
+
 const config: Config = {
   content: [
     "/app/assets/js/**/*.js",
     "/app/assets/css/**/*.css",
     "!/app/assets/css/_typography.css", // Exclude the generated file
-    "/app/lib/famichat_web/**/*.*ex",
+    "/app/lib/famichat_web/**/*.{ex,exs,heex}",
+    "/app/lib/famichat_web/live/**/*.heex",
+    // Add explicit paths for components that might be using the missing classes
+    "/app/lib/famichat_web/components/**/*.ex",
+    "/app/deps/phoenix_heroicons/**/*.ex", // Include HeroIcons component if it exists
+  ],
+  safelist: [
+    // Add explicit width and height utilities that we need
+    "h-2",
+    "h-3",
+    "h-4",
+    "h-5",
+    "h-6",
+    "h-8",
+    "h-10",
+    "w-2",
+    "w-3",
+    "w-4",
+    "w-5",
+    "w-6",
+    "w-8",
+    "w-10",
+    "w-11",
+    "w-24",
+    "w-32",
+    "w-full",
+    "w-1/3",
+    "md:grid-cols-2",
+    "md:grid-cols-3",
+    "space-x-1xl",
+    "space-y-1xs",
+    "space-y-2xs",
+    "space-y-1xl",
+    "animate-spin",
+    "hover:bg-accent/80",
+    // Ensure icon-related classes are included
+    "mr-1xs",
+    "mr-2",
+    "mr-1xl",
   ],
   corePlugins: {},
   plugins: [
