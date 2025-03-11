@@ -124,7 +124,7 @@ export const calculateLineHeight = (
 
   const multiplier = incrementMultipliers[config.incrementStep] || 2;
 
-  if (!incrementMultipliers.hasOwnProperty(config.incrementStep)) {
+  if (!Object.hasOwn(incrementMultipliers, config.incrementStep)) {
     console.warn(
       `Invalid incrementStep: ${config.incrementStep}. Defaulting to 'half'.`,
     );

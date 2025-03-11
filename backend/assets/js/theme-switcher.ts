@@ -7,8 +7,6 @@
  */
 
 export function initThemeToggle() {
-  console.log("Initializing theme toggle");
-
   // Reference to the root element
   const root = document.documentElement;
 
@@ -32,7 +30,6 @@ export function initThemeToggle() {
 
   // Function to set theme attribute on the root element
   const applyTheme = (theme: string) => {
-    console.log(`Applying theme: ${theme}`);
     if (theme === THEME_SYSTEM) {
       root.removeAttribute("data-theme");
     } else {
@@ -45,7 +42,6 @@ export function initThemeToggle() {
     const preference = storageAvailable
       ? localStorage.getItem(STORAGE_KEY)
       : null;
-    console.log(`User preference: ${preference}`);
     return preference;
   };
 
@@ -71,14 +67,12 @@ export function initThemeToggle() {
         preference = THEME_LIGHT;
       }
     }
-    console.log(`System preference: ${preference}`);
     return preference;
   };
 
   // **Added function to read default theme from HTML attribute**
   const getDefaultTheme = (): string => {
     const defaultTheme = root.getAttribute("data-theme") || THEME_DARK;
-    console.log(`Default theme from HTML attribute: ${defaultTheme}`);
     return defaultTheme;
   };
 
@@ -90,20 +84,16 @@ export function initThemeToggle() {
     if (userPreference) {
       if (userPreference === THEME_SYSTEM) {
         const systemTheme = getSystemPreference() || getDefaultTheme();
-        console.log(`Applying system theme: ${systemTheme}`);
         applyTheme(systemTheme);
       } else {
-        console.log(`Applying user preference: ${userPreference}`);
         applyTheme(userPreference);
       }
     } else {
       const systemPreference = getSystemPreference();
       if (systemPreference) {
-        console.log(`Applying system preference: ${systemPreference}`);
         applyTheme(systemPreference);
       } else {
         const defaultTheme = getDefaultTheme();
-        console.log(`Defaulting to theme from HTML attribute: ${defaultTheme}`);
         applyTheme(defaultTheme);
       }
     }
@@ -112,36 +102,19 @@ export function initThemeToggle() {
   // Synchronize radio buttons with the applied theme
   const syncRadioButtons = () => {
     const selectedTheme = getUserPreference() || THEME_SYSTEM;
-    console.log(`Syncing radio buttons. Selected theme: ${selectedTheme}`);
     const radio = document.querySelector(
       `input[name="theme"][value="${selectedTheme}"]`,
     ) as HTMLInputElement;
     if (radio) {
-      console.log(
-        `Found radio button for ${selectedTheme}. Setting checked to true.`,
-      );
       radio.checked = true;
     } else {
-      console.warn(`Radio button for ${selectedTheme} not found.`);
     }
-    console.log(
-      "Radio buttons after sync:",
-      document.querySelectorAll('input[name="theme"]:checked'),
-    );
+    console.log("Radio buttons after sync:");
   };
 
   // Apply theme and synchronize radio buttons immediately to prevent FOUC
   setTheme();
   syncRadioButtons();
-  console.log("After initial setTheme and syncRadioButtons:");
-  console.log(
-    "Current theme:",
-    document.documentElement.getAttribute("data-theme"),
-  );
-  console.log(
-    "Checked radio button:",
-    document.querySelector('input[name="theme"]:checked'),
-  );
 
   // Watch for system theme changes if user preference is 'system' or not set
   if (
@@ -172,7 +145,6 @@ export function initThemeToggle() {
   ) as HTMLFormElement;
 
   if (themeSwitcherForm) {
-    console.log("Theme switcher form found");
     themeSwitcherForm.addEventListener("change", (event) => {
       const target = event.target as HTMLInputElement;
       if (target && target.name === "theme") {
@@ -182,21 +154,10 @@ export function initThemeToggle() {
           saveUserPreference(selectedTheme);
           setTheme();
           syncRadioButtons(); // Ensure radio buttons are synced
-          console.log("After theme change:");
-          console.log(
-            "Current theme:",
-            document.documentElement.getAttribute("data-theme"),
-          );
-          console.log(
-            "Checked radio button:",
-            document.querySelector('input[name="theme"]:checked'),
-          );
         }
       }
     });
   } else {
     console.warn("Theme switcher form not found");
   }
-
-  console.log("Theme toggle initialization complete");
 }

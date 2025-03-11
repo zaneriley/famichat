@@ -51,6 +51,19 @@ defmodule FamichatWeb.MessageChannel do
   - iOS: Background connections limited to ~30 seconds
   - Android: Doze mode may delay message delivery
 
+  ## Telemetry and Performance Monitoring
+
+  This module emits telemetry events for critical operations:
+  - Channel joins: `[:famichat, :message_channel, :join]`
+  - Message broadcasts: `[:famichat, :message_channel, :broadcast]`
+  - Message acknowledgments: `[:famichat, :message_channel, :ack]`
+
+  Each event includes standard measurements (duration, timestamps) and contextual metadata.
+  Performance budgets are enforced (default: 200ms) and exceeded thresholds are logged.
+
+  For sensitive operations, encryption-related metadata is filtered from telemetry events
+  to prevent leakage of security information.
+
   ## Examples
 
   Sending a message:
@@ -80,6 +93,7 @@ defmodule FamichatWeb.MessageChannel do
   require Logger
 
   @encryption_metadata_fields ~w(version_tag encryption_flag key_id)
+  @default_perf_budget 200
 
   @doc """
   Handles joining the message channel.
@@ -103,11 +117,7 @@ defmodule FamichatWeb.MessageChannel do
     user_id = socket.assigns[:user_id]
     start_time = System.monotonic_time()
 
-    measurements = %{
-      start_time: start_time,
-      system_time: System.system_time(),
-      monotonic_time: System.monotonic_time()
-    }
+    measurements = compute_measurements(start_time)
 
     if is_nil(user_id) do
       Logger.debug("User ID missing from socket assigns, rejecting join")
@@ -205,77 +215,18 @@ defmodule FamichatWeb.MessageChannel do
 
   # Helper function to emit join telemetry
   defp emit_join_telemetry(measurements, metadata) do
-    Logger.debug("Emitting telemetry event with metadata: #{inspect(metadata)}")
-
-    # Calculate duration in milliseconds
-    duration_ms =
-      System.convert_time_unit(
-        System.monotonic_time() - measurements.start_time,
-        :native,
-        :millisecond
-      )
-
-    # Add duration to measurements
-    measurements = Map.put(measurements, :duration_ms, duration_ms)
-
-    # Add timestamp to metadata
-    metadata = Map.put(metadata, :timestamp, DateTime.utc_now())
-
-    # Filter out sensitive encryption metadata fields
-    # For failed joins, remove all encryption-related fields
-    # For successful joins, only keep the encryption_status field
-    filtered_metadata =
-      if metadata[:status] == :success do
-        # For successful joins, only keep encryption_status
-        Map.drop(metadata, @encryption_metadata_fields)
-      else
-        # For failed joins, remove all encryption-related fields including encryption_status
-        Map.drop(metadata, @encryption_metadata_fields ++ ["encryption_status"])
-      end
-
-    # Emit telemetry event with filtered metadata
-    :telemetry.execute(
-      [:famichat, :message_channel, :join],
-      measurements,
-      filtered_metadata
+    Logger.debug(
+      "Emitting join telemetry event with metadata: #{inspect(metadata)}"
     )
 
-    # Log performance budget warning if join takes too long
-    if duration_ms > 200 do
-      Logger.warning(
-        "Channel join exceeded performance budget: #{duration_ms}ms"
-      )
-    end
+    emit_telemetry(
+      [:famichat, :message_channel, :join],
+      measurements.start_time,
+      metadata,
+      filter_sensitive_metadata: true
+    )
   end
 
-  @doc """
-  Handles incoming messages on the channel.
-
-  Supports both plain text and encrypted messages. For encrypted messages,
-  additional metadata fields (version_tag, encryption_flag, key_id) are preserved
-  and broadcast to all channel subscribers.
-
-  ## Examples
-
-      # Plain text message
-      handle_in("new_msg", %{"body" => "Hello!"}, socket)
-
-      # Encrypted message
-      handle_in("new_msg", %{
-        "body" => "encrypted_content",
-        "version_tag" => "v1.0.0",
-        "encryption_flag" => true,
-        "key_id" => "KEY_USER_v1"
-      }, socket)
-
-  ## Telemetry
-
-  Emits [:famichat, :message_channel, :broadcast] event with the following metadata:
-  - user_id: The ID of the user sending the message
-  - conversation_type: The type of conversation (direct, group, etc.)
-  - conversation_id: The ID of the conversation
-  - encryption_status: Whether the message was encrypted
-  """
   @impl true
   def handle_in("new_msg", %{"body" => _body} = payload, socket) do
     start_time = System.monotonic_time()
@@ -291,16 +242,21 @@ defmodule FamichatWeb.MessageChannel do
     case topic_parts do
       # Type-aware format
       ["message", type, id] when type in ["self", "direct", "group", "family"] ->
-        measurements = %{
-          start_time: start_time,
-          system_time: System.system_time(),
-          monotonic_time: System.monotonic_time()
-        }
+        measurements = compute_measurements(start_time)
+
+        # Calculate message size for metrics
+        message_size =
+          if is_binary(payload["body"]) do
+            byte_size(payload["body"])
+          else
+            0
+          end
 
         metadata = %{
           user_id: socket.assigns.user_id,
           conversation_type: type,
           conversation_id: id,
+          message_size: message_size,
           encryption_status:
             if(Map.get(payload, "encryption_flag"),
               do: "enabled",
@@ -323,54 +279,127 @@ defmodule FamichatWeb.MessageChannel do
     end
   end
 
+  @impl true
   def handle_in("new_msg", _invalid_payload, socket) do
     {:reply, {:error, %{reason: "invalid_message"}}, socket}
   end
 
+  @doc """
+  Handles acknowledgments from clients that they've received a message.
+
+  This implements a basic client ACK mechanism to track message delivery.
+  The client should send a "message_ack" event after successfully receiving
+  and processing a "new_msg" event.
+
+  ## Parameters
+    * `payload` - Map containing message details for acknowledgment:
+      * `message_id` - Unique identifier for the message being acknowledged
+      * Other optional metadata
+
+  ## Examples
+
+      # Client acknowledging receipt of a message
+      handle_in("message_ack", %{"message_id" => "msg-123"}, socket)
+
+  ## Telemetry
+
+  Emits [:famichat, :message_channel, :ack] event with the following metadata:
+  - user_id: The ID of the user acknowledging the message
+  - conversation_type: The type of conversation
+  - conversation_id: The ID of the conversation
+  - message_id: The ID of the acknowledged message
+  """
+  @impl true
+  def handle_in("message_ack", payload, socket) do
+    handle_message_ack(payload, socket)
+  end
+
+  # Private helper function that processes message acknowledgments.
+  # See the @doc for handle_in("message_ack") for full documentation.
+  defp handle_message_ack(payload, socket) do
+    start_time = System.monotonic_time()
+    topic_parts = String.split(socket.topic, ":")
+
+    case topic_parts do
+      ["message", type, id]
+      when type in ["self", "direct", "group", "family"] ->
+        message_id = Map.get(payload, "message_id", "unknown")
+
+        # Create measurements for telemetry
+        measurements = compute_measurements(start_time)
+
+        # Metadata for the acknowledgment
+        metadata = %{
+          user_id: socket.assigns.user_id,
+          conversation_type: type,
+          conversation_id: id,
+          message_id: message_id
+        }
+
+        # Log the acknowledgment
+        Logger.info(
+          "[MessageChannel] Message acknowledgment: " <>
+            "conversation_type=#{type} " <>
+            "conversation_id=#{id} " <>
+            "user_id=#{socket.assigns.user_id} " <>
+            "message_id=#{message_id}"
+        )
+
+        # Emit telemetry for the acknowledgment
+        emit_ack_telemetry(measurements, metadata)
+
+        {:reply, :ok, socket}
+
+      _ ->
+        Logger.error("Unexpected topic format for ACK: #{inspect(topic_parts)}")
+        {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
+    end
+  end
+
   # Helper function to emit broadcast telemetry
+  @spec emit_broadcast_telemetry(map(), map()) :: :ok
   defp emit_broadcast_telemetry(measurements, metadata) do
     Logger.debug(
       "Emitting broadcast telemetry event with metadata: #{inspect(metadata)}"
     )
 
-    # Calculate duration in milliseconds
-    duration_ms =
-      System.convert_time_unit(
-        System.monotonic_time() - measurements.start_time,
-        :native,
-        :millisecond
-      )
-
-    # Add duration to measurements
-    measurements = Map.put(measurements, :duration_ms, duration_ms)
-
-    # Add timestamp to metadata
-    metadata = Map.put(metadata, :timestamp, DateTime.utc_now())
-
-    # Add message size to metadata if available
-    metadata =
-      if Map.has_key?(metadata, :message_size) do
-        metadata
-      else
-        Map.put(metadata, :message_size, 0)
-      end
-
-    # Filter out sensitive encryption metadata fields
-    # Only keep the encryption_status field, remove all other encryption-related fields
-    filtered_metadata = Map.drop(metadata, @encryption_metadata_fields)
-
-    # Emit telemetry event with filtered metadata
-    :telemetry.execute(
+    emit_telemetry(
       [:famichat, :message_channel, :broadcast],
-      measurements,
-      filtered_metadata
+      measurements.start_time,
+      metadata,
+      filter_sensitive_metadata: true
     )
+  end
 
-    # Log performance budget warning if broadcast takes too long
-    if duration_ms > 200 do
-      Logger.warning(
-        "Channel broadcast exceeded performance budget: #{duration_ms}ms"
-      )
-    end
+  # Helper function to emit acknowledgment telemetry
+  @spec emit_ack_telemetry(map(), map()) :: :ok
+  defp emit_ack_telemetry(measurements, metadata) do
+    emit_telemetry(
+      [:famichat, :message_channel, :ack],
+      measurements.start_time,
+      metadata
+    )
+  end
+
+  # New helper to centralize telemetry emission
+  defp emit_telemetry(event_name, start_time, metadata, opts \\ []) do
+    FamichatWeb.Telemetry.emit_event(
+      event_name,
+      start_time,
+      metadata,
+      filter_sensitive_metadata:
+        Keyword.get(opts, :filter_sensitive_metadata, false),
+      performance_budget_ms:
+        Keyword.get(opts, :performance_budget_ms, @default_perf_budget)
+    )
+  end
+
+  # New helper to compute common telemetry measurements
+  defp compute_measurements(start_time) do
+    %{
+      start_time: start_time,
+      system_time: System.system_time(),
+      monotonic_time: System.monotonic_time()
+    }
   end
 end

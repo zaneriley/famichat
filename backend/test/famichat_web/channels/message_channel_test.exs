@@ -1006,6 +1006,181 @@ defmodule FamichatWeb.MessageChannelTest do
     end
   end
 
+  describe "enhanced broadcast logging and client acknowledgment" do
+    setup do
+      # Start a telemetry handler for ack events
+      test_pid = self()
+      handler_id = "message-ack-test-#{:erlang.unique_integer()}"
+
+      Logger.debug("Setting up ack telemetry handler with id: #{handler_id}")
+
+      # Handler for acknowledgment events
+      :ok =
+        :telemetry.attach(
+          handler_id,
+          [:famichat, :message_channel, :ack],
+          fn event_name, measurements, metadata, _ ->
+            Logger.debug("""
+            Acknowledgment telemetry event received in test:
+            - event_name: #{inspect(event_name)}
+            - measurements: #{inspect(measurements)}
+            - metadata: #{inspect(metadata)}
+            """)
+
+            send(
+              test_pid,
+              {:ack_telemetry_event, event_name, measurements, metadata}
+            )
+          end,
+          nil
+        )
+
+      # Setup socket and join channel
+      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
+      {:ok, socket} = connect(UserSocket, %{"token" => token})
+      topic = "message:direct:conversation-123"
+      {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
+
+      on_exit(fn ->
+        Logger.debug("Detaching ack telemetry handler")
+        :telemetry.detach(handler_id)
+      end)
+
+      {:ok, %{socket: socket, handler_id: handler_id}}
+    end
+
+    @doc """
+    Tests the enhanced broadcast logging functionality.
+
+    This test verifies that:
+    1. The logging is enhanced with detailed information
+    2. Telemetry events include message size
+    3. Log messages can be captured and verified
+    """
+    test "broadcasts include enhanced logging with message size and metadata",
+         %{
+           socket: socket
+         } do
+      import ExUnit.CaptureLog
+
+      # Capture logs to verify the enhanced logging
+      logs =
+        capture_log(fn ->
+          # Send a message with a known size
+          # 100 byte message
+          message_body = String.duplicate("a", 100)
+          push(socket, "new_msg", %{"body" => message_body})
+
+          # Wait for telemetry to be emitted
+          assert_receive {:broadcast_telemetry_event,
+                          [:famichat, :message_channel, :broadcast],
+                          measurements, metadata},
+                         @telemetry_timeout
+
+          # Verify message size in telemetry
+          assert metadata.message_size == 100
+          assert Map.has_key?(measurements, :duration_ms)
+        end)
+
+      # Verify that the enhanced log contains all required fields
+      assert logs =~ "[MessageChannel] Broadcast event:"
+      assert logs =~ "conversation_type=direct"
+      assert logs =~ "conversation_id=conversation-123"
+      assert logs =~ "user_id=#{@valid_user_id}"
+      assert logs =~ "encryption_status=disabled"
+      assert logs =~ "message_size=100"
+      assert logs =~ "duration_ms="
+    end
+
+    @doc """
+    Tests the client acknowledgment mechanism.
+
+    This test verifies that:
+    1. The server handles message_ack events correctly
+    2. Telemetry events are emitted for acknowledgments
+    3. The acknowledgment includes the correct metadata
+    """
+    test "client acknowledgments are received and logged", %{socket: socket} do
+      import ExUnit.CaptureLog
+
+      # Capture logs to verify the acknowledgment logging
+      logs =
+        capture_log(fn ->
+          # Send a message acknowledgment
+          message_id = "test-message-123"
+          push(socket, "message_ack", %{"message_id" => message_id})
+
+          # Wait for telemetry to be emitted
+          assert_receive {:ack_telemetry_event,
+                          [:famichat, :message_channel, :ack], measurements,
+                          metadata},
+                         @telemetry_timeout
+
+          # Verify metadata in telemetry
+          assert metadata.message_id == message_id
+          assert metadata.user_id == @valid_user_id
+          assert metadata.conversation_type == "direct"
+          assert metadata.conversation_id == "conversation-123"
+          assert Map.has_key?(metadata, :timestamp)
+          assert Map.has_key?(measurements, :duration_ms)
+        end)
+
+      # Verify that the acknowledgment log contains all required fields
+      assert logs =~ "[MessageChannel] Message acknowledgment:"
+      assert logs =~ "conversation_type=direct"
+      assert logs =~ "conversation_id=conversation-123"
+      assert logs =~ "user_id=#{@valid_user_id}"
+      assert logs =~ "message_id=test-message-123"
+    end
+
+    @doc """
+    Tests the end-to-end flow where a client receives a message and sends an acknowledgment.
+
+    This test verifies that:
+    1. A message can be broadcast to a client
+    2. The client can acknowledge receipt of the message
+    3. The server logs both the broadcast and the acknowledgment
+    """
+    test "end-to-end message delivery with acknowledgment logging", %{
+      socket: socket
+    } do
+      # Create a second client
+      token2 = Phoenix.Token.sign(@endpoint, @salt, "user-456")
+      {:ok, socket2} = connect(UserSocket, %{"token" => token2})
+      topic = "message:direct:conversation-123"
+      {:ok, _, socket2} = subscribe_and_join(socket2, MessageChannel, topic)
+
+      # First client sends a message with a message ID
+      message_id = "unique-message-#{:rand.uniform(1000)}"
+
+      push(socket, "new_msg", %{
+        "body" => "Message requiring acknowledgment",
+        "message_id" => message_id
+      })
+
+      # Verify message was broadcast to channel
+      assert_broadcast "new_msg", %{
+        "body" => "Message requiring acknowledgment",
+        "user_id" => @valid_user_id
+      }
+
+      # Manually send an acknowledgment from the second client
+      push(socket2, "message_ack", %{"message_id" => message_id})
+
+      # Verify telemetry event for the acknowledgment
+      assert_receive {:ack_telemetry_event, [:famichat, :message_channel, :ack],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      # Verify metadata in telemetry
+      assert metadata.message_id == message_id
+      # The acknowledging user
+      assert metadata.user_id == "user-456"
+      assert metadata.conversation_type == "direct"
+      assert metadata.conversation_id == "conversation-123"
+    end
+  end
+
   defp socket_without_user_id do
     socket(UserSocket, nil, %{})
   end

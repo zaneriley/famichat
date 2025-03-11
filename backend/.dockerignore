@@ -7,3 +7,7 @@ priv/static/
 !.env.example
 .release-please-manifest.json
 docker-compose.override.yml
+
+*.pdf
+*.docx
+*.doc

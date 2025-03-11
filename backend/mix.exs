@@ -107,18 +107,18 @@ defmodule Famichat.MixProject do
         "guides/telemetry.md": [title: "Telemetry & Performance"]
       ],
       groups_for_extras: [
-        "Guides": ~r/guides\/.*/
+        Guides: ~r/guides\/.*/
       ],
       groups_for_modules: [
-        "Chat": [
+        Chat: [
           Famichat.Chat,
           ~r/Famichat\.Chat\..*/
         ],
-        "Accounts": [
+        Accounts: [
           Famichat.Accounts,
           ~r/Famichat\.Accounts\..*/
         ],
-        "Web": [
+        Web: [
           FamichatWeb,
           ~r/FamichatWeb\..*/
         ]

@@ -268,8 +268,9 @@ function yarn:build:css {
     args=(--watch)
   fi
 
+  # Added --output=standalone to disable PurgeCSS and include all Tailwind classes
   mkdir -p ../priv/static/css
-  tailwindcss --postcss -i css/app.css -o ../priv/static/css/app.css "${args[@]}"
+  tailwindcss --postcss --output=standalone -i css/app.css -o ../priv/static/css/app.css "${args[@]}"
 }
 
 function css:lint {

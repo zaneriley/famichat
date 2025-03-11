@@ -61,40 +61,7 @@ defmodule FamichatWeb.Navigation do
       </.link>
       <!-- Page navigation -->
       <nav role="navigation" class="col-span-6 col-start-3">
-        <ul class="flex space-x-1xl">
-          <li>
-            <.link
-              navigate={Routes.case_study_index_path(@socket, :index, @user_locale)}
-              class={active_class(@current_path, :case_studies)}
-            >
-              <.typography tag="span" size="md">
-                <%= ngettext("Case Study", "Case Studies", 2) %>
-              </.typography>
-            </.link>
-          </li>
-
-          <li>
-            <.link
-              navigate={Routes.note_index_path(@socket, :index, @user_locale)}
-              class={active_class(@current_path, :notes)}
-            >
-              <.typography tag="span" size="md">
-                <%= ngettext("Note", "Notes", 2) %>
-              </.typography>
-            </.link>
-          </li>
-
-          <li>
-            <.link
-              navigate={Routes.about_path(@socket, :index, @user_locale)}
-              class={active_class(@current_path, :about)}
-            >
-              <.typography tag="span" size="md">
-                <%= gettext("Self") %>
-              </.typography>
-            </.link>
-          </li>
-        </ul>
+        <ul class="flex space-x-1xl"></ul>
       </nav>
       <!-- Theme switcher -->
       <.theme_switcher class="col-start-9 col-end-11" />
