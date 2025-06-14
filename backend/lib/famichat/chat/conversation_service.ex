@@ -33,7 +33,8 @@ defmodule Famichat.Chat.ConversationService do
     Repo,
     Chat.Conversation,
     Chat.User,
-    Chat.ConversationParticipant
+    Chat.ConversationParticipant,
+    Chat.GroupConversationPrivileges
   }
 
   import Ecto.Query, only: [from: 2]
@@ -298,6 +299,82 @@ defmodule Famichat.Chat.ConversationService do
 
   defp result_status({:ok, _}), do: "success"
   defp result_status({:error, _}), do: "error"
+
+  @doc """
+  Creates a new group conversation within a family.
+
+  ## Parameters
+  - `user_id`: The ID of the user creating the conversation (will be an admin).
+  - `family_id`: The ID of the family this conversation belongs to.
+  - `name`: The name of the group conversation.
+  - `metadata`: Optional map for additional conversation metadata.
+
+  ## Returns
+  - `{:ok, Conversation.t()}` - The newly created group conversation with the creator as admin.
+  - `{:error, reason}` - An error tuple, e.g., `:user_not_found`, `:family_mismatch`, `:changeset_invalid`.
+  """
+  @spec create_group_conversation(String.t(), String.t(), String.t(), map()) ::
+          {:ok, Conversation.t()} | {:error, atom()}
+  def create_group_conversation(user_id, family_id, name, metadata \\ %{}) do
+    with {:ok, user} <- get_user(user_id),
+         true <- user.family_id == family_id || {:error, :family_mismatch} do
+      multi =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:conversation, fn _ ->
+          Conversation.create_changeset(%Conversation{}, %{
+            family_id: family_id,
+            conversation_type: :group,
+            metadata: Map.put(metadata, "name", name)
+          })
+        end)
+        |> Ecto.Multi.insert(
+          :participant,
+          fn %{conversation: conversation} ->
+            ConversationParticipant.changeset(%ConversationParticipant{}, %{
+              conversation_id: conversation.id,
+              user_id: user_id
+            })
+          end
+        )
+        |> Ecto.Multi.insert(
+          :admin_privilege,
+          fn %{conversation: conversation} ->
+            GroupConversationPrivileges.changeset(%GroupConversationPrivileges{}, %{
+              conversation_id: conversation.id,
+              user_id: user_id,
+              role: :admin,
+              granted_by_id: user_id
+            })
+          end
+        )
+        |> Ecto.Multi.run(:preload_users, fn repo, %{conversation: conversation} ->
+          {:ok, repo.preload(conversation, :users)}
+        end)
+
+      case Repo.transaction(multi) do
+        {:ok, %{preload_users: conversation}} ->
+          {:ok, conversation}
+
+        {:error, _op, reason, _changes} ->
+          # Log the detailed error for debugging
+          Logger.error(
+            "Failed to create group conversation: operation #{inspect(_op)}, reason #{inspect(reason)}, changes #{inspect(_changes)}"
+          )
+
+          # Return a generic error or the specific reason if appropriate
+          error_atom = if is_atom(reason), do: reason, else: :transaction_failed
+          {:error, error_atom}
+
+        # Catch potential Ecto.Changeset errors if Repo.transaction returns it directly
+        {:error, changeset} when is_struct(changeset, Ecto.Changeset) ->
+          {:error, :changeset_invalid}
+      end
+    else
+      error_reason ->
+        # This will handle {:error, :user_not_found} or {:error, :family_mismatch}
+        error_reason
+    end
+  end
 
   @doc """
   Assigns the admin role to a user in a group conversation.
