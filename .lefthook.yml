@@ -50,4 +50,4 @@ pre-push:
   parallel: false
   commands:
     run_checks:
-      run: lefthook run pre-push-check || echo "Checks failed, but push will proceed. Please fix issues before merging."
+      run: lefthook run pre-push-check
