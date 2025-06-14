@@ -1,0 +1,26 @@
+name: "Security Scan"
+
+on:
+  pull_request:
+    branches:
+      - "*"
+  push:
+    branches:
+      - "main"
+      - "master"
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout code"
+        uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 0 # Fetch all history for deep scan
+
+      - name: "Run Gitleaks scan"
+        uses: "gitleaks/gitleaks-action@v2"
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          # Optional: Gitleaks config file path, if you have one
+          # GITLEAKS_CONFIG: .gitleaks.toml
