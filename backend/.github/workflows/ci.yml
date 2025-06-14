@@ -33,14 +33,37 @@ jobs:
           sed -i "s|.:/app|/tmp:/tmp|g" docker-compose.yml
           ./run ci:setup-env
 
+      - name: "Check for vulnerable dependencies"
+        run: |
+          # Ensure the project is compiled before running hex.audit, if necessary
+          # mix compile --force --quiet
+          # The above might be handled by other ./run commands, if not, uncomment.
+          # Navigate to the backend directory if ./run doesn't handle it
+          cd backend
+          mix hex.audit
+
+      - name: "Check code formatting" # <-- NEW STEP
+        run: |
+          cd backend
+          mix format --check-formatted
+
       - name: "Lint"
         run: ./run ci:lint
 
       - name: "Security check"
         run: ./run ci:security-check
 
-      - name: "Run tests"
+      - name: "Run tests" # This step is assumed to generate coverage data in a compatible format (e.g., lcov.info)
         run: ./run ci:test
+
+      - name: "Upload test coverage to Coveralls" # <-- NEW STEP
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Ensure parallel is false if jobs are not parallel (which they aren't here)
+          parallel: false
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }} # The action might pick this up.
 
       - name: "Static analysis"
         run: ./run ci:static-analysis
