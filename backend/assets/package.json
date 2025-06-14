@@ -33,12 +33,6 @@
     "lint:css": "stylelint \"./css/**/*.css\"",
     "lint:css:fix": "stylelint \"./css/**/*.css\" --fix",
     "test:browser": "vitest --workspace=vitest.workspace.ts",
-    "assets:font-metrics": "ts-node ./tailwind/extract-font-metrics.ts",
-    "be:migrate": "cd .. && ./run mix ecto.migrate",
-    "be:rollback": "cd .. && ./run mix ecto.rollback",
-    "be:test": "cd .. && ./run mix test",
-    "be:iex": "cd .. && ./run iex -S mix",
-    "be:credo": "cd .. && ./run mix credo",
-    "be:format": "cd .. && ./run mix format"
+    "assets:font-metrics": "ts-node ./tailwind/extract-font-metrics.ts"
   }
 }
