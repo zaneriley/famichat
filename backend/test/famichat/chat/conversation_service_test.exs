@@ -359,20 +359,28 @@ defmodule Famichat.Chat.ConversationServiceTest do
         :telemetry.detach(handler_name)
       end)
 
-      # Add admin privilege for admin_user to support the tests
-      {:ok, _privilege} =
-        %GroupConversationPrivileges{}
-        |> GroupConversationPrivileges.changeset(%{
-          conversation_id: group_conversation.id,
-          user_id: admin_user.id,
-          role: :admin,
-          granted_by_id: admin_user.id
-        })
-        |> Repo.insert()
+      # The group_conversation fixture now handles making its creator an admin.
+      # We fetch this creator to use in tests that verify creator privileges
+      # or need to target the original admin.
+      group_creator = hd(Repo.preload(group_conversation, :users).users)
+
+      # The admin_user defined in the setup is used for tests that require
+      # *an* admin to perform actions. If this admin_user is not the
+      # group_creator, we make them an admin of this group_conversation
+      # so they can perform administrative actions in other tests.
+      if admin_user.id != group_creator.id do
+        {:ok, _} =
+          ConversationService.assign_admin(
+            group_conversation.id,
+            admin_user.id,
+            group_creator.id # The creator (original admin) grants this
+          )
+      end
 
       {:ok,
        %{
          family: family,
+         group_creator: group_creator,
          admin_user: admin_user,
          member_user: member_user,
          other_member: other_member,
@@ -383,33 +391,41 @@ defmodule Famichat.Chat.ConversationServiceTest do
     end
 
     test "auto-assigns creator as admin when creating a group conversation", %{
-      admin_user: admin_user,
+      group_creator: group_creator, # Use the actual creator from the fixture
       group_conversation: group_conversation
     } do
-      # Check if the group creator has admin privileges
+      # Check if the group creator (from the fixture) has admin privileges
       {:ok, is_admin} =
-        ConversationService.admin?(group_conversation.id, admin_user.id)
+        ConversationService.admin?(group_conversation.id, group_creator.id)
 
-      assert is_admin
+      assert is_admin,
+             "The creator of the group conversation should be an admin. Creator ID: #{group_creator.id}"
     end
 
     test "prevents removing the last admin from a group", %{
-      admin_user: admin_user,
-      group_conversation: group_conversation
+      group_creator: group_creator, # The actual admin of this specific conversation
+      group_conversation: group_conversation,
+      admin_user: admin_user # The admin performing the action (could be group_creator or another admin)
     } do
-      # Try to demote the only admin to a member
+      # Ensure the action is performed by an admin (admin_user is now guaranteed to be one for this group)
+      # The user whose privilege is being changed is the group_creator (the last admin)
       {:error, :last_admin} =
         ConversationService.assign_member(
           group_conversation.id,
-          admin_user.id,
-          admin_user.id
+          group_creator.id, # Target the actual last admin
+          admin_user.id # Action performed by an admin
         )
 
       # Try to remove the only admin's privileges
+      # Note: remove_privilege can be called by the user themselves or an admin.
+      # If admin_user is the group_creator, this is self-removal.
+      # If admin_user is different, it's removal by another admin.
+      # The critical part is that group_creator is the target.
       {:error, :last_admin} =
         ConversationService.remove_privilege(
           group_conversation.id,
-          admin_user.id
+          group_creator.id, # Target the actual last admin
+          admin_user.id # Action performed by an admin (or nil if self-removal)
         )
     end
 
