@@ -1,0 +1,33 @@
+{
+  "name": "Famichat Elixir Backend",
+  "dockerComposeFile": [
+    "../docker-compose.yml"
+  ],
+  "service": "backend",
+  "workspaceFolder": "/workspace/backend",
+  "portsAttributes": {
+    "4000": {
+      "label": "Phoenix HTTP",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "jakebecker.elixir-ls",
+        "editorconfig.editorconfig",
+        "github.vscode-pull-request-github",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "[elixir]": {
+          "editor.defaultFormatter": "jakebecker.elixir-ls"
+        }
+      }
+    }
+  },
+  "postCreateCommand": "sudo chown -R vscode:vscode /workspace && mix local.hex --force && mix local.rebar --force && cd /workspace/backend && mix deps.get",
+  "remoteUser": "vscode"
+}
