@@ -396,9 +396,7 @@ Change Management & Documentation Updates
 + – Updated telemetry guidelines for crypto operations
 
 Version 1.4 (June 14, 2025 Update)
-  – Added "Debugging" and "Project Documentation" sections to main README.md.
-  – Updated npm scripts in README.md for backend tasks.
-  – Minor review of project-docs/guide.md and project-docs/telemetry.md.
+  – Updated Lefthook configuration in `.lefthook.yml` (stricter pre-push hook, corrected `wait_for_web` port to 8001). Added VS Code DevContainer configuration (`.devcontainer/devcontainer.json`). Corrected date in `project-docs/telemetry.md`.
  
  ─────────────────────────────  
  Final Notes
