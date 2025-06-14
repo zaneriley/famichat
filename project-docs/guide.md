@@ -394,6 +394,11 @@ Change Management & Documentation Updates
 + – Integrated E2EE roadmap into sprint planning  
 + – Added security testing requirements  
 + – Updated telemetry guidelines for crypto operations
+
+Version 1.4 (June 14, 2025 Update)
+  – Added "Debugging" and "Project Documentation" sections to main README.md.
+  – Updated npm scripts in README.md for backend tasks.
+  – Minor review of project-docs/guide.md and project-docs/telemetry.md.
  
  ─────────────────────────────  
  Final Notes
