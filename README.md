@@ -68,13 +68,13 @@ For now, this repo is mainly a playground to test out:
     # curl -L -o ~/bin/lefthook https://github.com/evilmartians/lefthook/releases/download/v1.11.2/lefthook_1.11.2_MacOS_x86_64
     # For Linux:
     # curl -L -o ~/bin/lefthook https://github.com/evilmartians/lefthook/releases/download/v1.11.2/lefthook_1.11.2_Linux_x86_64
-    
+
     # Make it executable (not needed for Windows)
     # chmod +x ~/bin/lefthook
-    
+
     # Ensure ~/bin is in your PATH
     # export PATH="$HOME/bin:$PATH"
-    
+
     # Initialize Lefthook in the repository
     ~/bin/lefthook install
     ```

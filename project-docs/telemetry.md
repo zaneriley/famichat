@@ -39,4 +39,4 @@ Telemetry is a key tool for monitoring the performance and behavior of the Famic
   - Every new or modified function should incorporate telemetry spans as part of its design.
   - In our code reviews, we will verify that performance-critical paths are appropriately instrumented.
 
-*Last Updated: [Insert Date]* 
+*Last Updated: June 14, 2025*
