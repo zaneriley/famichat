@@ -79,11 +79,11 @@ For now, this repo is mainly a playground to test out:
 
     This command will:
     *   Build and launch a PostgreSQL database container on port `5432`.
-    *   Build and launch the Phoenix backend container, accessible on port `4000`.
+    *   Build and launch the Phoenix backend container, accessible on port `8001`.
 
 4.  **Verify the Backend:**
 
-    Open your web browser and navigate to [http://localhost:4000](http://localhost:4000). You should see the default Phoenix "Welcome to Phoenix!" page or a "Hello from Famichat!" message if you've customized the root route.
+    Open your web browser and navigate to http://localhost:8001. (This is the default port; it can be configured by setting `DOCKER_WEB_PORT_FORWARD` in your `.env` file). You should see the default Phoenix "Welcome to Phoenix!" page or a "Hello from Famichat!" message if you've customized the root route.
 
 5.  **Set up Flutter Web Development (if needed):**
 
@@ -182,25 +182,12 @@ Famichat uses [Lefthook](https://github.com/evilmartians/lefthook) to manage Git
 ### Backend (Phoenix/Elixir)
 
 *   **Directory:** `backend/`
-    *   Most backend commands can be run using `./run <mix_task>` from the `backend/` directory or via npm/yarn scripts from the `backend/assets/` directory (e.g., `npm run be:migrate` or `yarn be:migrate`).
-*   **Running Migrations:**
-    *   `cd backend && ./run mix ecto.migrate`
-    *   or `cd backend/assets && npm run be:migrate`
-*   **Rollback Migrations:**
-    *   `cd backend && ./run mix ecto.rollback`
-    *   or `cd backend/assets && npm run be:rollback`
-*   **Running Tests:**
-    *   `cd backend && ./run mix test`
-    *   or `cd backend/assets && npm run be:test`
-*   **Running IEx Console:**
-    *   `cd backend && ./run iex -S mix`
-    *   or `cd backend/assets && npm run be:iex`
-*   **Code Formatting (Elixir):**
-    *   `cd backend && ./run mix format`
-    *   or `cd backend/assets && npm run be:format`
-*   **Code Analysis (Credo):**
-    *   `cd backend && ./run mix credo`
-    *   or `cd backend/assets && npm run be:credo`
+*   **Running Migrations:** `cd backend && ./run mix ecto.migrate`
+*   **Rollback Migrations:** `cd backend && ./run mix ecto.rollback`
+*   **Running Tests:** `cd backend && ./run mix test`
+*   **Running IEx Console:** `cd backend && ./run iex -S mix`
+*   **Code Formatting (Elixir):** `cd backend && ./run mix format`
+*   **Code Analysis (Credo):** `cd backend && ./run mix credo`
 
 ### Frontend (Flutter)
 
@@ -252,9 +239,7 @@ While Famichat can be developed using a variety of text editors and IDEs, we rec
 *   **Linting:**
     *   **Elixir (Credo):**
         *   The `ElixirLS` extension usually integrates Credo findings, displaying them in the "Problems" panel of VS Code.
-        *   For manual checks from the terminal:
-            *   Navigate to `backend/assets/` and run `npm run be:credo` (or `yarn be:credo`).
-            *   Alternatively, from `backend/`, run `./run mix credo`.
+        *   For manual checks from the terminal run `cd backend && ./run mix credo`.
     *   **Flutter:**
         *   The Dart/Flutter extension integrates `flutter analyze` directly into the IDE, showing issues in the "Problems" panel.
         *   You can also run `flutter analyze` manually in the `flutter/famichat` directory.
@@ -275,7 +260,7 @@ While Famichat can be developed using a variety of text editors and IDEs, we rec
 
 *   **Using `IEx.pry`**:
     *   You can insert `require IEx; IEx.pry` into your Elixir code where you want to start a debugging session.
-    *   Run the backend in an IEx session: `cd backend/assets && npm run be:iex` (or `yarn be:iex`).
+    *   Run the backend in an IEx session: `cd backend && ./run iex -S mix`.
     *   When the code execution reaches `IEx.pry`, the IEx session will become interactive, allowing you to inspect variables, execute code, and use `respawn/0` to re-enter the pry session after code changes, or `continue/0` to resume execution.
 *   **Viewing Logs**:
     *   To view real-time logs from the backend container: `docker-compose logs -f backend`
