@@ -8,12 +8,12 @@ defmodule FamichatWeb.Telemetry do
   """
 
   use Supervisor
-  import Telemetry.Metrics
   require Logger
+  import Telemetry.Metrics
 
   # Common constants
   @sensitive_metadata_fields ~w(version_tag encryption_flag key_id)
-  @default_performance_budget_ms 200
+  @default_performance_budget_ms 50
 
   def start_link(arg) do
     Supervisor.start_link(__MODULE__, arg, name: __MODULE__)

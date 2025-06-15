@@ -339,15 +339,19 @@ defmodule Famichat.Chat.ConversationService do
         |> Ecto.Multi.insert(
           :admin_privilege,
           fn %{conversation: conversation} ->
-            GroupConversationPrivileges.changeset(%GroupConversationPrivileges{}, %{
-              conversation_id: conversation.id,
-              user_id: user_id,
-              role: :admin,
-              granted_by_id: user_id
-            })
+            GroupConversationPrivileges.changeset(
+              %GroupConversationPrivileges{},
+              %{
+                conversation_id: conversation.id,
+                user_id: user_id,
+                role: :admin,
+                granted_by_id: user_id
+              }
+            )
           end
         )
-        |> Ecto.Multi.run(:preload_users, fn repo, %{conversation: conversation} ->
+        |> Ecto.Multi.run(:preload_users, fn repo,
+                                             %{conversation: conversation} ->
           {:ok, repo.preload(conversation, :users)}
         end)
 

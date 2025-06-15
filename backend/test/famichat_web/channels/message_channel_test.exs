@@ -275,6 +275,60 @@ defmodule FamichatWeb.MessageChannelTest do
       refute Map.has_key?(metadata, :encryption_flag)
       refute Map.has_key?(metadata, :encryption_version)
     end
+
+    test "emits :authorize_conversation_access telemetry event on successful join",
+         %{socket: socket} do
+      handler_id = :"telemetry_handler_#{System.unique_integer([:positive])}"
+      test_pid = self()
+
+      event_name_to_capture = [
+        :famichat,
+        :message_channel,
+        :join,
+        :authorize_conversation_access,
+        :stop
+      ]
+
+      :ok =
+        :telemetry.attach(
+          handler_id,
+          event_name_to_capture,
+          fn ev_name, measurements, metadata, _config ->
+            send(
+              test_pid,
+              {:telemetry_event_received, ev_name, measurements, metadata}
+            )
+          end,
+          nil
+        )
+
+      # The socket from setup is already connected with @valid_user_id
+      # Join a "direct" conversation
+      conversation_id = "conv456"
+      conversation_type = "direct"
+      topic = "message:#{conversation_type}:#{conversation_id}"
+
+      assert {:ok, _reply, _socket} =
+               subscribe_and_join(socket, MessageChannel, topic)
+
+      # Assert that the specific telemetry event was received
+      assert_receive {
+                       :telemetry_event_received,
+                       actual_event_name,
+                       measurements,
+                       metadata
+                     },
+                     @telemetry_timeout
+
+      assert actual_event_name == event_name_to_capture
+      # This comes from the socket setup
+      assert metadata.user_id == @valid_user_id
+      assert metadata.conversation_id == conversation_id
+      assert metadata.conversation_type == conversation_type
+      assert is_integer(measurements.duration)
+
+      :telemetry.detach(handler_id)
+    end
   end
 
   describe "message broadcasting - type-aware format" do

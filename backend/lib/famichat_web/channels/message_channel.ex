@@ -91,9 +91,10 @@ defmodule FamichatWeb.MessageChannel do
 
   use Phoenix.Channel
   require Logger
+  alias Famichat.Chat
 
   @encryption_metadata_fields ~w(version_tag encryption_flag key_id)
-  @default_perf_budget 200
+  @default_perf_budget 50
 
   @doc """
   Handles joining the message channel.
@@ -156,31 +157,17 @@ defmodule FamichatWeb.MessageChannel do
   defp handle_type_aware_join(socket, type, id, user_id, measurements) do
     # Perform type-specific authorization checks
     authorized =
-      case type do
-        "self" ->
-          # For self conversations, only the creator can access
-          # In a real implementation, this would query the database
-          # For now, we'll assume the ID contains the user_id for demo purposes
-          id == user_id
-
-        "direct" ->
-          # For direct conversations, only the two participants can access
-          # In a real implementation, this would query the database
-          # For now, we'll authorize all for demo purposes
-          true
-
-        "group" ->
-          # For group conversations, only active members can access
-          # In a real implementation, this would query the database
-          # For now, we'll authorize all for demo purposes
-          true
-
-        "family" ->
-          # For family conversations, all family members have access
-          # In a real implementation, this would query the database
-          # For now, we'll authorize all for demo purposes
-          true
-      end
+      FamichatWeb.Telemetry.with_telemetry(
+        [:famichat, :message_channel, :join, :authorize_conversation_access],
+        %{user_id: user_id, conversation_id: id, conversation_type: type},
+        fn ->
+          Famichat.Chat.user_authorized_for_conversation?(
+            user_id,
+            id,
+            type
+          )
+        end
+      )
 
     if authorized do
       Logger.debug(
