@@ -3,9 +3,15 @@ defmodule Famichat.Chat do
   The Chat context.
   """
 
+  use Ecto.Schema
+  require Logger
+  import Ecto.Changeset
   import Ecto.Query, warn: false
+
+  alias Famichat.Chat.Conversation
+  alias Famichat.Chat.ConversationVisibilityService
+  alias Famichat.Chat.{Family, User}
   alias Famichat.Repo
-  alias Famichat.Chat.{User, Family}
 
   @doc """
   Returns the list of families.
@@ -168,9 +174,6 @@ defmodule Famichat.Chat do
 
   ## Conversation Visibility
 
-  alias Famichat.Chat.Conversation
-  alias Famichat.Chat.ConversationVisibilityService
-
   @doc """
   Hides a conversation for a specific user.
 
@@ -223,5 +226,37 @@ defmodule Famichat.Chat do
         ]
   def list_visible_conversations(user_id, opts \\ []) do
     ConversationVisibilityService.list_visible_conversations(user_id, opts)
+  end
+
+  @doc """
+  Checks if a user is authorized for a conversation.
+
+  ## Parameters
+    - socket: The Phoenix socket
+    - user_id: The ID of the user
+    - conversation_id: The ID of the conversation
+    - conversation_type: The type of the conversation ("self", "direct", "group", "family")
+
+  ## Returns
+    - `true` if the user is authorized
+    - `false` otherwise
+  """
+  def user_authorized_for_conversation?(
+        socket,
+        user_id,
+        conversation_id,
+        conversation_type
+      ) do
+    Logger.debug(
+      "user_authorized_for_conversation? called with user_id: #{inspect(user_id)}, " <>
+        "conversation_id: #{inspect(conversation_id)}, conversation_type: #{inspect(conversation_type)}"
+    )
+
+    # Placeholder authorization logic
+    case conversation_type do
+      "self" -> conversation_id == user_id
+      # For "direct", "group", "family", return true for now
+      _ -> true
+    end
   end
 end

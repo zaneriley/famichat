@@ -373,7 +373,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
           ConversationService.assign_admin(
             group_conversation.id,
             admin_user.id,
-            group_creator.id # The creator (original admin) grants this
+            # The creator (original admin) grants this
+            group_creator.id
           )
       end
 
@@ -391,7 +392,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
     end
 
     test "auto-assigns creator as admin when creating a group conversation", %{
-      group_creator: group_creator, # Use the actual creator from the fixture
+      # Use the actual creator from the fixture
+      group_creator: group_creator,
       group_conversation: group_conversation
     } do
       # Check if the group creator (from the fixture) has admin privileges
@@ -403,17 +405,21 @@ defmodule Famichat.Chat.ConversationServiceTest do
     end
 
     test "prevents removing the last admin from a group", %{
-      group_creator: group_creator, # The actual admin of this specific conversation
+      # The actual admin of this specific conversation
+      group_creator: group_creator,
       group_conversation: group_conversation,
-      admin_user: admin_user # The admin performing the action (could be group_creator or another admin)
+      # The admin performing the action (could be group_creator or another admin)
+      admin_user: admin_user
     } do
       # Ensure the action is performed by an admin (admin_user is now guaranteed to be one for this group)
       # The user whose privilege is being changed is the group_creator (the last admin)
       {:error, :last_admin} =
         ConversationService.assign_member(
           group_conversation.id,
-          group_creator.id, # Target the actual last admin
-          admin_user.id # Action performed by an admin
+          # Target the actual last admin
+          group_creator.id,
+          # Action performed by an admin
+          admin_user.id
         )
 
       # Try to remove the only admin's privileges
@@ -424,8 +430,10 @@ defmodule Famichat.Chat.ConversationServiceTest do
       {:error, :last_admin} =
         ConversationService.remove_privilege(
           group_conversation.id,
-          group_creator.id, # Target the actual last admin
-          admin_user.id # Action performed by an admin (or nil if self-removal)
+          # Target the actual last admin
+          group_creator.id,
+          # Action performed by an admin (or nil if self-removal)
+          admin_user.id
         )
     end
 

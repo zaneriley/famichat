@@ -17,7 +17,12 @@ defmodule Famichat.ChatFixtures do
       conv = ChatFixtures.conversation_fixture()
   """
 
-  alias Famichat.Chat.{Conversation, ConversationParticipant, ConversationService}
+  alias Famichat.Chat.{
+    Conversation,
+    ConversationParticipant,
+    ConversationService
+  }
+
   alias Famichat.Repo
 
   @doc """
