@@ -162,7 +162,6 @@ defmodule FamichatWeb.MessageChannel do
         %{user_id: user_id, conversation_id: id, conversation_type: type},
         fn ->
           Famichat.Chat.user_authorized_for_conversation?(
-            socket,
             user_id,
             id,
             type

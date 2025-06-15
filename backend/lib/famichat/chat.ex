@@ -232,7 +232,6 @@ defmodule Famichat.Chat do
   Checks if a user is authorized for a conversation.
 
   ## Parameters
-    - socket: The Phoenix socket
     - user_id: The ID of the user
     - conversation_id: The ID of the conversation
     - conversation_type: The type of the conversation ("self", "direct", "group", "family")
@@ -242,7 +241,6 @@ defmodule Famichat.Chat do
     - `false` otherwise
   """
   def user_authorized_for_conversation?(
-        socket,
         user_id,
         conversation_id,
         conversation_type
@@ -252,11 +250,34 @@ defmodule Famichat.Chat do
         "conversation_id: #{inspect(conversation_id)}, conversation_type: #{inspect(conversation_type)}"
     )
 
-    # Placeholder authorization logic
     case conversation_type do
-      "self" -> conversation_id == user_id
-      # For "direct", "group", "family", return true for now
-      _ -> true
+      "self" ->
+        # For self conversations, only the creator can access
+        # In a real implementation, this would query the database
+        # For now, we'll assume the ID contains the user_id for demo purposes
+        conversation_id == user_id
+
+      "direct" ->
+        # For direct conversations, only the two participants can access
+        # In a real implementation, this would query the database
+        # For now, we'll authorize all for demo purposes
+        true
+
+      "group" ->
+        # For group conversations, only active members can access
+        # In a real implementation, this would query the database
+        # For now, we'll authorize all for demo purposes
+        true
+
+      "family" ->
+        # For family conversations, all family members have access
+        # In a real implementation, this would query the database
+        # For now, we'll authorize all for demo purposes
+        true
+
+      _ ->
+        # Default case
+        false
     end
   end
 end
