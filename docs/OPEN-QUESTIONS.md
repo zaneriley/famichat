@@ -10,37 +10,51 @@ This document tracks architectural and product decisions that require discussion
 
 ### Q1: Encryption Protocol Choice
 
-**Status**: ✅ **RECOMMENDED DECISION: Use MLS for all conversations**
+**Status**: ✅ **RESOLVED: Signal Protocol**
 
-**Updated Context**: Based on research, MLS is production-ready (Wire deployed to 2000-member groups), standardized (RFC 9420/9750), and provides superior security (Post-Compromise Security, cryptographic membership proofs).
+**Final Decision**: Use Signal Protocol for all E2EE messaging
 
-**Recommendation**: **MLS-Only**
-- All conversations: MLS (~150ms for groups)
-- Single protocol (avoid dual-protocol complexity)
-- Superior security: PCS + FS + cryptographic membership
-- Production-proven: Wire, Google RCS integration
-- Future-proof: IETF standard, industry adoption
-- Implementation: OpenMLS (Rust) via Rustler NIF
+**Rationale**:
+- **Right-sized for families**: 2-6 people per household (not 100+ person groups)
+- **Performance**: 30-90ms for families (well within 200ms budget)
+- **Battle-tested**: WhatsApp, Signal, 2B+ users
+- **Deniability**: Better for family trust (vs MLS signatures)
+- **Simpler**: Easier to implement than MLS (5 weeks vs 8 weeks)
 
-**Why MLS beats alternatives**:
-1. **vs Signal**: Signal can't scale to groups (2000ms for 100 people), no PCS
-2. **vs Megolm**: No PCS (once compromised stays compromised), not standardized
-3. **vs Hybrid**: Dual-protocol complexity, inconsistent security, marginal performance benefit
+**Alternatives Evaluated**:
 
-**Tradeoff**: Requires budget adjustment (200ms → 300ms end-to-end)
-- Still acceptable: Below 400ms "slow" threshold
-- Industry standard: WhatsApp ~300ms
-- Self-hosted network savings (10-30ms) offset encryption cost
+1. **MLS (Rejected)**
+   - ✅ Superior for large groups (100+ people)
+   - ❌ Overkill for families (tree overhead unnecessary at 2-6 people scale)
+   - ❌ No deniability (signatures prove authorship)
+   - ❌ Higher complexity (epoch management, tree operations)
+   - **Conclusion**: MLS wins at >20 people. Famichat families are 2-6 people.
 
-**User Decision Needed**:
-1. Approve MLS as encryption protocol? (Recommended: Yes)
-2. Approve budget adjustment to 300ms? (Recommended: Yes, see Q2)
+2. **Megolm/Matrix (Rejected)**
+   - ✅ Decent performance (~110ms for 100 people)
+   - ❌ No Post-Compromise Security (once compromised, stays compromised)
+   - ❌ Not standardized (Matrix-specific, vendor lock-in)
+   - ❌ Platform coupling (implies Matrix ecosystem dependency)
+   - **Conclusion**: Inferior security, no advantage for families
 
-**Dependencies**:
-- Q2 (budget flexibility) - linked decision
-- Sprint 10 (E2EE implementation) can proceed once approved
+3. **No E2EE (Rejected)**
+   - ✅ Simplest implementation
+   - ❌ Impossible to retrofit later (must build in from Day 1)
+   - ❌ No zero-knowledge (admin can read messages)
+   - ❌ User expectation (modern apps have E2EE)
+   - **Conclusion**: E2EE is table stakes, must have from start
 
-**See**: [ENCRYPTION.md](ENCRYPTION.md#protocol-recommendation) for detailed analysis
+**Implementation**:
+- libsignal-client (Rust) via Rustler NIF
+- X3DH + Double Ratchet
+- Pairwise encryption for groups
+- Timeline: 5 weeks (Sprints 8-12)
+
+**Re-evaluation Trigger**:
+- If Layer 5 (inter-family channels) scales >30 people and latency >400ms
+- Then consider: Hybrid approach (Signal for families, MLS for large channels)
+
+**See**: [ADR 006](decisions/006-signal-protocol-for-e2ee.md) for full evaluation
 
 ---
 

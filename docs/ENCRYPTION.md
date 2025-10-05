@@ -8,308 +8,356 @@
 
 Famichat uses a **hybrid encryption approach**:
 
-1. **Client-Side E2EE** (Planned): Signal Protocol for message content
-2. **Field-Level Encryption**: Cloak.Ecto for sensitive user data (email, tokens)
+1. **Server-Side E2EE**: Signal Protocol for message content (backend Rust NIF + libsignal-client)
+2. **Field-Level Encryption**: Cloak.Ecto for sensitive user data (email, tokens, keys)
 3. **Infrastructure Encryption**: Database encryption at rest
 
+**Trust Model**: Self-hosted = you control the backend. Server has decryption keys but you own the server (similar to Signal's sealed sender trust model).
+
 ---
 
-## Current Status
+## Current Status (End of Sprint 7)
 
-### ✅ Implemented
-- Encryption infrastructure (schema fields, serialization)
-- Metadata storage in JSONB `messages.metadata`
+### ✅ Implemented - Encryption Metadata Infrastructure
+- Encryption metadata storage in JSONB `messages.metadata` field
+- `serialize_message/1` - Stores encryption metadata from params
+- `deserialize_message/1` - Retrieves encryption metadata
+- `requires_encryption?/1` - Policy enforcement (all conversation types require encryption)
+- Telemetry tracking for encryption status (enabled/disabled/missing)
 - Telemetry filtering (prevents sensitive data leaks)
 - Token-based channel authentication
+- **Tests**: [decryption_test.exs](../backend/test/famichat/messages/decryption_test.exs) validates metadata flow
 
-### ❌ Not Implemented (CRITICAL GAP)
-- No actual cryptography
-- No key exchange
-- No client-side encryption
-- No key management system
+### ❌ Not Implemented - Actual Cryptography
+- ⚠️ **CRITICAL**: **Messages currently stored in plaintext**
+- No libsignal-client library (Rust crate)
+- No Rustler NIF integration
+- No X3DH key exchange implementation
+- No Double Ratchet encryption/decryption
+- No key management system (identity keys, prekeys, sessions)
+- No Cloak.Ecto vault for key encryption at rest
+- `decrypt_message/1` is a **placeholder stub** (no actual decryption logic)
 
----
+### 🔄 Planned Implementation
 
-## Protocol Evaluation
+**Sprint 9 (3 weeks)**: Signal Protocol via Server-Side Rust NIF
+- Week 1-2: Rustler + libsignal-client setup, basic encryption tests
+- Week 2-3: X3DH key exchange, database schema for keys, Cloak.Ecto vault
+- Week 3: Wire up message encryption/decryption, integration tests
 
-Famichat requires <50ms encryption budget to meet <200ms end-to-end latency target. Different E2EE protocols have vastly different performance characteristics at neighborhood scale (100-500 people).
-
-### Signal Protocol
-
-**Status**: ❌ Rejected for group conversations
-
-**Performance**:
-- 1:1 conversations: ~15ms ✅
-- Group conversations (100 people): ~2000ms ❌
-
-**Problem**: Signal uses pairwise encryption. For N-person group:
-- Sender must encrypt message N times (once per recipient)
-- At 100 recipients: 100 × 20ms = 2000ms
-- Exceeds 50ms budget by 40x
-
-**Conclusion**: Signal Protocol works for direct conversations but cannot be used for neighborhood-scale groups.
+**Sprint 10 (2 weeks)**: Layer 0 Dogfooding with Encryption Enabled
 
 ---
 
-### Megolm (Matrix Protocol)
+## Protocol Choice: Signal Protocol
 
-**Status**: ⚠️ Viable option, requires evaluation
+**Decision**: Use Signal Protocol for all end-to-end encrypted messaging.
 
-**Performance**:
-- Group conversations (100 people): ~110ms
-- Exceeds 50ms budget but within tolerance (2.2x)
+**Why Signal?**
+- **Right-sized for families**: Optimized for 2-6 person households (primary use case)
+- **Battle-tested**: WhatsApp (2B+ users), Signal, Facebook Messenger
+- **Performance**: 30-90ms for family groups (well within 200ms budget)
+- **Deniability**: Messages use MACs (not signatures), better for family trust dynamics
+- **Mature ecosystem**: libsignal-client actively maintained by Signal Foundation
 
-**Advantages**:
-- Sender encrypts once, all recipients decrypt with shared ratchet
-- Mature implementation (Matrix uses in production)
-- Open specification
-- Good forward secrecy
-
-**Tradeoffs**:
-- Slightly weaker security model than Signal (shared group key)
-- Key rotation complexity for large groups
-- Recovery from compromise requires group rekey
-
-**See**: [Megolm Spec](https://gitlab.matrix.org/matrix-org/olm/-/blob/master/docs/megolm.md)
+**Alternatives Evaluated** (see [ADR 006](decisions/006-signal-protocol-for-e2ee.md)):
+- ❌ **MLS**: Overkill for small groups (2-6 people), tree overhead unnecessary
+- ❌ **Megolm**: No Post-Compromise Security, Matrix-specific (vendor lock-in)
+- ❌ **No E2EE**: Impossible to retrofit later, user expectation for secure messaging
 
 ---
 
-### MLS (Message Layer Security - IETF)
+## Signal Protocol Architecture
 
-**Status**: ✅ Recommended - Standardized and production-ready
+### Components
 
-**Performance**:
-- **Message encryption/decryption**: 5-10ms (symmetric AEAD after group established)
-- **Group operations** (setup, add/remove member, key rotation): ~150ms for 100-person group
-  - Infrequent operations (group creation, membership changes, periodic key rotation)
-  - Logarithmic cost (scales efficiently even to 10,000+ members)
-- **Regular messaging**: Fits within 50ms encryption budget ✅
-- **Group management**: Exceeds budget but acceptable (infrequent, not on critical messaging path)
+**1. X3DH (Extended Triple Diffie-Hellman)**
+- Asynchronous key agreement (works when recipient offline)
+- Initial session establishment between users
+- Uses identity keys + ephemeral prekeys
+- Performance: ~15ms for 1:1 key exchange
 
-**Advantages**:
-- **Standardized**: RFC 9420 (July 2023) + RFC 9750 Architecture (April 2025)
-- **Production-proven**: Wire deployed MLS to all products (2000-member groups)
-- **Industry adoption**: Google integrating into RCS, Matrix experimenting, major vendors participating
-- **Superior security model**:
-  - Forward Secrecy (FS): Past messages safe even if current keys compromised
-  - Post-Compromise Security (PCS): Recovery from device compromise via key updates
-  - Strong authentication: Cryptographic member verification, prevents impersonation
-  - Group membership controls: Former members automatically lose access
-  - Server/network adversary resistance: Untrusted delivery service, E2EE guaranteed
-- **Scalability**: Logarithmic operations (tree-based), tested to 10,000+ members
-- **Future-proof**: IETF standard, multiple implementations, interoperability testing
+**2. Double Ratchet**
+- Forward secrecy (past messages safe if keys compromised)
+- Post-compromise security (future messages safe after key rotation)
+- Automatic per-message key derivation
+- Performance: ~15ms per message encryption/decryption
 
-**Security Advantages Over Signal/Megolm**:
-1. **Post-Compromise Security**: Automatic recovery from device compromise (Signal/Megolm lack this)
-2. **Cryptographic membership proofs**: Verifiable group roster (prevents server manipulation)
-3. **Standardized interoperability**: Future cross-platform messaging (EU DMA compliance path)
-4. **Continuous key agreement**: Stronger than Megolm's shared ratchet
+**3. Pairwise Encryption for Groups**
+- Each group message encrypted separately for each recipient
+- N-person group = N separate encryptions
+- Performance scales linearly: O(n)
+  - 2 people: 30ms
+  - 6 people: 90ms
+  - 30 people: 450ms (Layer 5 upper bound)
 
-**Implementation Considerations**:
-- **Library**: OpenMLS (Rust) via Rustler NIF
-  - Mature: v0.6 (approaching 1.0), production use at Wire
-  - Safe: Rust memory safety + high-level API
-  - Active development: Post-quantum experiments, storage traits
-- **State management**: Requires persistent storage of group state (ETS/database)
-  - Each group = GenServer managing MLS context
-  - Must handle epoch updates, membership changes
-- **Integration complexity**: Higher than Megolm (tree structures, epochs, proposals/commits)
-  - Offset by robust library (OpenMLS handles protocol complexity)
-- **NIF considerations**: Rustler makes safe, but test thoroughly
-  - Use dirty schedulers for crypto operations
+### Performance Characteristics
 
-**Tradeoffs**:
-- Group operations (150ms) slower than message encryption (5-10ms)
-  - Acceptable: Group changes infrequent (user joins/leaves, periodic key rotation)
-  - Not on critical path: Regular messaging unaffected
-- Complex state management (but OpenMLS provides storage interface)
-- Foreign dependency (Rust via NIF, but Rustler well-established)
-- API still evolving (pre-1.0, expect breaking changes until stable)
-
-**Security Limitations** (application must handle):
-1. **No protection against malicious insiders**: Legitimate members can leak plaintext
-2. **Replay attacks within epoch**: Insiders can re-send messages (app must track message IDs)
-3. **Idle device risk**: Long-offline devices miss key updates (app should evict idle devices)
-4. **No deniability**: Signatures prove message authenticity to third parties (vs Signal's deniability)
-
-**See**:
-- [RFC 9420 (MLS Protocol)](https://datatracker.ietf.org/doc/rfc9420/)
-- [RFC 9750 (MLS Architecture)](https://datatracker.ietf.org/doc/rfc9750/)
-- [OpenMLS (Rust implementation)](https://github.com/openmls/openmls)
-- [Wire MLS Announcement](https://wire.com/) (production case study)
-
----
-
-### Protocol Recommendation
-
-**Decision**: Use MLS for all conversations
-
-**Rationale**:
-1. **Superior security**: Post-Compromise Security + Forward Secrecy + cryptographic membership
-2. **Single protocol**: Avoid complexity of dual-protocol (Signal + Megolm) system
-3. **Production-proven**: Wire successfully deployed to 2000-member groups
-4. **Future-proof**: IETF standard, industry moving toward MLS for interoperability
-5. **Scalability**: Logarithmic operations handle neighborhood scale (100-500 people) efficiently
-6. **Trust model alignment**: Designed for untrusted servers (matches self-hosted neighborhood model)
-
-**Performance analysis**:
-- **Message encryption**: 5-10ms (within 50ms budget) ✅
-- **Group operations**: 150ms for 100-person group (infrequent, not on critical path)
-- **Total messaging latency**: ~220ms (10ms encrypt + 100ms network + 10ms decrypt + 100ms other)
-  - Meets original 200ms target ✅
-  - Self-hosted deployment (10-30ms network) provides budget margin
-- **Group management latency**: ~150ms (acceptable for infrequent operations like adding members)
-
-**Complexity tradeoff**:
-- Higher integration complexity than Megolm
-- Offset by:
-  - OpenMLS handles protocol complexity (high-level API)
-  - Single protocol simpler than dual-protocol maintenance
-  - Superior security worth engineering investment
-
-**Why not Signal Protocol**:
-- Group encryption: 2000ms for 100 people (pairwise encryption doesn't scale)
-- No Post-Compromise Security (MLS provides automatic recovery)
-- Only viable for 1:1 conversations (neighborhood scale requires groups)
-
-**Why not Megolm**:
-- No Post-Compromise Security (once compromised, stays compromised)
-- Weaker security model (shared group key vs MLS continuous agreement)
-- Not an IETF standard (Matrix-specific, limited interoperability)
-- Similar message performance (5-10ms) but inferior security
-
-**Why not Hybrid (Signal + Megolm/MLS)**:
-- Dual-protocol complexity: Maintain two implementations, two security models
-- Protocol switching logic: Risk of bugs at boundaries
-- Inconsistent security guarantees across conversation types
-- No performance benefit: All protocols ~5-10ms for message encryption
-
----
-
-## Encryption Performance Constraints
-
-### Budget Allocation (50ms total)
-
+**Family Scale (Layers 1-4):**
 ```
-Key derivation: 10ms
-  → Signing operation: 10ms
-  → Encryption operation: 20ms
-  → Serialization: 10ms
-= 50ms total
+2 people (Layer 1 Dyad):           15ms × 2 = 30ms   ✅
+4 people (Layer 2 Triad):          15ms × 4 = 60ms   ✅
+6 people (Layer 3 Extended):       15ms × 6 = 90ms   ✅
 ```
 
-### Optimization Strategies
+**Inter-Family Scale (Layer 5, if needed):**
+```
+20 people (4 families):            15ms × 20 = 300ms  ⚠️ Borderline
+30 people (5 families):            15ms × 30 = 450ms  ⚠️ Upper limit
+```
 
-1. **Precompute Keys**: Derive session keys during idle time
-   - Background task generates keys for active conversations
-   - Reduces encryption time from 50ms → 20ms (2.5x improvement)
-
-2. **Hardware Acceleration**: Use platform crypto APIs
-   - iOS: CryptoKit (hardware-accelerated AES, Curve25519)
-   - Android: Keystore + BoringSSL
-   - Estimated 2-5x speedup vs pure software crypto
-
-3. **Batch Encryption**: Encrypt multiple messages in single operation
-   - Amortize key derivation cost across messages
-   - Useful for message queues (offline → online sync)
-
-4. **Cache Derived Keys**: Store session keys for active conversations
-   - Avoid redundant key derivation
-   - Trade memory for CPU (acceptable on modern devices)
+**Conclusion**: Signal performs excellently for family messaging (primary use case). Layer 5 may need evaluation if groups regularly exceed 30 people.
 
 ---
 
-## Planned Implementation (Sprint 10+)
+## Implementation Plan (Sprint 9 - 3 Weeks)
 
-### Phase 1: Direct Conversations (Sprint 10-12)
-**Protocol**: Signal Protocol (X3DH + Double Ratchet)
+### Phase 1: Rust NIF + libsignal-client (Week 1-2)
 
-**Components**:
-1. **X3DH** (Extended Triple Diffie-Hellman)
-   - Initial key agreement
-   - Asynchronous (works when recipient offline)
-   - Performance: ~15ms for 1:1 key exchange
+**Approach**: Server-side encryption via Rust NIF (not client-side JavaScript)
 
-2. **Double Ratchet**
-   - Forward secrecy
-   - Post-compromise security
-   - Per-message key derivation
-   - Performance: ~15ms per message
+**Goal**: Integrate libsignal-client into Elixir via Rustler NIF
 
-3. **Key Management**
-   - Secure key storage (iOS Keychain, Android Keystore)
-   - Automatic key rotation
-   - Backup/recovery mechanism (user-controlled)
+**Tasks**:
+1. Add Rust toolchain to Docker (multi-stage build)
+2. Create Rustler NIF wrapper
+3. Add libsignal-client dependency
+4. Implement error handling + telemetry
+5. Test basic encrypt/decrypt functions
 
-**Timeline**: 3 sprints (6 weeks)
+**Deliverable**: Can call Signal functions from Elixir
 
----
-
-### Phase 2: Group Conversations (Sprint 13-15)
-**Protocol**: Megolm (Matrix Protocol)
-
-**Components**:
-1. **Outbound Group Session**
-   - Sender-side ratchet
-   - Shared among all group members
-   - Performance: ~110ms for 100-person group
-
-2. **Inbound Group Session**
-   - Recipient-side decryption
-   - Fast (no per-message key derivation)
-   - Performance: ~5ms per message
-
-3. **Key Distribution**
-   - Signal Protocol for key transport (secure channel)
-   - Initial group key sent to all members
-   - Key rotation on membership changes
-
-**Timeline**: 3 sprints (6 weeks)
-
----
-
-### Phase 3: Optimization (Sprint 16+)
-**Focus**: Meet 50ms encryption budget
-
-**Optimizations**:
-1. Hardware acceleration (CryptoKit, Keystore)
-2. Key precomputation (background tasks)
-3. Key caching (active conversations)
-4. Binary serialization (replace JSON)
-
-**Target Performance**:
-- Direct: 5ms (down from 15ms)
-- Groups: 50ms (down from 110ms)
-
-**Timeline**: 2 sprints (4 weeks)
-
----
-
-## Message Encryption Flow
-
-### Current (Placeholder)
 ```elixir
-# Message created with empty encryption fields
-message = %Message{
-  content: "Hello",
-  metadata: %{}  # Empty - no encryption
-}
+# lib/famichat/crypto/signal.ex
+defmodule Famichat.Crypto.Signal do
+  use Rustler, otp_app: :famichat, crate: "signal_nif"
+
+  def generate_identity_key(_user_id), do: :erlang.nif_error(:nif_not_loaded)
+  def generate_prekeys(_user_id, _count), do: :erlang.nif_error(:nif_not_loaded)
+  def create_session(_sender_id, _recipient_prekey), do: :erlang.nif_error(:nif_not_loaded)
+  def encrypt(_session_id, _plaintext), do: :erlang.nif_error(:nif_not_loaded)
+  def decrypt(_session_id, _ciphertext), do: :erlang.nif_error(:nif_not_loaded)
+end
 ```
 
-### Planned (E2EE)
-```elixir
-# Client encrypts before sending
-encrypted_content = encrypt(plaintext, recipient_keys)
+---
 
-message = %Message{
-  content: encrypted_content,  # Ciphertext
-  metadata: %{
-    encryption_version: "v1.0.0",
-    encryption_flag: true,
-    key_id: "KEY_USER_v1",
-    # Additional Signal Protocol metadata
-  }
-}
+### Phase 2: Key Management (Week 2-3)
+
+**Goal**: Users have Signal identity keys and can establish sessions
+
+**Database Schema**:
+```sql
+-- User identity keys (long-term)
+CREATE TABLE signal_identity_keys (
+  user_id UUID PRIMARY KEY,
+  public_key BYTEA NOT NULL,
+  private_key_encrypted BYTEA NOT NULL,  -- Encrypted with user password
+  created_at TIMESTAMP NOT NULL
+);
+
+-- Prekeys (one-time use for session establishment)
+CREATE TABLE signal_prekeys (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  prekey_id INTEGER NOT NULL,
+  public_key BYTEA NOT NULL,
+  private_key_encrypted BYTEA NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL,
+  UNIQUE(user_id, prekey_id)
+);
+
+-- Active sessions (pairwise between users)
+CREATE TABLE signal_sessions (
+  id UUID PRIMARY KEY,
+  local_user_id UUID NOT NULL,
+  remote_user_id UUID NOT NULL,
+  session_state BYTEA NOT NULL,  -- Serialized Double Ratchet state
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  UNIQUE(local_user_id, remote_user_id)
+);
+```
+
+**Tasks**:
+1. Create Cloak.Ecto vault for key encryption at rest
+2. Generate identity keys on user signup (encrypted with Cloak)
+3. Generate 100 prekeys per user (replenish when <20 remain)
+4. Implement X3DH session establishment (server-side NIF call)
+5. Store session state (Double Ratchet state, encrypted at rest)
+6. Handle session updates (ratchet forward on each message)
+
+**Deliverable**: Users can establish encrypted sessions (keys stored encrypted in database)
+
+---
+
+### Phase 3: Message Encryption Integration (Week 3)
+
+**Goal**: Messages encrypted end-to-end using Signal Protocol
+
+**Updated Message Schema**:
+```elixir
+schema "messages" do
+  field :content, :binary  # Encrypted ciphertext
+  field :encrypted, :boolean, default: true
+
+  # Encryption metadata (separate table per ADR 005)
+  has_one :encryption, MessageEncryption
+
+  belongs_to :sender, User
+  belongs_to :conversation, Conversation
+
+  timestamps()
+end
+```
+
+**Encryption Flow**:
+```elixir
+# 1:1 Conversation
+def create_message(sender_id, recipient_id, plaintext) do
+  with {:ok, session} <- get_or_create_session(sender_id, recipient_id),
+       {:ok, ciphertext} <- Crypto.Signal.encrypt(session.id, plaintext) do
+    %Message{
+      sender_id: sender_id,
+      content: ciphertext,
+      encrypted: true
+    }
+    |> Repo.insert()
+  end
+end
+
+# Group Conversation (family of 6 people)
+def create_group_message(sender_id, recipient_ids, plaintext) do
+  # Pairwise encryption for each recipient
+  Enum.map(recipient_ids, fn recipient_id ->
+    create_message(sender_id, recipient_id, plaintext)
+  end)
+end
+```
+
+**Tasks**:
+1. Integrate Signal encryption into MessageService
+2. Handle group messages (pairwise encryption)
+3. Update Double Ratchet state after each message
+4. Handle decryption errors gracefully
+
+**Deliverable**: End-to-end encrypted messaging works
+
+---
+
+### Phase 4: UI Integration (Week 5)
+
+**Goal**: LiveView displays encrypted messages transparently
+
+**Key Derivation**:
+```elixir
+# User logs in with password
+# Derive master key from password (Argon2)
+# Decrypt private Signal keys from database
+# Store decrypted keys in encrypted session cookie
+
+def login(email, password) do
+  with {:ok, user} <- Accounts.get_by_email(email),
+       {:ok, master_key} <- derive_master_key(password, user.salt),
+       {:ok, identity_key} <- decrypt_identity_key(user, master_key) do
+
+    session_data = %{
+      user_id: user.id,
+      identity_key: identity_key  # Encrypted in session cookie
+    }
+
+    {:ok, session_data}
+  end
+end
+```
+
+**LiveView Integration**:
+```elixir
+def handle_event("send_message", %{"content" => plaintext}, socket) do
+  sender_id = socket.assigns.current_user.id
+  recipient_id = socket.assigns.conversation.other_user_id
+
+  case Chat.create_encrypted_message(sender_id, recipient_id, plaintext) do
+    {:ok, encrypted_message} ->
+      # Decrypt for display (sender can decrypt own message)
+      {:ok, decrypted} = decrypt_message(sender_id, encrypted_message)
+      {:noreply, assign(socket, messages: [decrypted | socket.assigns.messages])}
+  end
+end
+
+def handle_info({:new_message, encrypted_message}, socket) do
+  # Real-time message received
+  case decrypt_message(socket.assigns.current_user.id, encrypted_message) do
+    {:ok, decrypted} ->
+      {:noreply, update(socket, :messages, &[decrypted | &1])}
+    {:error, :cannot_decrypt} ->
+      # Session missing or corrupted
+      {:noreply, put_flash(socket, :error, "Could not decrypt message")}
+  end
+end
+```
+
+**Tasks**:
+1. Key derivation from user password
+2. Encrypted session storage (keys in cookie)
+3. Transparent encryption/decryption in LiveView
+4. Error handling (session missing, decryption failures)
+5. Real-time updates with encrypted messages
+
+**Deliverable**: Full encrypted messaging via LiveView
+
+---
+
+## Security Properties
+
+### Forward Secrecy
+**Guarantee**: Past messages remain secure even if current keys are compromised.
+
+**How**: Double Ratchet generates new message keys for every message exchange. Old keys deleted after use.
+
+**Example**: If attacker steals device on Monday, they cannot decrypt messages from Sunday (keys already deleted).
+
+---
+
+### Post-Compromise Security
+**Guarantee**: Future messages become secure again after key rotation.
+
+**How**: Double Ratchet automatically rotates keys on every message. Compromised session heals after next round-trip.
+
+**Example**: If attacker steals device on Monday, Tuesday's messages are still secure (new keys generated).
+
+---
+
+### Deniability
+**Guarantee**: Messages cannot be cryptographically proven to third parties.
+
+**How**: Signal uses MACs (Message Authentication Codes), not digital signatures. Anyone with the shared key could have forged the message.
+
+**Why This Matters for Families**: Teen can say "I didn't send that" (plausible deniability). Parent can't prove "you said X" with cryptographic evidence. Better for family trust dynamics.
+
+**Contrast with MLS**: MLS uses signatures (non-repudiation). Messages can be proven in conflicts. May harm family trust.
+
+---
+
+## Encryption Metadata Storage
+
+Per [ADR 005](decisions/005-encryption-metadata-schema.md), encryption metadata stored in separate table for indexing performance.
+
+```sql
+CREATE TABLE message_encryption (
+  message_id UUID PRIMARY KEY,
+  encrypted BOOLEAN NOT NULL,
+  protocol VARCHAR NOT NULL DEFAULT 'signal',
+  version VARCHAR NOT NULL,
+  session_id UUID,  -- References signal_sessions
+  sender_device_id VARCHAR,
+  metadata JSONB DEFAULT '{}'  -- Protocol-specific extras
+);
+
+-- Indexes for common queries
+CREATE INDEX idx_encryption_session ON message_encryption(session_id);
+CREATE INDEX idx_encryption_protocol ON message_encryption(protocol);
 ```
 
 ---
@@ -319,28 +367,245 @@ message = %Message{
 **Defined in** `MessageService.requires_encryption?/1`:
 
 - `:direct` → Encryption required
-- `:group` → Encryption required
-- `:family` → Encryption required
-- `:self` → Encryption optional
+- `:group` → Encryption required (pairwise for each member)
+- `:family` → Encryption required (pairwise for each member)
+- `:self` → Encryption optional (can use symmetric encryption instead)
+
+---
+
+## Error Handling
+
+### NIF Safety
+**Problem**: Rust panics crash the entire BEAM VM.
+
+**Solution**: Panic handlers and error boundaries.
+
+```rust
+#[rustler::nif(schedule = "DirtyCpu")]
+fn encrypt(session_id: String, plaintext: String) -> Result<Vec<u8>, String> {
+    std::panic::catch_unwind(|| {
+        // Signal encryption logic
+        signal_encrypt_internal(session_id, plaintext)
+    })
+    .map_err(|_| "Signal encryption panic".to_string())?
+}
+```
+
+### Decryption Failures
+**Causes**:
+- Session missing (new device, no session established)
+- Session corrupted (database issue)
+- Message tampered with (detected by AEAD)
+- Session out of sync (missed messages)
+
+**Handling**:
+```elixir
+case decrypt_message(user_id, encrypted_message) do
+  {:ok, plaintext} ->
+    # Display message
+    plaintext
+
+  {:error, :session_not_found} ->
+    # Establish new session
+    establish_session(user_id, message.sender_id)
+    retry_decrypt(user_id, encrypted_message)
+
+  {:error, :out_of_sync} ->
+    # Request missing messages to catch up ratchet
+    request_missing_messages(conversation_id)
+
+  {:error, :tampered} ->
+    # AEAD verification failed, message altered
+    log_security_event(:message_tampered, message.id)
+    "[Message could not be decrypted]"
+end
+```
+
+---
+
+## Performance Monitoring
+
+### Telemetry Events
+
+```elixir
+:telemetry.span(
+  [:famichat, :crypto, :encrypt],
+  %{user_id: user_id, recipient_id: recipient_id},
+  fn ->
+    result = Crypto.Signal.encrypt(session_id, plaintext)
+    {result, %{message_size: byte_size(plaintext)}}
+  end
+)
+```
+
+**Metrics Tracked**:
+- Encryption latency (P50, P95, P99)
+- Decryption latency
+- Session establishment time
+- NIF call failures
+- Decryption error rate
+
+**Alerts**:
+- Encryption latency >100ms (performance regression)
+- Decryption error rate >1% (session sync issues)
+- NIF crashes (panic in Rust code)
 
 ---
 
 ## Security Testing Strategy
 
 ### Required Tests
-1. **Encryption/decryption cycles** - Verify round-trip
-2. **Tampered ciphertext** - Detect modifications
-3. **Performance under load** - Crypto overhead acceptable
-4. **Key rotation** - Seamless key updates
+
+1. **Encryption/decryption round-trip**
+   ```elixir
+   test "message encrypts and decrypts correctly" do
+     plaintext = "Hello, World!"
+     {:ok, ciphertext} = encrypt(sender, recipient, plaintext)
+     {:ok, decrypted} = decrypt(recipient, ciphertext)
+     assert decrypted == plaintext
+   end
+   ```
+
+2. **Tampered ciphertext detection**
+   ```elixir
+   test "tampered message fails to decrypt" do
+     {:ok, ciphertext} = encrypt(sender, recipient, "Hello")
+     tampered = corrupt_byte(ciphertext, 10)
+     assert {:error, :tampered} = decrypt(recipient, tampered)
+   end
+   ```
+
+3. **Forward secrecy**
+   ```elixir
+   test "old messages cannot be decrypted after key rotation" do
+     {:ok, msg1} = encrypt_and_store(sender, recipient, "Message 1")
+     {:ok, msg2} = encrypt_and_store(sender, recipient, "Message 2")
+
+     # Compromise session after msg2
+     compromised_session = steal_session_keys()
+
+     # msg2 decryptable with compromised keys
+     {:ok, _} = decrypt_with_compromised_keys(msg2, compromised_session)
+
+     # msg1 NOT decryptable (keys already rotated away)
+     {:error, :key_not_found} = decrypt_with_compromised_keys(msg1, compromised_session)
+   end
+   ```
+
+4. **Performance under load**
+   ```elixir
+   test "encryption performance acceptable for 6-person family" do
+     recipients = create_users(6)
+     plaintext = "Family group message"
+
+     {time_us, _} = :timer.tc(fn ->
+       Enum.each(recipients, fn recipient ->
+         encrypt(sender, recipient, plaintext)
+       end)
+     end)
+
+     time_ms = time_us / 1000
+     assert time_ms < 100  # 6 people should encrypt in <100ms
+   end
+   ```
+
+---
+
+## Open Questions
+
+### Q1: Multi-Device Support
+**Question**: How do users access messages from multiple devices (phone + tablet + web)?
+
+**Options**:
+- **Session Protocol** (Signal's multi-device extension)
+  - Requires additional complexity (device linking, message fanout)
+  - Need to encrypt for all user devices, not just recipient's devices
+
+- **Manual device linking**
+  - Primary device approves new devices
+  - QR code scan (similar to WhatsApp Web)
+
+- **Defer to post-MVP**
+  - Single device first, add multi-device if users request
+
+**Decision**: Defer until Layer 2-3 validation. Solve when dogfooding reveals need.
+
+---
+
+### Q2: Key Backup & Recovery
+**Question**: What if user loses device? How to recover message history?
+
+**Options**:
+- **Encrypted cloud backup** (user-controlled passphrase)
+  - User generates backup passphrase
+  - Keys encrypted with passphrase, stored on server
+  - Risk: Weak passphrase = compromised keys
+
+- **Social recovery** (Shamir secret sharing)
+  - Key split among trusted family members
+  - Requires 3-of-5 family members to recover
+  - Complex UX, social engineering risk
+
+- **No backup** (lost device = lost history)
+  - Simplest, most secure
+  - Poor UX, users frustrated by data loss
+
+**Decision**: Defer until Layer 1 validation. Test which approach users prefer when dogfooding.
+
+---
+
+### Q3: Layer 5 Performance
+**Question**: Will Signal scale to 30-person inter-family channels?
+
+**Performance Analysis**:
+- 30 people = 450ms encryption time
+- Exceeds 200ms budget but < 500ms "slow" threshold
+- Infrequent use (inter-family coordination, not daily chat)
+
+**Options if performance becomes issue**:
+- **Accept 450ms**: Still usable for infrequent coordination
+- **Hybrid approach**: Signal for families, MLS for large channels only
+- **Full MLS migration**: Months of work, only if Layer 5 becomes primary use case
+
+**Decision**: Test in Layer 5, pivot if needed. Don't optimize for problem we don't have yet.
+
+---
+
+## Migration Path (If Needed)
+
+**If Layer 5 grows beyond 30 people and performance unacceptable:**
+
+### Option A: Accept Higher Latency
+- 450ms still < 500ms "slow" threshold
+- Inter-family coordination is infrequent (weekly carpools, not daily chat)
+- Users may tolerate slightly higher latency for these use cases
+
+### Option B: Hybrid Protocol
+- **Signal for families** (Layers 1-4, 2-6 people)
+- **MLS for inter-family** (Layer 5, 20-30 people)
+- Complex but possible migration
+- Requires maintaining two crypto implementations
+
+### Option C: Full MLS Migration
+- Replace Signal with MLS for all conversations
+- Requires re-implementing key management
+- Months of work
+- Only if Layer 5 becomes primary use case (unlikely given product vision)
+
+**Recommendation**: Start with Signal, re-evaluate after Layer 5 testing. Don't prematurely optimize.
 
 ---
 
 ## Related Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - System design
-- [backend/guides/messaging-implementation.md](../backend/guides/messaging-implementation.md)
+- **ADR 002**: [Hybrid Encryption Strategy](decisions/002-encryption-approach.md)
+- **ADR 005**: [Encryption Metadata Schema](decisions/005-encryption-metadata-schema.md)
+- **ADR 006**: [Signal Protocol for E2EE](decisions/006-signal-protocol-for-e2ee.md) - Full protocol evaluation
+- **ARCHITECTURE.md**: [System Architecture](ARCHITECTURE.md)
+- **PERFORMANCE.md**: [Performance Budgets](PERFORMANCE.md)
 
 ---
 
 **Last Updated**: 2025-10-05
-**Status**: Infrastructure ready, implementation pending (Sprint 10)
+**Status**: Signal Protocol chosen, implementation starts Sprint 8
+**Next Review**: After Layer 5 implementation (if inter-family channels grow >30 people)
