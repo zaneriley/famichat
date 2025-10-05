@@ -8,12 +8,12 @@ See [STATUS.md](../STATUS.md) for current implementation details.
 
 ## System Overview
 
-Famichat is a Phoenix/Elixir backend with Flutter client, designed for self-hosted family communication.
+Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed for self-hosted family communication.
 
 ```
 ┌─────────────────┐     WebSocket/HTTP      ┌──────────────────┐
-│ Flutter Client  │ <──────────────────────> │ Phoenix Backend  │
-│  (iOS/Web)      │                          │  (Elixir)        │
+│ Phoenix LiveView│ <──────────────────────> │ Phoenix Backend  │
+│  (Web Browser)  │                          │  (Elixir)        │
 └─────────────────┘                          └──────────────────┘
                                                       │
                                         ┌─────────────┴──────────────┐
@@ -23,6 +23,8 @@ Famichat is a Phoenix/Elixir backend with Flutter client, designed for self-host
                                  │  (Metadata)  │          │  (S3/MinIO)     │
                                  └──────────────┘          └─────────────────┘
 ```
+
+**Note**: Native mobile app deferred until Layer 4 (Autonomy & Safety features requiring background geolocation). Current focus is dogfooding with LiveView for Layers 0-3.
 
 ---
 
@@ -105,20 +107,23 @@ Famichat is a Phoenix/Elixir backend with Flutter client, designed for self-host
 
 ---
 
-## Frontend Architecture (Flutter)
+## Frontend Architecture (Phoenix LiveView)
 
-**Status**: Proof-of-concept only (5% complete)
+**Status**: In progress (40% complete)
 
 **Current**:
-- Basic HTTP client
-- Config loading from JSON
-- Simple Material Design UI
+- LiveView setup and configuration ✅
+- Test LiveView pages ✅
+- LiveView Hooks for channel integration ✅
+- Theme switching components ✅
+- Core component library ✅
 
-**Needed**:
-- WebSocket client (phoenix_socket package)
-- State management (Provider or Bloc)
-- Message UI components
-- Offline storage
+**In Progress** (Sprint 8):
+- Authentication UI (login/registration)
+- Messaging interface (conversation list, message view)
+- Real-time channel integration via LiveView Hooks
+
+**Note**: Native mobile app (Flutter/iOS/Android) deferred until Layer 4 (Autonomy & Safety features). Current focus is dogfooding with LiveView for Layers 0-3.
 
 ---
 
@@ -142,15 +147,17 @@ Famichat is a Phoenix/Elixir backend with Flutter client, designed for self-host
 
 See [ENCRYPTION.md](ENCRYPTION.md) for detailed security design.
 
-**Current**:
+**Current** (End of Sprint 7):
 - Token-based channel authentication ✅
 - Family-based authorization ✅
-- Encryption infrastructure ready ⚠️ (no crypto yet)
+- Encryption metadata infrastructure ✅ (serialization, telemetry)
+- ⚠️ **Messages currently stored in plaintext** (no crypto implementation)
 
-**Planned**:
-- E2EE with Signal Protocol
-- Key management system
-- Device trust verification
+**Planned** (Sprint 9 - 3 weeks):
+- Server-side Signal Protocol E2EE (Rust NIF + libsignal-client)
+- X3DH key exchange + Double Ratchet
+- Key management system (database storage with Cloak.Ecto encryption at rest)
+- Trust model: Self-hosted backend = you control the server (similar to Signal's sealed sender)
 
 ---
 
@@ -166,14 +173,16 @@ Performance is a critical constraint that informs all architectural decisions.
 
 **Budget Breakdown (Sender → Receiver)**:
 ```
-Client capture (10ms)
-  → Client encrypt (50ms)
+LiveView captures message (10ms)
+  → Server encrypts via Signal NIF (30-90ms for 2-6 people)
+  → Store encrypted in database (10ms)
+  → Broadcast to recipients (20ms)
   → Network send (50ms)
-  → Server process (20ms)
-  → Network receive (50ms)
-  → Client decrypt (10ms)
-  → Client display (10ms)
-= 200ms total
+  → Recipient LiveView receives (10ms)
+  → Server decrypts via Signal NIF (15ms)
+  → LiveView renders (10ms)
+
+= ~245-305ms total for family messaging (2-6 people)
 ```
 
 **Architectural Implications**:

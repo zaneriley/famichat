@@ -23,31 +23,30 @@ Performance budgets are hard constraints that inform all architectural decisions
 |-----------|--------|-----------|
 | **Sender → Receiver** | <200ms | Industry standard for "instant" messaging (WhatsApp, Telegram target this). Beyond 200ms, users perceive delay. |
 | **Typing → Display** | <10ms | Perception threshold. Below 10ms feels instantaneous. Above 10ms, typing feels laggy. |
-| **Encryption** | <10ms | MLS uses symmetric AEAD for messages (5-10ms). Group operations (150ms) are infrequent, not on critical path. |
+| **Encryption** | <10ms | Signal Protocol uses symmetric ratchet for individual encryptions (~15ms per recipient). Family scale (2-6 people) = 30-90ms total. |
 | **Network Operations** | <100ms | Self-hosted deployment advantage. Neighborhood-local server reduces latency vs centralized cloud. |
 | **UI Rendering** | <16ms | 60fps target. Ensures smooth animations and transitions. |
 
 **Total Budget Breakdown (Sender → Receiver)**:
 ```
-User types character
+User types message
   → Client captures (10ms)
-  → Client encrypts (10ms)   # MLS symmetric AEAD
+  → Client encrypts (30-90ms)  # Signal pairwise encryption for 2-6 recipients
   → Network send (50ms)
   → Server processes (20ms)
   → Network receive (50ms)
-  → Client decrypts (10ms)   # MLS symmetric AEAD
+  → Client decrypts (15ms)    # Signal symmetric ratchet
   → Client displays (10ms)
-= 160ms total (40ms under budget) ✅
+= 185-325ms total for family groups
 ```
 
-**Group Operations** (infrequent, not on critical messaging path):
-```
-Group membership change (add/remove member):
-  → Tree operations (150ms for 100-person group)
-  → Logarithmic scaling (efficient even at 10,000+ members)
-  → Acceptable: User joins/leaves happen occasionally
-  → Not blocking: Regular messaging continues unaffected
-```
+**Layer-Specific Performance**:
+- **Layer 1 (Dyad, 2 people)**: 30ms encryption → 185ms total ✅
+- **Layer 2 (Triad, 4 people)**: 60ms encryption → 215ms total ✅
+- **Layer 3 (Extended, 6 people)**: 90ms encryption → 245ms total ✅
+- **Layer 5 (Inter-family, 20-30 people)**: 300-450ms encryption → 545-695ms total ⚠️
+
+**Note**: Layer 5 exceeds 200ms budget but is acceptable for infrequent cross-family coordination. If needed, can pivot to MLS for Layer 5 only.
 
 ---
 
@@ -72,13 +71,14 @@ Group membership change (add/remove member):
 
 **Problem**: Should we send each character individually or batch into words/sentences?
 
-**Current Decision**: Deferred pending encryption protocol selection.
+**Current Decision**: Message batching (send complete messages, not character-by-character).
 
-**Options**:
-- **Character streaming**: Lower perceived latency (<10ms typing feedback), higher encryption overhead
-- **Word batching**: Lower overhead, higher perceived latency (wait for word completion)
+**Rationale**:
+- Signal Protocol's pairwise encryption (30-90ms for families) makes per-character streaming impractical
+- Users expect complete message delivery (similar to WhatsApp, Signal)
+- Optimistic UI can show typing feedback locally while encryption happens in background
 
-**Constraint**: Encryption budget (50ms) may require batching for performance.
+**Implementation**: User types locally (instant feedback), sends complete message when pressing "Send".
 
 ---
 
@@ -145,61 +145,70 @@ Group membership change (add/remove member):
 
 ## Encryption Performance Constraints
 
-### Protocol Selection: MLS (IETF Standard)
+### Protocol Selection: Signal Protocol
 
-**Decision**: Use MLS for all conversations (both 1:1 and groups)
+**Decision**: Use Signal Protocol for all conversations (family scale: 2-6 people)
 
 **Performance Characteristics**:
 
 | Operation | Time | Frequency | Impact |
 |-----------|------|-----------|--------|
-| **Message encryption** | 5-10ms | Every message | ✅ Within 10ms budget |
-| **Message decryption** | 5-10ms | Every message | ✅ Within 10ms budget |
-| **Group setup** | 150ms (100 people) | Once per group | ✅ Infrequent, acceptable |
-| **Add/remove member** | 150ms (100 people) | Occasional | ✅ Infrequent, acceptable |
-| **Key rotation** | 150ms (100 people) | Periodic (weekly/monthly) | ✅ Infrequent, acceptable |
+| **Message encryption (per recipient)** | ~15ms | Every message | ✅ Pairwise encryption |
+| **Message decryption** | ~15ms | Every message | ✅ Symmetric ratchet |
+| **Session setup (X3DH)** | 50-100ms | Once per contact | ✅ Infrequent, one-time |
+| **Key rotation (Double Ratchet)** | <1ms | Every message | ✅ Automatic, negligible |
 
-**Why MLS Works**:
-1. **Message encryption uses symmetric AEAD**: After group is established, messages encrypted with shared group key
-   - AES-GCM or ChaCha20-Poly1305 (5-10ms)
-   - No per-recipient encryption (unlike Signal's pairwise approach)
-2. **Group operations are infrequent**: 150ms tree operations only on membership changes
-   - Not on critical messaging path
-   - Logarithmic scaling (efficient even at 10,000+ members)
-3. **Meets original 200ms budget**: 10ms encrypt + 100ms network + 10ms decrypt = 120ms core path
+**Performance at Family Scale**:
+- **2 people (Layer 1)**: 15ms × 2 = 30ms ✅
+- **4 people (Layer 2)**: 15ms × 4 = 60ms ✅
+- **6 people (Layer 3)**: 15ms × 6 = 90ms ✅
+- **20-30 people (Layer 5)**: 15ms × 20-30 = 300-450ms ⚠️ (acceptable for infrequent inter-family coordination)
 
-**Rejected Alternatives**:
-- **Signal Protocol**: 2000ms for 100-person groups (pairwise encryption doesn't scale)
-- **Megolm**: No Post-Compromise Security, not standardized (Matrix-specific)
+**Why Signal Protocol Works**:
+1. **Right-sized for families**: Pairwise encryption performs well at 2-6 people
+2. **Battle-tested**: WhatsApp (2B+ users), Signal, Facebook Messenger
+3. **Deniability**: Uses MACs (not signatures), better for family trust
+4. **Forward Secrecy + PCS**: Double Ratchet provides both
+5. **Meets 200ms budget for Layers 1-3**: 30-90ms encryption well within budget
 
-**See**: [ENCRYPTION.md](ENCRYPTION.md#protocol-recommendation) for detailed protocol comparison
+**Why Not MLS?**:
+- MLS optimizes for large groups (100+ people) with tree-based operations
+- At family scale (2-6 people), MLS tree overhead adds unnecessary complexity
+- Signal's pairwise approach is simpler and performs better at this scale
+
+**See**: [ENCRYPTION.md](ENCRYPTION.md) and [ADR 006](decisions/006-signal-protocol-for-e2ee.md) for detailed protocol evaluation
 
 ---
 
-### MLS Performance Budget
+### Signal Protocol Performance Budget
 
 **Message Encryption** (critical path):
 ```
-Symmetric AEAD encryption: 5-10ms
-  → AES-GCM or ChaCha20-Poly1305
-  → Single encryption for all recipients
-  → Well within 10ms budget ✅
+Pairwise encryption (per recipient): ~15ms
+  → Symmetric ratchet (ChaCha20-Poly1305)
+  → HMAC authentication
+  → Per-recipient encryption (N recipients = N × 15ms)
+
+Family scale examples:
+  → 2 people: 30ms total ✅
+  → 4 people: 60ms total ✅
+  → 6 people: 90ms total ✅
 ```
 
-**Group Operations** (off critical path):
+**Session Setup** (one-time, off critical path):
 ```
-Tree-based key agreement: 150ms (100 people)
-  → Logarithmic operations (log₂(100) ≈ 7 tree levels)
-  → Compute new group key
-  → Distribute to all members
-  → Infrequent: Only on membership changes
+X3DH key exchange: 50-100ms
+  → ECDH operations (3-4 key agreements)
+  → Initial shared secret derivation
+  → First message encrypted
+  → Infrequent: Only when establishing new contact
 ```
 
 **Optimization Strategies**:
 1. **Precompute keys**: Derive session keys during idle time
 2. **Hardware acceleration**: Use native crypto libraries (iOS CryptoKit, Android Keystore)
-3. **Batching**: Encrypt multiple messages in single operation (if protocol allows)
-4. **Caching**: Cache derived keys for active conversations
+3. **Caching**: Cache active session states for frequent conversations
+4. **Background encryption**: Encrypt in background thread while showing optimistic UI
 
 ---
 
@@ -262,11 +271,11 @@ Tree-based key agreement: 150ms (100 people)
 
 ---
 
-### 3. Encryption Protocol Limitations
+### 3. Signal Protocol Scaling Limitations
 
-**Tradeoff**: Cannot use Signal Protocol for groups (too slow). Requires Megolm, MLS, or custom protocol.
+**Tradeoff**: Signal Protocol's pairwise encryption doesn't scale beyond ~30 people (450ms).
 
-**Rationale**: 50ms encryption budget is hard constraint. Signal Protocol takes 2000ms for 100-person groups.
+**Rationale**: At family scale (2-6 people), Signal performs excellently (30-90ms). For Layer 5 inter-family coordination (20-30 people), 300-450ms is acceptable given infrequent usage. If scale exceeds 30 people, can pivot to MLS for those specific conversations.
 
 ---
 
@@ -289,7 +298,7 @@ Tree-based key agreement: 150ms (100 people)
 ### Phase 2: Encryption Optimization (Sprint 11-15)
 - Hardware-accelerated crypto (iOS CryptoKit, Android Keystore)
 - Key precomputation during idle time
-- Batch encryption for message queues
+- Background thread encryption (non-blocking UI)
 
 ### Phase 3: Advanced Optimizations (Sprint 16+)
 - Edge caching for frequently accessed data
