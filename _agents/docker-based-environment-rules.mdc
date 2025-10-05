@@ -1,0 +1,44 @@
+---
+description: 
+globs: *.exs, *.heex, backend/,*.ex
+alwaysApply: false
+---
+description: Use these rules any time your working in the backend, with elixir code, or needing to psh commands in docker.
+
+## Core Environment Understanding
+1. **ALWAYS assume Docker-based environments**: Never psh commands directly on the host system.
+   - All operations must be performed through the project's `./psh` script
+   - Direct `mix`, `yarn`, or `npm` commands will fail or have unexpected effects
+
+2. **NEVER use direct commands** like:
+   - `mix deps.get`
+   - `mix assets.deploy`
+   - `npm install`
+   - `yarn build`
+
+3. **ALWAYS use the psh script wrapper**:
+   - `./psh mix:install` (NOT `mix deps.get`)
+   - `./psh yarn:build:css` (NOT `yarn build` or similar)
+   - `./psh yarn:build:js` (NOT direct JS build commands)
+   - `./psh elixir:format` (NOT `mix format`)
+
+## Troubleshooting Asset Issues
+
+1. **CSS/Tailwind issues**: When utilities are missing:
+   - NEVER edit Tailwind config directly - use `./psh yarn:build:css`
+   - For full CSS rebuild: `./psh mix assets.deploy`
+   - For font issues: `./psh assets:font-metrics`
+
+2. **Container-specific paths**: 
+   - Container paths start with `/app/` not local relative paths
+   - Static files must be in `/app/priv/static/` to be served
+
+## Error Response Protocol
+1. When encountering build/asset errors:
+   - First check the `psh` script for appropriate commands
+   - Use `./psh clean` followed by `./psh mix assets.deploy`
+   - For Docker-specific issues, consider `docker compose down && docker compose up -d`
+
+2. NEVER attempt to modify files without first:
+   - Understanding where they are located in the Docker container
+   - Determining the correct `./psh` command to rebuild them

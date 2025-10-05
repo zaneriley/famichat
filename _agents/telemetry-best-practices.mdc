@@ -1,0 +1,83 @@
+---
+description: 
+globs: *.exs, *.ex
+alwaysApply: false
+---
+description: Rules and guidelines for how to write telemetry, metrics
+
+## Instrumentation on Critical Functions
+
+- **Use `:telemetry.span/3`:**  
+  Wrap key functions (e.g., message retrieval, conversation creation) with telemetry spans. This automatically captures execution times and emits both the result and measurements.
+  
+- **Leverage Centralized Helpers:**  
+  Use helper functions like `PushSearch.Telemetry.with_telemetry/4` to wrap business logic. This minimizes boilerplate and enforces a consistent pattern for:
+  - Measuring duration
+  - Handling errors
+  - Emitting telemetry events
+
+## Event Naming Conventions
+
+- **Standard Pattern:**  
+  Use event names following the pattern `[:push-search, <module>, <function>]`. Example:
+  - `[:push-search, :message_service, :get_conversation_messages]`
+  
+- **Include Contextual Data:**  
+  Every telemetry event should contain relevant measurements (e.g., execution time, message size) and metadata (e.g., user_id, error types) to facilitate detailed monitoring.
+
+## Performance Budgets
+
+- **Definition:**  
+  Performance budgets set thresholds for critical operations.  
+- **Standard Target:**  
+  Aim for an end-to-end execution time below **200ms** for messaging operations.
+  
+- **Implementation:**  
+  - Configure telemetry spans to measure durations automatically.
+  - Use options such as `performance_budget_ms: 200` in your telemetry helper functions.
+  - Write tests that assert critical operations meet these performance targets.
+
+## Integration with Monitoring Tools
+
+- **Non-Blocking Instrumentation:**  
+  Ensure that telemetry does not block the primary operation flow. Even if external telemetry handlers (e.g., Prometheus, Grafana) are unavailable, the application should continue to function normally.
+  
+- **Metrics Aggregation:**  
+  Export telemetry data for external monitoring, enabling real-time visualization, aggregation, and alerting.
+
+## Using Telemetry Data for Product Insights
+
+- **User Experience:**  
+  Analyze measurements such as response times and throughput to deliver near-instant messaging.
+  
+- **Feature Usage and Engagement:**  
+  Leverage telemetry data (e.g., message volume, error rates) as signals for product market fit.
+  
+- **Continuous Improvement:**  
+  Use telemetry insights to identify and resolve performance bottlenecks, and to adjust architectural decisions and performance budgets over time.
+
+## Consistency and Best Practices
+
+- **Instrument Every Critical Function:**  
+  Every new or modified performance-critical function must incorporate telemetry spans.
+  
+- **Use Centralized Helpers:**  
+  Adopt common telemetry functions (`emit_event/4`, `with_telemetry/4`) to enforce consistency and reduce redundant code.
+  
+- **Sensitive Data Handling:**  
+  For operations dealing with sensitive data (e.g., encryption metadata), include the option `filter_sensitive_metadata: true` to prevent sensitive information from being logged or exported.
+
+## Example Usage
+
+```elixir
+def get_conversation_messages(conversation_id) do
+  FamichatWeb.Telemetry.with_telemetry(
+    [:push-search, :message_service, :get_conversation_messages],
+    fn -> MessageService.fetch(conversation_id) end,
+    %{},
+    performance_budget_ms: 200
+  )
+end
+```
+
+This updated guideline ensures that telemetry instrumentation across Famichat is consistent, DRY, and maintainable, while providing the necessary performance insights to drive continuous improvements.
