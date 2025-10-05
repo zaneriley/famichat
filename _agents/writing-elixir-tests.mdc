@@ -1,0 +1,74 @@
+---
+description: 
+globs: *.exs,test/*
+alwaysApply: false
+---
+---
+description: These rules are helpful when writing tests, following TDD, or verifying functionality of elixir code. Includes Phoenix LiveView and Mox best practices.
+globs: *.exs, test/*
+---
+- When asked to follow TDD, first focus on writing out what we should be tested. Do not write code yet.
+- Never test migration files.
+- Do not create new functionality or new non-test files unless you were specifically asked to get failed tests passing and it makes sense to create new files.
+
+# Elixir Testing Guidelines & Best Practices (Update Proposal)
+
+## General Testing Principles
+
+*   **AI Action: Prioritize Test Isolation:** When generating tests for LiveViews or components, check if a test-specific layout (e.g., `test.html.heex` via a dedicated pipeline like `:test_isolated`) is appropriate to avoid rendering global UI like navigation. If such a layout/pipeline doesn't exist, consider proposing its creation.
+*   **AI Action: Generate Clear Assertions:** Ensure generated test assertions are specific and directly relate to the behavior being tested.
+*   **AI Action: Use Readable Test Names:** When generating tests, use descriptive names for test blocks and helper functions.
+
+## Phoenix LiveView Testing
+
+### 1. Isolating LiveView Components with Test-Specific Layouts (AI Enforceable)
+
+*   **Rule:** For new LiveView tests (`*_test.exs` files testing a LiveView), if the LiveView under test might be rendered within a global application layout (`app.html.heex`), verify or implement a test-specific layout and router pipeline (e.g., named `:test_isolated` or `:test_minimal_layout`) that uses this minimal layout. The LiveView's test route should use this pipeline.
+*   **Rule:** If modifying `your_app_web.ex`'s `live_view/0` macro, if a global `layout: ...` option is removed, ensure that page-level LiveViews (like `DemoLive.Index` or other main views) are updated to explicitly set their required application layout in their `mount/3` function (e.g., `socket = assign(socket, :layout, {YourAppWeb.Layouts, :app})`).
+
+### 2. Phoenix Test Session Data: String vs. Atom Keys (AI Enforceable)
+
+*   **Rule:** When generating code that uses `Plug.Test.init_test_session/2` to set session data for LiveView tests, always use string keys within a map for data that LiveView `on_mount` hooks will access via `Map.get(session, "string_key")`. Example: `Plug.Test.init_test_session(conn, %{"user_id" => user_id})`.
+
+## Mocking with Mox
+
+### 1. Mock Lifecycles and Expectation Counts in LiveView (AI Enforceable)
+
+*   **Rule:** When generating `Mox.expect/4` calls for functions anticipated to be called within LiveView `on_mount` hooks, default to an expectation count of `2` (to cover static and connected phases) unless specified otherwise. Add a comment explaining why `2` is used. Example: `Mox.expect(MyMock, :my_func, 2, fn ... end) # Called for static render & LV mount`.
+
+### 2. Application Configuration for Mocking Dependencies (AI Preferred Strategy)
+
+*   **Rule:** When a module's dependency is fetched via `Application.get_env/3`, and mocking this dependency is required for a test:
+    1.  **Prefer** adding a configuration to `config/test.exs` (e.g., `config :my_app, :dependency_key, MyMockModule`).
+    2.  Then, in the test, use `Mox.expect(MyMockModule, ...)` directly.
+    3.  **Avoid** using `Mox.stub_with/2` for this dependency in the test if the app config seam is used, unless there's a very specific reason for per-test override of the globally mocked module.
+*   **AI Action:** If encountering a situation where `Mox.stub_with/2` is being used for a dependency that *could* be mocked via app config, suggest refactoring to use the app config method if it simplifies the test and aligns with this rule.
+
+### 3. Pinning Arguments Correctly in `Mox.expect` (AI Enforceable)
+
+*   **Rule:** When generating `Mox.expect/4` with an anonymous function that pattern matches on an argument using the pin operator `^`, ensure the pinned variable (e.g., `^expected_value`) is defined and available in the scope where `Mox.expect` is called.
+*   **Rule:** Avoid using `when` guards in `Mox.expect` anonymous functions for the primary purpose of matching a pinned argument if the pin operator `^` in the function head can achieve the same. Use `when` for more complex/additional conditions.
+
+### 4. Return Value of `Mox.stub_with/2` (AI Enforceable)
+
+*   **Rule:** When generating code that uses `Mox.stub_with(MockModule, TargetModule)`, never pattern match its return value against `:ok`. Call it directly: `Mox.stub_with(MyMock, MyRealModule)`.
+
+### 5. Shared Setup vs. Per-Test Expectations (AI Preferred Strategy)
+
+*   **Rule:** Avoid setting broad `Mox.expect` calls in shared `setup` blocks (like a describe block's main setup) if individual tests within that block need to mock the same function differently or with more specific arguments.
+*   **Preference:** Encourage `Mox.expect` calls to be co-located with the individual tests that rely on those specific expectations. Shared setups can prepare data (like `user_id`s) and pass it to tests, which then define their own expectations.
+
+## Data Structure Consistency
+
+### 1. Atom vs. String Keys in Maps (AI Vigilance)
+
+*   **Rule:** When generating HEEx template code that accesses map fields (e.g., `@current_user.email`), ensure the key access method (`.` for atom keys, `["..."]` for string keys) matches how the map's keys are actually defined (e.g., `Map.from_struct/1` creates atom keys).
+*   **AI Action:** If modifying code that passes data to a template, and that data is a map, double-check key types against how they are accessed in the template.
+
+## General Code Health
+
+### 1. Compiler Warnings as Regressions (AI Action)
+
+*   **Rule:** After code generation or modification, if compiler warnings (unused aliases, imports, variables) are present in the output, attempt to fix them. If a fix isn't obvious or might have side effects, point out the warning to the user.
+
+---

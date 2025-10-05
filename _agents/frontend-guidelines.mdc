@@ -1,0 +1,81 @@
+---
+description: 
+globs: *.html.heex,*.css,*.js,*.ts
+alwaysApply: false
+---
+<frontend_guidelines>
+  <role>expert senior frontend engineer</role>
+  <project>custom UI for a portfolio website</project>
+  <stack>Phoenix, Tailwind CSS, Esbuild, Vitest</stack>
+
+  <component_creation>
+    <instruction>
+      Before creating a custom UI component, ask "What HTML element tags might be needed for this component?" You will then provide a list of HTML tags.
+    </instruction>
+    <examples>
+      <example>
+        <component>Button</component>
+        <tags>button, a</tags>
+      </example>
+      <example>
+        <component>Heading</component>
+        <tags>h1, h2, h3, h4, h5, h6</tags>
+      </example>
+    </examples>
+  </component_creation>
+
+  <value_hierarchy>
+    <instruction>Do not use hardcoded values or magic values. Prefer properties in this order:</instruction>
+    <order>
+      <item>
+        <name>Component implementation</name>
+        <description>Phoenix function components (.ex files) that render the appropriate HTML with the defined styles.</description>
+      </item>
+      <item>
+        <name>Component styles</name>
+        <description>Use a combination of Tailwind CSS classes and semantic tokens to style the components.</description>
+        <example>
+        The Principle: Design values (colors, spacing, etc.) are volatile. Directly using framework defaults (e.g., p-4, text-red-500) creates brittle code that breaks during theming or redesigns. Do not use hardcoded values. If you're lacking CSS options, just leave it off so I can see where the design system breaks. Failing loud on spec is better to identify gaps.
+        ---
+        1.2 Sizing (Width, Height)
+        Core Principle: Responsiveness First. Fixed dimensions are the exception, not the rule.
+        FORBIDDEN: NEVER apply fixed w-* or h-* classes to elements that contain text, such as buttons, cards, or paragraphs. Let the content and padding define their size.
+        FORBIDDEN: Do not use fixed sizes for creating layout columns. Use Flexbox/Grid utilities.
+        ALLOWED: Use w-full or h-full to fill a parent container.
+        ALLOWED (Restricted): Use fixed sizes only when an element has no intrinsic size (like a decorative div or avatar placeholder) or must conform to a strict dimension for a visualization.
+        </example>
+      </item>
+      <item>
+        <name>Semantic tokens</name>
+        <description>Create CSS custom properties with meaningful names that reference the design primitives.</description>
+        <example>--text-color, --heading-font-size</example>
+        <file_path>/srv/personal-site/assets/css/_typography.css</file_path>
+        <file_path>/srv/personal-site/assets/css/_color.css</file_path>
+      </item>
+      <item>
+        <name>Design primitives</name>
+        <description>Defined base colors, font sizes, and spacing as CSS custom properties in the :root scope.</description>
+        <file_path>/srv/personal-site/assets/css/_typography.css</file_path>
+        <file_path>/srv/personal-site/assets/css/_color.css</file_path>
+      </item>
+    </order>
+  </value_hierarchy>
+
+  <code_writing>
+    <instruction>
+      When writing code, you will think through any considerations or requirements to make sure we've thought of everything. Only after that do you write the code.
+    </instruction>
+  </code_writing>
+
+  <code_quality>
+    <instruction>
+      The code should be well-formatted, documented, and follow best practices for Phoenix and Tailwind development.
+    </instruction>
+  </code_quality>
+
+  <tech_stack>
+    <language>Elixir</language>
+    <framework>Phoenix</framework>
+    <css_framework>Tailwind CSS</css_framework>
+  </tech_stack>
+</frontend_guidelines>

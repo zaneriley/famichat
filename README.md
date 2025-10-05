@@ -7,43 +7,43 @@ Secure, Self-Hosted Family Communication Platform
 
 **A self-hosted, white-label video and chat application designed to create a secure and intimate digital space for families.**
 
-## 🚦 Project Status (2025-10-05)
+## Project Status (2025-10-05)
 
 **Phase**: Alpha Development
 **Progress**: ████████░░░░░░░░░░░░ 40% to MVP
 **Current Sprint**: Sprint 7 - Real-Time Messaging (30% complete)
 
 ### Quick Health Check
-- ✅ **Backend Core**: 60% complete (messaging works, auth missing)
-- ✅ **Frontend (LiveView)**: 40% complete (messaging UI in progress)
-- ✅ **Infrastructure**: 50% complete (dev ready, prod missing)
-- 🚨 **Critical Blocker**: No authentication system
+- **Backend Core**: 60% complete (messaging works, auth missing)
+- **Frontend (LiveView)**: 40% complete (messaging UI in progress)
+- **Infrastructure**: 50% complete (dev ready, prod missing)
+- **Critical Blocker**: No authentication system
 
-## 📍 Navigation
+## Navigation
 
 ### Daily Work
-- 🎯 **[STATUS.md](STATUS.md)** - Comprehensive current state (**READ THIS FOR DETAILED STATUS**)
-- 📋 **[CURRENT-SPRINT.md](CURRENT-SPRINT.md)** - Sprint 7 tasks (**YOUR DAILY FILE**)
-- 🗓️ **[ROADMAP.md](ROADMAP.md)** - Timeline & sprint history
+- **[STATUS.md](STATUS.md)** - Comprehensive current state (**READ THIS FOR DETAILED STATUS**)
+- **[CURRENT-SPRINT.md](CURRENT-SPRINT.md)** - Sprint 7 tasks (**YOUR DAILY FILE**)
+- **[ROADMAP.md](ROADMAP.md)** - Timeline & sprint history
 
 ### Development
-- 🏗️ **[backend/README.md](backend/README.md)** - Backend setup & commands
-- 📚 **[backend/guides/](backend/guides/)** - Technical implementation guides
+- **[backend/README.md](backend/README.md)** - Backend setup & commands
+- **[backend/guides/](backend/guides/)** - Technical implementation guides
   - [Messaging Implementation](backend/guides/messaging-implementation.md)
   - [Telemetry & Performance](backend/guides/telemetry.md)
   - [Conversation Types](backend/guides/overview.md)
 
 ### Deep Dives
-- 🏛️ **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design decisions
-- 🎯 **[docs/VISION.md](docs/VISION.md)** - Product vision & goals
-- 🔐 **[docs/ENCRYPTION.md](docs/ENCRYPTION.md)** - Security architecture
-- ⚡ **[docs/PERFORMANCE.md](docs/PERFORMANCE.md)** - Performance budgets & optimization
-- 📊 **[docs/API-DESIGN.md](docs/API-DESIGN.md)** - API principles & patterns
-- ❓ **[docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md)** - Unresolved architectural decisions
-- 🎨 **[docs/design/](docs/design/)** - UI/UX specifications
-- 📝 **[docs/decisions/](docs/decisions/)** - Architecture Decision Records (ADRs)
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design decisions
+- **[docs/VISION.md](docs/VISION.md)** - Product vision & goals
+- **[docs/ENCRYPTION.md](docs/ENCRYPTION.md)** - Security architecture
+- **[docs/PERFORMANCE.md](docs/PERFORMANCE.md)** - Performance budgets & optimization
+- **[docs/API-DESIGN.md](docs/API-DESIGN.md)** - API principles & patterns
+- **[docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md)** - Unresolved architectural decisions
+- **[docs/design/](docs/design/)** - UI/UX specifications
+- **[docs/decisions/](docs/decisions/)** - Architecture Decision Records (ADRs)
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # Start backend
@@ -56,37 +56,37 @@ cd backend && ./run mix test
 cat CURRENT-SPRINT.md
 ```
 
-## 📊 Key Metrics (Latest)
+## Key Metrics (Latest)
 
-- **Tests**: 98/98 passing ✅
+- **Tests**: 98/98 passing
 - **Coverage**: Unknown (needs measurement)
 - **Backend files**: 49 Elixir modules
 - **Migrations**: 9 applied
-- **Performance**: All operations < 200ms budget ✅
+- **Performance**: All operations < 200ms budget
 
-## 🎯 What Works vs What Doesn't
+## What Works vs What Doesn't
 
-### ✅ Working
+### Working
 - Text messaging (send/retrieve with pagination)
 - Conversations (direct, self, group with role management)
 - Real-time channels (Phoenix Channels configured)
 - Telemetry & monitoring (all critical paths instrumented)
 - Conversation hiding/visibility management
 
-### ❌ Missing (Critical Blockers)
+### Missing (Critical Blockers)
 - **User authentication** (CRITICAL - no login/registration! Sprint 8)
 - **Actual encryption** (CRITICAL - messages stored in plaintext! Sprint 9)
-  - ✅ Encryption metadata infrastructure exists
-  - ❌ No Signal Protocol implementation yet (Rust NIF + libsignal-client)
+  - Encryption metadata infrastructure exists
+  - No Signal Protocol implementation yet (Rust NIF + libsignal-client)
 - **Production deployment** (no prod config)
 
-### 🚧 In Progress (Sprint 7)
+### In Progress (Sprint 7)
 - Channel routing & authorization
 - Broadcast testing
 - Client integration documentation
 - Encryption serialization tests
 
-## 📚 Documentation Structure
+## Documentation Structure
 
 ```
 /
@@ -128,7 +128,7 @@ cat CURRENT-SPRINT.md
 └── /project-docs/archive/      # Historical docs
 ```
 
-## 🏗️ Tech Stack
+## Tech Stack
 
 - **Backend**: Phoenix 1.7, Elixir 1.13+
 - **Database**: PostgreSQL 16
@@ -138,7 +138,7 @@ cat CURRENT-SPRINT.md
 - **Quality**: Credo, Sobelow, Dialyzer, ExCoveralls
 - **Future**: Native mobile app (deferred until Layer 4)
 
-## 🎯 Current Focus
+## Current Focus
 
 **This Week**:
 1. Complete Sprint 7 channel authorization (Story 7.1.3)
@@ -150,7 +150,7 @@ cat CURRENT-SPRINT.md
 - **Sprint 9 (3 weeks)**: Signal Protocol E2EE implementation (server-side Rust NIF)
 - **Sprint 10 (2 weeks)**: Layer 0 dogfooding with encryption enabled
 
-## 📖 Getting Started Guide
+## Getting Started Guide
 
 ### Prerequisites
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/)
@@ -201,7 +201,7 @@ Open [http://localhost:8001](http://localhost:8001) in your browser to view the 
 - **Pre-push**: Runs format checks, linting, tests (allows push even if fails)
 - **Configuration**: See `.lefthook.yml` files
 
-## 🏛️ Architecture Overview
+## Architecture Overview
 
 ```
 +---------------------+      WebSocket/Phoenix Channels     +---------------------+
@@ -226,7 +226,7 @@ Open [http://localhost:8001](http://localhost:8001) in your browser to view the 
                                                                  | (Rich Media - future)
 ```
 
-## 📖 Additional Resources
+## Additional Resources
 
 - **Detailed Status**: See [STATUS.md](STATUS.md) for comprehensive implementation status
 - **API Documentation**: Run `mix docs` in backend/ directory
