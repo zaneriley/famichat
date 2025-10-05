@@ -15,7 +15,7 @@ Secure, Self-Hosted Family Communication Platform
 
 ### Quick Health Check
 - ✅ **Backend Core**: 60% complete (messaging works, auth missing)
-- ⚠️ **Frontend**: 5% complete (proof-of-concept only)
+- ✅ **Frontend (LiveView)**: 40% complete (messaging UI in progress)
 - ✅ **Infrastructure**: 50% complete (dev ready, prod missing)
 - 🚨 **Critical Blocker**: No authentication system
 
@@ -74,9 +74,10 @@ cat CURRENT-SPRINT.md
 - Conversation hiding/visibility management
 
 ### ❌ Missing (Critical Blockers)
-- **User authentication** (CRITICAL - no login/registration!)
-- **Flutter client** (WebSocket integration missing)
-- **E2E encryption** (infrastructure ready, not implemented)
+- **User authentication** (CRITICAL - no login/registration! Sprint 8)
+- **Actual encryption** (CRITICAL - messages stored in plaintext! Sprint 9)
+  - ✅ Encryption metadata infrastructure exists
+  - ❌ No Signal Protocol implementation yet (Rust NIF + libsignal-client)
 - **Production deployment** (no prod config)
 
 ### 🚧 In Progress (Sprint 7)
@@ -132,9 +133,10 @@ cat CURRENT-SPRINT.md
 - **Backend**: Phoenix 1.7, Elixir 1.13+
 - **Database**: PostgreSQL 16
 - **Real-time**: Phoenix Channels (WebSocket)
-- **Frontend**: Flutter (iOS, Web planned)
+- **Frontend**: Phoenix LiveView (web UI for Layers 0-3)
 - **Infrastructure**: Docker, Docker Compose
 - **Quality**: Credo, Sobelow, Dialyzer, ExCoveralls
+- **Future**: Native mobile app (deferred until Layer 4)
 
 ## 🎯 Current Focus
 
@@ -143,16 +145,15 @@ cat CURRENT-SPRINT.md
 2. Start Accounts context (Story 7.9) - CRITICAL for auth
 3. Measure test coverage
 
-**Next Sprint**:
-- Build Flutter WebSocket client
-- Implement basic authentication
-- Create messaging UI
+**Next Sprints**:
+- **Sprint 8 (2 weeks)**: Authentication + LiveView messaging UI
+- **Sprint 9 (3 weeks)**: Signal Protocol E2EE implementation (server-side Rust NIF)
+- **Sprint 10 (2 weeks)**: Layer 0 dogfooding with encryption enabled
 
 ## 📖 Getting Started Guide
 
 ### Prerequisites
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/)
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (latest stable version)
 - [Lefthook](https://github.com/evilmartians/lefthook) for Git hooks management
 
 ### Setup Steps
@@ -191,15 +192,8 @@ cd backend
 ./run mix ecto.migrate     # Run migrations
 ```
 
-**Frontend (Flutter)**:
-```bash
-cd flutter/famichat
-
-flutter pub get            # Get dependencies
-flutter run -d chrome      # Run in browser
-flutter run                # Run on device
-flutter test               # Run tests
-```
+**Frontend (Phoenix LiveView)**:
+Open [http://localhost:8001](http://localhost:8001) in your browser to view the LiveView UI.
 
 ### Git Hooks (Lefthook)
 
@@ -211,16 +205,17 @@ flutter test               # Run tests
 
 ```
 +---------------------+      WebSocket/Phoenix Channels     +---------------------+
-| Flutter Client App  | <-----------------------------------> | Phoenix Backend     |
-+---------------------+                                     +---------------------+
-      |                                                         |
-      | UI, State Mgmt, WebRTC                                  | Controllers, Channels,
-      | WebRTC Signaling                                        | Services, Telemetry
+| Phoenix LiveView UI | <-----------------------------------> | Phoenix Backend     |
+| (Web Browser)       |                                     +---------------------+
++---------------------+                                         |
+      |                                                         | Controllers, Channels,
+      | LiveView Hooks                                          | Services, Telemetry
+      | WebSocket events                                        |
       v                                                         v
-+---------------------+                                     +---------------------+
-| Rich Media (Local  |                                      | PostgreSQL Database |
-| Caching, Playback) |                                      +---------------------+
-+---------------------+                                          ^
+                                                         +---------------------+
+                                                         | PostgreSQL Database |
+                                                         +---------------------+
+                                                                 ^
                                                                  | (Metadata, Text, Media Refs)
                                                                  |
                                                          +---------------------+
@@ -228,12 +223,7 @@ flutter test               # Run tests
                                                          | AWS S3, MinIO, etc. |
                                                          +---------------------+
                                                                  ^
-                                                                 | (Rich Media)
-                                                                 |
-                                                         +---------------------+
-                                                         | TURN/STUN Servers   |
-                                                         | (for WebRTC)        |
-                                                         +---------------------+
+                                                                 | (Rich Media - future)
 ```
 
 ## 📖 Additional Resources

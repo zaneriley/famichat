@@ -14,19 +14,20 @@ We're trying to build a private video and chat app meant for a single household.
 For now, this repo is mainly a playground to test out:
 
 *   A basic backend in Elixir/Phoenix.
-*   A simple Flutter app that can talk to it.
+*   A Phoenix LiveView web UI (for dogfooding Layers 0-3).
 ```
 +---------------------+      WebSocket/Phoenix Channels     +---------------------+
-| Flutter Client App  | <-----------------------------------> | Phoenix Backend     |
-+---------------------+                                     +---------------------+
-      |                                                         |
-      | UI, State Mgmt, WebRTC                                  | Controllers, Channels, Bots/Agents,       
-      | WebRTC Signaling, DB Access                             |
+| Phoenix LiveView UI | <-----------------------------------> | Phoenix Backend     |
+| (Web Browser)       |                                     +---------------------+
++---------------------+                                          |
+      |                                                         | Controllers, Channels,
+      | LiveView Hooks                                          | Services, Telemetry
+      | WebSocket events                                        |
       v                                                         v
-+---------------------+                                     +---------------------+
-| Rich Media (Local  |                                      | PostgreSQL Database |
-| Caching, Playback) |                                      +---------------------+
-+---------------------+                                          ^
+                                                         +---------------------+
+                                                         | PostgreSQL Database |
+                                                         +---------------------+
+                                                                 ^
                                                                  | (Metadata, Text, Media Refs)
                                                                  |
                                                          +---------------------+
@@ -34,19 +35,13 @@ For now, this repo is mainly a playground to test out:
                                                          | AWS S3, MinIO, etc. |
                                                          +---------------------+
                                                                  ^
-                                                                 | (Rich Media)
-                                                                 |
-                                                         +---------------------+
-                                                         | TURN/STUN Servers   |
-                                                         | (for WebRTC)        |
-                                                         +---------------------+
+                                                                 | (Rich Media - future)
 
 ```
 
 ## Prerequisites
 
 *   [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/)
-*   [Flutter SDK](https://docs.flutter.dev/get-started/install) (latest stable version)
 *   [Lefthook](https://github.com/evilmartians/lefthook) for Git hooks management
 
 ## Getting Started
@@ -93,46 +88,11 @@ For now, this repo is mainly a playground to test out:
 
     Open your web browser and navigate to [http://localhost:4000](http://localhost:4000). You should see the default Phoenix "Welcome to Phoenix!" page or a "Hello from Famichat!" message if you've customized the root route.
 
-5.  **Set up Flutter Web Development (if needed):**
+5.  **Access the LiveView UI:**
 
-    If you want to run the Flutter web client, ensure web support is enabled in your Flutter installation:
+    Open your browser and navigate to [http://localhost:8001](http://localhost:8001) to view the Phoenix LiveView UI.
 
-    ```bash
-    flutter config --enable-web
-    flutter devices # Verify 'Chrome' or 'Web Server' is listed
-    ```
-
-6.  **Run the Flutter App:**
-
-    Navigate to the Flutter project directory:
-
-    ```bash
-    cd flutter/famichat
-    ```
-
-    Get Flutter dependencies:
-
-    ```bash
-    flutter pub get
-    ```
-
-    **Run in a web browser (for development):**
-
-    ```bash
-    flutter run -d chrome
-    ```
-
-    This will launch the Flutter web app in your default Chrome browser, connecting to the Phoenix backend running in Docker.
-
-    **Run on a mobile device or emulator:**
-
-    Ensure you have a connected device or emulator configured for Flutter development. Then run:
-
-    ```bash
-    flutter run
-    ```
-
-    Flutter will attempt to build and run the app on your connected device/emulator.
+    **Note**: Native mobile app (Flutter/iOS/Android) deferred until Layer 4. Current focus is dogfooding with LiveView for Layers 0-3.
 
 ## Development
 
@@ -168,11 +128,9 @@ Famichat uses [Lefthook](https://github.com/evilmartians/lefthook) to manage Git
 *   **Running Migrations:** `cd backend && ./run mix ecto.migrate`
 *   **Rollback Migrations:** `cd backend && ./run mix ecto.rollback`
 
-### Frontend (Flutter)
+### Frontend (Phoenix LiveView)
 
-*   **Directory:** `flutter/famichat/`
-*   **Get Dependencies:** `flutter pub get`
-*   **Run in Web Browser (Chrome):** `flutter run -d chrome`
-*   **Run on Device/Emulator:** `flutter run`
-*   **Run Tests:** `flutter test`
-*   **Code Formatting:** Flutter uses automatic formatting. Configure your IDE to format on save.
+*   **Directory:** `backend/lib/famichat_web/live/`
+*   **Access UI:** Open [http://localhost:8001](http://localhost:8001) in your browser
+*   **LiveView Documentation:** [Phoenix LiveView Guides](https://hexdocs.pm/phoenix_live_view/)
+*   **Note:** Native mobile app (Flutter/iOS/Android) deferred until Layer 4. Current focus is LiveView for dogfooding.
