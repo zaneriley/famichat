@@ -17,7 +17,12 @@ defmodule Famichat.ChatFixtures do
       conv = ChatFixtures.conversation_fixture()
   """
 
-  alias Famichat.Chat.{Conversation, ConversationParticipant, ConversationService}
+  alias Famichat.Chat.{
+    Conversation,
+    ConversationParticipant,
+    ConversationService
+  }
+
   alias Famichat.Repo
 
   @doc """
@@ -192,7 +197,9 @@ defmodule Famichat.ChatFixtures do
   defp create_conversation_by_type(attrs) do
     # For other conversation types (e.g. :self, if added later)
     # This will now only handle types not explicitly matched above.
-    user = user_fixture(%{family_id: attrs.family_id})
+    user =
+      Map.get(attrs, :user1) ||
+        user_fixture(%{family_id: attrs.family_id})
 
     conversation = create_base_conversation(attrs)
     add_participant(conversation.id, user.id)
