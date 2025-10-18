@@ -50,7 +50,7 @@ defmodule Famichat.MixProject do
       {:bcrypt_elixir, "~> 3.0"},
       {:cachex, "~> 3.6"},
       {:cowboy, "~> 2.11.0"},
-      {:credo, "~> 1.7.7", only: [:dev, :test], runtime: false},
+      {:credo, "~> 1.7.11", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:dns_cluster, "~> 0.1.3"},
       {:earmark, "~> 1.4"},
