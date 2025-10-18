@@ -3,12 +3,21 @@ defmodule FamichatWeb.MessageChannelTest do
   import Phoenix.ChannelTest
   require Logger
 
+  alias Famichat.Chat.{Conversation, ConversationParticipant, User}
+  alias Famichat.ChatFixtures
+  alias Famichat.Repo
   alias FamichatWeb.MessageChannel
   alias FamichatWeb.UserSocket
 
   @endpoint FamichatWeb.Endpoint
   @salt "user_auth"
   @valid_user_id "123e4567-e89b-12d3-a456-426614174000"
+  @second_user_id "223e4567-e89b-12d3-a456-426614174001"
+  @third_user_id "323e4567-e89b-12d3-a456-426614174002"
+  @self_conversation_id "44444444-4444-4444-4444-444444444444"
+  @direct_conversation_id "11111111-1111-1111-1111-111111111111"
+  @group_conversation_id "22222222-2222-2222-2222-222222222222"
+  @family_conversation_id "33333333-3333-3333-3333-333333333333"
   @telemetry_timeout 1000
 
   setup do
@@ -65,7 +74,62 @@ defmodule FamichatWeb.MessageChannelTest do
       :telemetry.detach(broadcast_handler_id)
     end)
 
-    {:ok, %{handler_id: handler_id, broadcast_handler_id: broadcast_handler_id}}
+    family = ChatFixtures.family_fixture()
+
+    user =
+      insert_user_with_id(@valid_user_id, family.id, %{
+        username: "primary_user",
+        email: "primary_user@example.com"
+      })
+
+    second_user =
+      insert_user_with_id(@second_user_id, family.id, %{
+        username: "secondary_user",
+        email: "secondary_user@example.com"
+      })
+
+    third_user =
+      insert_user_with_id(@third_user_id, family.id, %{
+        username: "tertiary_user",
+        email: "tertiary_user@example.com"
+      })
+
+    self_conversation =
+      insert_conversation(@self_conversation_id, :self, family.id, [user.id])
+
+    direct_conversation =
+      insert_conversation(@direct_conversation_id, :direct, family.id, [
+        user.id,
+        second_user.id
+      ])
+
+    group_conversation =
+      insert_conversation(@group_conversation_id, :group, family.id, [
+        user.id,
+        second_user.id,
+        third_user.id
+      ])
+
+    family_conversation =
+      insert_conversation(@family_conversation_id, :family, family.id, [
+        user.id,
+        second_user.id,
+        third_user.id
+      ])
+
+    {:ok,
+     %{
+       handler_id: handler_id,
+       broadcast_handler_id: broadcast_handler_id,
+       family: family,
+       user: user,
+       second_user: second_user,
+       third_user: third_user,
+       self_conversation: self_conversation,
+       direct_conversation: direct_conversation,
+       group_conversation: group_conversation,
+       family_conversation: family_conversation
+     }}
   end
 
   describe "socket connection" do
@@ -84,15 +148,16 @@ defmodule FamichatWeb.MessageChannelTest do
   end
 
   describe "channel join - type-aware format" do
-    setup do
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
+    setup %{user: user, family: family} do
+      token = Phoenix.Token.sign(@endpoint, @salt, user.id)
       {:ok, socket} = connect(UserSocket, %{"token" => token})
-      {:ok, %{socket: socket}}
+      {:ok, %{socket: socket, family: family}}
     end
 
-    test "successfully joins self conversation channel", %{socket: socket} do
-      # Use the user_id as the conversation ID for self conversations
-      topic = "message:self:#{@valid_user_id}"
+    test "successfully joins self conversation channel", %{
+      socket: socket
+    } do
+      topic = "message:self:#{@self_conversation_id}"
 
       assert {:ok, _reply, _socket} =
                subscribe_and_join(socket, MessageChannel, topic)
@@ -107,12 +172,12 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.encryption_status == "enabled"
       assert metadata.user_id == @valid_user_id
       assert metadata.conversation_type == "self"
-      assert metadata.conversation_id == @valid_user_id
+      assert metadata.conversation_id == @self_conversation_id
       assert Map.has_key?(metadata, :timestamp)
     end
 
     test "successfully joins direct conversation channel", %{socket: socket} do
-      topic = "message:direct:some-conversation-id"
+      topic = "message:direct:#{@direct_conversation_id}"
 
       assert {:ok, _reply, _socket} =
                subscribe_and_join(socket, MessageChannel, topic)
@@ -125,11 +190,11 @@ defmodule FamichatWeb.MessageChannelTest do
       # Assert metadata for successful join
       assert metadata.status == :success
       assert metadata.conversation_type == "direct"
-      assert metadata.conversation_id == "some-conversation-id"
+      assert metadata.conversation_id == @direct_conversation_id
     end
 
     test "successfully joins group conversation channel", %{socket: socket} do
-      topic = "message:group:group-conversation-id"
+      topic = "message:group:#{@group_conversation_id}"
 
       assert {:ok, _reply, _socket} =
                subscribe_and_join(socket, MessageChannel, topic)
@@ -142,11 +207,11 @@ defmodule FamichatWeb.MessageChannelTest do
       # Assert metadata for successful join
       assert metadata.status == :success
       assert metadata.conversation_type == "group"
-      assert metadata.conversation_id == "group-conversation-id"
+      assert metadata.conversation_id == @group_conversation_id
     end
 
     test "successfully joins family conversation channel", %{socket: socket} do
-      topic = "message:family:family-id"
+      topic = "message:family:#{@family_conversation_id}"
 
       assert {:ok, _reply, _socket} =
                subscribe_and_join(socket, MessageChannel, topic)
@@ -159,7 +224,33 @@ defmodule FamichatWeb.MessageChannelTest do
       # Assert metadata for successful join
       assert metadata.status == :success
       assert metadata.conversation_type == "family"
-      assert metadata.conversation_id == "family-id"
+      assert metadata.conversation_id == @family_conversation_id
+    end
+
+    test "rejects join when user is not participant in direct conversation", %{
+      socket: socket,
+      family: family
+    } do
+      outsider1 = insert_user_with_id(Ecto.UUID.generate(), family.id)
+      outsider2 = insert_user_with_id(Ecto.UUID.generate(), family.id)
+
+      conversation =
+        insert_conversation(Ecto.UUID.generate(), :direct, family.id, [
+          outsider1.id,
+          outsider2.id
+        ])
+
+      topic = "message:direct:#{conversation.id}"
+
+      assert {:error, %{reason: "unauthorized"}} =
+               subscribe_and_join(socket, MessageChannel, topic)
+
+      assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      assert metadata.status == :error
+      assert metadata.error_reason == :unauthorized
     end
 
     test "rejects join with invalid topic format", %{socket: socket} do
@@ -196,6 +287,20 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.error_reason == :invalid_topic_format
     end
 
+    test "rejects join when conversation id is invalid", %{socket: socket} do
+      topic = "message:direct:not-a-uuid"
+
+      assert {:error, %{reason: "invalid_conversation_id"}} =
+               subscribe_and_join(socket, MessageChannel, topic)
+
+      assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      assert metadata.status == :error
+      assert metadata.error_reason == :invalid_conversation_id
+    end
+
     # New tests for encryption-aware telemetry
     test "failed join telemetry does not contain sensitive encryption metadata",
          %{socket: socket} do
@@ -217,9 +322,10 @@ defmodule FamichatWeb.MessageChannelTest do
 
       # Test with unauthorized access (using a socket without user_id)
       socket_without_auth = socket_without_user_id()
+      topic = "message:direct:#{@direct_conversation_id}"
 
       assert {:error, %{reason: "unauthorized"}} =
-               join(socket_without_auth, "message:direct:123", %{})
+               join(socket_without_auth, topic, %{})
 
       # Verify telemetry event
       assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
@@ -236,7 +342,7 @@ defmodule FamichatWeb.MessageChannelTest do
       socket: socket
     } do
       # Test with direct conversation
-      topic = "message:direct:conversation-123"
+      topic = "message:direct:#{@direct_conversation_id}"
 
       assert {:ok, _reply, _socket} =
                subscribe_and_join(socket, MessageChannel, topic)
@@ -256,7 +362,7 @@ defmodule FamichatWeb.MessageChannelTest do
       refute Map.has_key?(metadata, :encryption_version)
 
       # Test with self conversation
-      topic = "message:self:#{@valid_user_id}"
+      topic = "message:self:#{@self_conversation_id}"
 
       assert {:ok, _reply, _socket} =
                subscribe_and_join(socket, MessageChannel, topic)
@@ -286,7 +392,7 @@ defmodule FamichatWeb.MessageChannelTest do
         subscribe_and_join(
           socket,
           MessageChannel,
-          "message:direct:conversation-123"
+          "message:direct:#{@direct_conversation_id}"
         )
 
       {:ok, %{socket: socket}}
@@ -310,7 +416,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Assert metadata
       assert metadata.user_id == @valid_user_id
       assert metadata.conversation_type == "direct"
-      assert metadata.conversation_id == "conversation-123"
+      assert metadata.conversation_id == @direct_conversation_id
       assert metadata.encryption_status == "disabled"
       assert Map.has_key?(metadata, :timestamp)
       assert Map.has_key?(metadata, :message_size)
@@ -402,7 +508,7 @@ defmodule FamichatWeb.MessageChannelTest do
     setup do
       token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
       {:ok, socket} = connect(UserSocket, %{"token" => token})
-      topic = "message:self:#{@valid_user_id}"
+      topic = "message:self:#{@self_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
       {:ok, %{socket: socket, topic: topic}}
     end
@@ -444,7 +550,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Assert telemetry metadata
       assert metadata.user_id == @valid_user_id
       assert metadata.conversation_type == "self"
-      assert metadata.conversation_id == @valid_user_id
+      assert metadata.conversation_id == @self_conversation_id
       assert metadata.encryption_status == "disabled"
       assert Map.has_key?(metadata, :timestamp)
       assert Map.has_key?(metadata, :message_size)
@@ -499,7 +605,7 @@ defmodule FamichatWeb.MessageChannelTest do
     setup do
       token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
       {:ok, socket} = connect(UserSocket, %{"token" => token})
-      topic = "message:group:group-123"
+      topic = "message:group:#{@group_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
       {:ok, %{socket: socket, topic: topic}}
     end
@@ -541,7 +647,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Assert telemetry metadata
       assert metadata.user_id == @valid_user_id
       assert metadata.conversation_type == "group"
-      assert metadata.conversation_id == "group-123"
+      assert metadata.conversation_id == @group_conversation_id
       assert metadata.encryption_status == "disabled"
       assert Map.has_key?(metadata, :timestamp)
       assert Map.has_key?(metadata, :message_size)
@@ -598,7 +704,7 @@ defmodule FamichatWeb.MessageChannelTest do
     setup do
       token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
       {:ok, socket} = connect(UserSocket, %{"token" => token})
-      topic = "message:family:family-123"
+      topic = "message:family:#{@family_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
       {:ok, %{socket: socket, topic: topic}}
     end
@@ -640,7 +746,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Assert telemetry metadata
       assert metadata.user_id == @valid_user_id
       assert metadata.conversation_type == "family"
-      assert metadata.conversation_id == "family-123"
+      assert metadata.conversation_id == @family_conversation_id
       assert metadata.encryption_status == "disabled"
       assert Map.has_key?(metadata, :timestamp)
       assert Map.has_key?(metadata, :message_size)
@@ -697,7 +803,7 @@ defmodule FamichatWeb.MessageChannelTest do
     setup do
       token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
       {:ok, socket} = connect(UserSocket, %{"token" => token})
-      topic = "message:direct:conversation-123"
+      topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
       {:ok, %{socket: socket, topic: topic}}
     end
@@ -732,7 +838,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Assert telemetry metadata
       assert metadata.user_id == @valid_user_id
       assert metadata.conversation_type == "direct"
-      assert metadata.conversation_id == "conversation-123"
+      assert metadata.conversation_id == @direct_conversation_id
       assert metadata.encryption_status == "disabled"
     end
 
@@ -836,7 +942,7 @@ defmodule FamichatWeb.MessageChannelTest do
     test "client can subscribe to channel and receive messages" do
       # Create two clients
       token1 = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      token2 = Phoenix.Token.sign(@endpoint, @salt, "user-456")
+      token2 = Phoenix.Token.sign(@endpoint, @salt, @second_user_id)
 
       # Connect first client
       {:ok, socket1} = connect(UserSocket, %{"token" => token1})
@@ -845,7 +951,7 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, socket2} = connect(UserSocket, %{"token" => token2})
 
       # Both clients join the same direct conversation channel
-      topic = "message:direct:conversation-123"
+      topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket1} = subscribe_and_join(socket1, MessageChannel, topic)
       {:ok, _, socket2} = subscribe_and_join(socket2, MessageChannel, topic)
 
@@ -866,7 +972,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Verify first client receives the message
       assert_push "new_msg", %{
         "body" => ^response_body,
-        "user_id" => "user-456"
+        "user_id" => @second_user_id
       }
     end
 
@@ -882,7 +988,7 @@ defmodule FamichatWeb.MessageChannelTest do
     test "client can subscribe to channel and receive encrypted messages" do
       # Create two clients
       token1 = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      token2 = Phoenix.Token.sign(@endpoint, @salt, "user-456")
+      token2 = Phoenix.Token.sign(@endpoint, @salt, @second_user_id)
 
       # Connect first client
       {:ok, socket1} = connect(UserSocket, %{"token" => token1})
@@ -891,7 +997,7 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, socket2} = connect(UserSocket, %{"token" => token2})
 
       # Both clients join the same direct conversation channel
-      topic = "message:direct:conversation-123"
+      topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket1} = subscribe_and_join(socket1, MessageChannel, topic)
       {:ok, _, socket2} = subscribe_and_join(socket2, MessageChannel, topic)
 
@@ -927,7 +1033,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Verify first client receives the encrypted message with all metadata
       assert_push "new_msg", %{
         "body" => "encrypted_content_from_client_2",
-        "user_id" => "user-456",
+        "user_id" => @second_user_id,
         "version_tag" => "v1.0.0",
         "encryption_flag" => true,
         "key_id" => "KEY_DIRECT_v1"
@@ -942,15 +1048,22 @@ defmodule FamichatWeb.MessageChannelTest do
     2. The client is rejected when trying to join a channel they don't have access to
     3. The error response includes an appropriate reason
     """
-    test "client is rejected when joining unauthorized channel" do
+    test "client is rejected when joining unauthorized channel", %{
+      family: family,
+      second_user: second_user
+    } do
       # Create a client
       token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
 
       # Connect client
       {:ok, socket} = connect(UserSocket, %{"token" => token})
 
-      # Try to join a self conversation for a different user
-      topic = "message:self:different-user-id"
+      other_self_conversation =
+        insert_conversation(Ecto.UUID.generate(), :self, family.id, [
+          second_user.id
+        ])
+
+      topic = "message:self:#{other_self_conversation.id}"
 
       # This should be rejected
       assert {:error, %{reason: "unauthorized"}} =
@@ -972,7 +1085,7 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, socket} = connect(UserSocket, %{"token" => token})
 
       # Join a channel
-      topic = "message:direct:conversation-123"
+      topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
 
       # Send a message
@@ -1038,7 +1151,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Setup socket and join channel
       token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
       {:ok, socket} = connect(UserSocket, %{"token" => token})
-      topic = "message:direct:conversation-123"
+      topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
 
       on_exit(fn ->
@@ -1085,7 +1198,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Verify that the enhanced log contains all required fields
       assert logs =~ "[MessageChannel] Broadcast event:"
       assert logs =~ "conversation_type=direct"
-      assert logs =~ "conversation_id=conversation-123"
+      assert logs =~ "conversation_id=#{@direct_conversation_id}"
       assert logs =~ "user_id=#{@valid_user_id}"
       assert logs =~ "encryption_status=disabled"
       assert logs =~ "message_size=100"
@@ -1120,7 +1233,7 @@ defmodule FamichatWeb.MessageChannelTest do
           assert metadata.message_id == message_id
           assert metadata.user_id == @valid_user_id
           assert metadata.conversation_type == "direct"
-          assert metadata.conversation_id == "conversation-123"
+          assert metadata.conversation_id == @direct_conversation_id
           assert Map.has_key?(metadata, :timestamp)
           assert Map.has_key?(measurements, :duration_ms)
         end)
@@ -1128,7 +1241,7 @@ defmodule FamichatWeb.MessageChannelTest do
       # Verify that the acknowledgment log contains all required fields
       assert logs =~ "[MessageChannel] Message acknowledgment:"
       assert logs =~ "conversation_type=direct"
-      assert logs =~ "conversation_id=conversation-123"
+      assert logs =~ "conversation_id=#{@direct_conversation_id}"
       assert logs =~ "user_id=#{@valid_user_id}"
       assert logs =~ "message_id=test-message-123"
     end
@@ -1145,9 +1258,9 @@ defmodule FamichatWeb.MessageChannelTest do
       socket: socket
     } do
       # Create a second client
-      token2 = Phoenix.Token.sign(@endpoint, @salt, "user-456")
+      token2 = Phoenix.Token.sign(@endpoint, @salt, @second_user_id)
       {:ok, socket2} = connect(UserSocket, %{"token" => token2})
-      topic = "message:direct:conversation-123"
+      topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket2} = subscribe_and_join(socket2, MessageChannel, topic)
 
       # First client sends a message with a message ID
@@ -1175,13 +1288,72 @@ defmodule FamichatWeb.MessageChannelTest do
       # Verify metadata in telemetry
       assert metadata.message_id == message_id
       # The acknowledging user
-      assert metadata.user_id == "user-456"
+      assert metadata.user_id == @second_user_id
       assert metadata.conversation_type == "direct"
-      assert metadata.conversation_id == "conversation-123"
+      assert metadata.conversation_id == @direct_conversation_id
     end
   end
 
   defp socket_without_user_id do
     socket(UserSocket, nil, %{})
   end
+
+  defp insert_user_with_id(id, family_id, attrs \\ %{}) do
+    defaults = %{
+      username: ChatFixtures.unique_user_username(),
+      email: ChatFixtures.unique_user_email(),
+      role: :member,
+      family_id: family_id
+    }
+
+    user_attrs =
+      defaults
+      |> Map.merge(Map.take(attrs, [:username, :email, :role, :family_id]))
+
+    %User{id: id}
+    |> User.changeset(user_attrs)
+    |> Repo.insert!()
+  end
+
+  defp insert_conversation(id, type, family_id, participant_ids, attrs \\ %{}) do
+    metadata = Map.get(attrs, :metadata, default_metadata(type))
+
+    conversation_attrs =
+      %{
+        family_id: family_id,
+        conversation_type: type,
+        metadata: metadata
+      }
+      |> maybe_put_direct_key(type, family_id, participant_ids)
+      |> Map.merge(Map.take(attrs, [:direct_key]))
+
+    conversation =
+      %Conversation{id: id}
+      |> Conversation.create_changeset(conversation_attrs)
+      |> Repo.insert!()
+
+    Enum.each(participant_ids, fn participant_id ->
+      %ConversationParticipant{}
+      |> ConversationParticipant.changeset(%{
+        conversation_id: conversation.id,
+        user_id: participant_id
+      })
+      |> Repo.insert!()
+    end)
+
+    conversation
+  end
+
+  defp maybe_put_direct_key(attrs, :direct, family_id, [user1_id, user2_id | _]) do
+    direct_key =
+      Conversation.compute_direct_key(user1_id, user2_id, family_id)
+
+    Map.put_new(attrs, :direct_key, direct_key)
+  end
+
+  defp maybe_put_direct_key(attrs, _type, _family_id, _participant_ids),
+    do: attrs
+
+  defp default_metadata(:group), do: %{"name" => "Test Group Conversation"}
+  defp default_metadata(_), do: %{}
 end

@@ -65,7 +65,10 @@
             />
           </div>
           <div
-            class={"h-md w-md rounded-full mr-md flex-shrink-0 shadow-sm #{if @channel_joined, do: 'bg-[#45bd7f]', else: 'bg-[#ff6b6b]'}"}
+            class={[
+              "h-md w-md rounded-full mr-md flex-shrink-0 shadow-sm",
+              if(@channel_joined, do: "bg-[#45bd7f]", else: "bg-[#ff6b6b]")
+            ]}
             aria-hidden="true"
           >
           </div>
@@ -125,7 +128,13 @@
                 phx-click="connect-channel"
                 data-channel-joined={@channel_joined}
                 onclick="console.log('[MessageTest] Connect button clicked', { channelJoined: this.dataset.channelJoined, timestamp: new Date().toISOString() })"
-                class={"px-4 py-1xs rounded-full font-medium transition-colors shadow-md border-2 text-white #{if @channel_joined, do: 'bg-[#ff6b6b] hover:bg-[#ff5252] border-[#e05151]', else: 'bg-[#45bd7f] hover:bg-[#3daa70] border-[#3a9966]'}"}
+                class={[
+                  "px-4 py-1xs rounded-full font-medium transition-colors shadow-md border-2 text-white",
+                  if(@channel_joined,
+                    do: "bg-[#ff6b6b] hover:bg-[#ff5252] border-[#e05151]",
+                    else: "bg-[#45bd7f] hover:bg-[#3daa70] border-[#3a9966]"
+                  )
+                ]}
               >
                 <%= if @channel_joined, do: "Disconnect", else: "Connect" %>
               </button>
@@ -156,11 +165,7 @@
               </div>
             </div>
           <% else %>
-            <div
-              id="messages"
-              phx-update="append"
-              class="flex flex-col space-y-3"
-            >
+            <div id="messages" class="flex flex-col space-y-3">
               <%= for message <- @messages do %>
                 <div
                   id={"message-#{message_id(message)}"}
@@ -268,11 +273,15 @@
             phx-click="send-message"
             onclick="console.log('[MessageTest] Send button clicked', { message: document.querySelector('textarea[phx-key=Enter]').value })"
             disabled={!@channel_joined || @current_message == ""}
-            class={"p-md rounded-full flex-shrink-0 shadow-md border-2 #{
-              if !@channel_joined || @current_message == "",
-              do: 'bg-[#e0dbc8] text-[#aba994] cursor-not-allowed border-[#d1ccb9]',
-              else: 'bg-[#45bd7f] text-white hover:bg-[#3daa70] transition-colors border-[#3a9966]'
-            }"}
+            class={[
+              "p-md rounded-full flex-shrink-0 shadow-md border-2",
+              if(!@channel_joined || @current_message == "",
+                do:
+                  "bg-[#e0dbc8] text-[#aba994] cursor-not-allowed border-[#d1ccb9]",
+                else:
+                  "bg-[#45bd7f] text-white hover:bg-[#3daa70] transition-colors border-[#3a9966]"
+              )
+            ]}
           >
             <Heroicons.paper_airplane solid class="h-1xl w-md" />
           </button>
@@ -287,7 +296,15 @@
           </h2>
           <div class="bg-[#fdf6e3] rounded-md p-md border border-[#cea569]">
             <div class="flex items-center mb-2">
-              <div class={"h-md w-md rounded-full mr-md flex-shrink-0 #{if @encryption_enabled, do: 'bg-[#45bd7f]', else: 'bg-[#ff6b6b]'}"}>
+              <div
+                class={[
+                  "h-md w-md rounded-full mr-md flex-shrink-0",
+                  if(@encryption_enabled,
+                    do: "bg-[#45bd7f]",
+                    else: "bg-[#ff6b6b]"
+                  )
+                ]}
+              >
               </div>
               <span class="font-medium">
                 Status: <%= if @encryption_enabled,

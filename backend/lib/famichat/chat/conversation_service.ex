@@ -339,15 +339,19 @@ defmodule Famichat.Chat.ConversationService do
         |> Ecto.Multi.insert(
           :admin_privilege,
           fn %{conversation: conversation} ->
-            GroupConversationPrivileges.changeset(%GroupConversationPrivileges{}, %{
-              conversation_id: conversation.id,
-              user_id: user_id,
-              role: :admin,
-              granted_by_id: user_id
-            })
+            GroupConversationPrivileges.changeset(
+              %GroupConversationPrivileges{},
+              %{
+                conversation_id: conversation.id,
+                user_id: user_id,
+                role: :admin,
+                granted_by_id: user_id
+              }
+            )
           end
         )
-        |> Ecto.Multi.run(:preload_users, fn repo, %{conversation: conversation} ->
+        |> Ecto.Multi.run(:preload_users, fn repo,
+                                             %{conversation: conversation} ->
           {:ok, repo.preload(conversation, :users)}
         end)
 
@@ -355,10 +359,10 @@ defmodule Famichat.Chat.ConversationService do
         {:ok, %{preload_users: conversation}} ->
           {:ok, conversation}
 
-        {:error, _op, reason, _changes} ->
+        {:error, failed_operation, reason, failed_changes} ->
           # Log the detailed error for debugging
           Logger.error(
-            "Failed to create group conversation: operation #{inspect(_op)}, reason #{inspect(reason)}, changes #{inspect(_changes)}"
+            "Failed to create group conversation: operation #{inspect(failed_operation)}, reason #{inspect(reason)}, changes #{inspect(failed_changes)}"
           )
 
           # Return a generic error or the specific reason if appropriate
