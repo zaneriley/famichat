@@ -90,7 +90,17 @@ defmodule FamichatWeb.MessageChannel do
   """
 
   use Phoenix.Channel
+  import Ecto.Query, only: [from: 2]
   require Logger
+
+  alias Famichat.Chat.{
+    Conversation,
+    ConversationParticipant,
+    MessageService,
+    User
+  }
+
+  alias Famichat.Repo
 
   @encryption_metadata_fields ~w(version_tag encryption_flag key_id)
   @default_perf_budget 200
@@ -154,35 +164,18 @@ defmodule FamichatWeb.MessageChannel do
 
   # Helper function to authorize and join based on conversation type
   defp handle_type_aware_join(socket, type, id, user_id, measurements) do
-    # Perform type-specific authorization checks
-    authorized =
+    type_atom =
       case type do
-        "self" ->
-          # For self conversations, only the creator can access
-          # In a real implementation, this would query the database
-          # For now, we'll assume the ID contains the user_id for demo purposes
-          id == user_id
-
-        "direct" ->
-          # For direct conversations, only the two participants can access
-          # In a real implementation, this would query the database
-          # For now, we'll authorize all for demo purposes
-          true
-
-        "group" ->
-          # For group conversations, only active members can access
-          # In a real implementation, this would query the database
-          # For now, we'll authorize all for demo purposes
-          true
-
-        "family" ->
-          # For family conversations, all family members have access
-          # In a real implementation, this would query the database
-          # For now, we'll authorize all for demo purposes
-          true
+        "self" -> :self
+        "direct" -> :direct
+        "group" -> :group
+        "family" -> :family
       end
 
-    if authorized do
+    with {:ok, _uuid} <- validate_conversation_id(id),
+         {:ok, conversation} <- fetch_conversation(id, type_atom),
+         {:ok, user} <- fetch_user(user_id),
+         :ok <- authorize_conversation(conversation, user, type_atom) do
       Logger.debug(
         "User authorized for #{type} conversation, joining channel with user_id: #{user_id}"
       )
@@ -191,25 +184,26 @@ defmodule FamichatWeb.MessageChannel do
         user_id: user_id,
         conversation_type: type,
         conversation_id: id,
-        encryption_status: "enabled",
+        encryption_status: encryption_status(conversation),
         status: :success
       })
 
       {:ok, socket}
     else
-      Logger.debug(
-        "User not authorized for #{type} conversation, rejecting join"
-      )
+      {:error, reason} ->
+        Logger.debug(
+          "Join rejected for #{type} conversation id=#{id} reason=#{inspect(reason)}"
+        )
 
-      emit_join_telemetry(measurements, %{
-        user_id: user_id,
-        conversation_type: type,
-        conversation_id: id,
-        status: :error,
-        error_reason: :unauthorized
-      })
+        emit_join_telemetry(measurements, %{
+          user_id: user_id,
+          conversation_type: type,
+          conversation_id: id,
+          status: :error,
+          error_reason: reason
+        })
 
-      {:error, %{reason: "unauthorized"}}
+        {:error, %{reason: reason_to_string(reason)}}
     end
   end
 
@@ -402,4 +396,83 @@ defmodule FamichatWeb.MessageChannel do
       monotonic_time: System.monotonic_time()
     }
   end
+
+  defp validate_conversation_id(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, _uuid} -> {:ok, id}
+      :error -> {:error, :invalid_conversation_id}
+    end
+  end
+
+  defp fetch_conversation(id, expected_type) do
+    case Repo.get(Conversation, id) do
+      %Conversation{conversation_type: ^expected_type} = conversation ->
+        {:ok, conversation}
+
+      %Conversation{} ->
+        {:error, :invalid_conversation_type}
+
+      nil ->
+        {:error, :conversation_not_found}
+    end
+  end
+
+  defp fetch_user(user_id) do
+    case Repo.get(User, user_id) do
+      %User{} = user -> {:ok, user}
+      nil -> {:error, :user_not_found}
+    end
+  end
+
+  defp authorize_conversation(conversation, user, type) do
+    conversation_id = conversation.id
+    user_id = user.id
+
+    authorized? =
+      case type do
+        :self ->
+          participant?(conversation_id, user_id)
+
+        :direct ->
+          participant?(conversation_id, user_id)
+
+        :group ->
+          participant?(conversation_id, user_id)
+
+        :family ->
+          participant?(conversation_id, user_id) ||
+            user.family_id == conversation.family_id
+      end
+
+    if authorized?, do: :ok, else: {:error, :unauthorized}
+  end
+
+  defp participant?(conversation_id, user_id) do
+    query =
+      from p in ConversationParticipant,
+        where:
+          p.conversation_id == ^conversation_id and
+            p.user_id == ^user_id
+
+    Repo.exists?(query)
+  end
+
+  defp encryption_status(%Conversation{conversation_type: type}) do
+    if MessageService.requires_encryption?(type) do
+      "enabled"
+    else
+      "disabled"
+    end
+  end
+
+  defp reason_to_string(:invalid_conversation_id), do: "invalid_conversation_id"
+  defp reason_to_string(:conversation_not_found), do: "conversation_not_found"
+
+  defp reason_to_string(:invalid_conversation_type),
+    do: "invalid_conversation_type"
+
+  defp reason_to_string(:user_not_found), do: "unauthorized"
+  defp reason_to_string(:unauthorized), do: "unauthorized"
+  defp reason_to_string(:invalid_topic_format), do: "invalid_topic_format"
+  defp reason_to_string(other), do: to_string(other)
 end
