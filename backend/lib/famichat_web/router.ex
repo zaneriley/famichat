@@ -63,14 +63,9 @@ defmodule FamichatWeb.Router do
       live_session :admin, on_mount: {FamichatWeb.LiveHelpers, :admin} do
         # Add the new message testing route
         live "/message-test", MessageTestLive, :index
-
-        # Add our Tailwind test route
-        live "/tailwind-test", TailwindTestLive, :index
       end
 
       # Keep non-LiveView routes outside the live_session
-      get "/up/", UpController, :index
-      get "/up/databases", UpController, :databases
       live_dashboard "/dashboard", metrics: FamichatWeb.Telemetry
     end
   end
