@@ -99,8 +99,11 @@ RUN if [ "${MIX_ENV}" != "dev" ]; then \
   && cp -r /public/* /app/priv/static/ \
   && mix phx.digest && mix release; fi
 
-COPY --chown=elixir:elixir bin/docker-entrypoint-web /app/bin/
-  
+USER root
+COPY bin/docker-entrypoint-web /app/bin/
+RUN chmod 755 /app/bin/docker-entrypoint-web && chown elixir:elixir /app/bin/docker-entrypoint-web
+USER elixir
+
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
 EXPOSE 8001
@@ -145,7 +148,10 @@ ENV USER=elixir
 # Copy built assets and release from Stage 2
 COPY --chown=elixir:elixir --from=dev /public /public
 COPY --chown=elixir:elixir --from=dev /mix/_build/prod/rel/famichat ./
-COPY --chown=elixir:elixir bin/docker-entrypoint-web /app/bin/
+USER root
+COPY bin/docker-entrypoint-web /app/bin/
+RUN chmod 755 /app/bin/docker-entrypoint-web && chown elixir:elixir /app/bin/docker-entrypoint-web
+USER elixir
 
 COPY --chown=elixir:elixir --from=dev /app/priv /app/priv
 RUN mkdir -p /app/priv/static && chown elixir:elixir /app/priv/static
