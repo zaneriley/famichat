@@ -11,10 +11,6 @@ defmodule Famichat.Chat.MessageService do
   @max_limit 100
   @default_preloads [:sender, :conversation]
 
-  # Encryption metadata fields - preserved for reference and future use
-  # when implementing schema validation for encryption metadata
-  @encryption_metadata_fields [:key_id, :version_tag, :encryption_flag]
-
   # Define conversation-type encryption requirements
   @encryption_requirements %{
     direct: true,

@@ -227,12 +227,8 @@ defmodule FamichatWeb.MessageTestLive do
     {:noreply, assign(socket, messages: messages)}
   end
 
-  # Helper function to format message timestamps
-  defp format_time(datetime) do
-    Calendar.strftime(datetime, "%I:%M %p")
-  end
-
-  defp handle_info({:channel_push_confirmed, _ref}, socket) do
+  @impl true
+  def handle_info({:channel_push_confirmed, _ref}, socket) do
     {:noreply, socket}
   end
 

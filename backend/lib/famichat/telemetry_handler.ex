@@ -19,7 +19,12 @@ defmodule Famichat.TelemetryHandler do
       # Add more events here as new telemetry-enabled functions are added.
     ]
 
-    :telemetry.attach_many("famichat-logger", events, &handle_event/4, nil)
+    :telemetry.attach_many(
+      "famichat-logger",
+      events,
+      &__MODULE__.handle_event/4,
+      nil
+    )
   end
 
   @doc false

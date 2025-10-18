@@ -58,6 +58,8 @@ config :logger, :console,
 
 config :phoenix, :json_library, Jason
 
+config :tzdata, :autoupdate, :disabled
+
 config :famichat, Famichat.Mailer, adapter: Swoosh.Adapters.Local
 
 config :swoosh, :api_client, false

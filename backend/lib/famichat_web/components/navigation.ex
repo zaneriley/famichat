@@ -102,12 +102,6 @@ defmodule FamichatWeb.Navigation do
     """
   end
 
-  defp active_class(current_path, page) do
-    if String.contains?(current_path, Atom.to_string(page)),
-      do: "font-bold",
-      else: ""
-  end
-
   defp build_localized_path(current_path, locale) do
     base_path = FamichatWeb.Layouts.remove_locale_from_path(current_path)
 
