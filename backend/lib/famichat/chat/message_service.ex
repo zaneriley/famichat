@@ -5,7 +5,7 @@ defmodule Famichat.Chat.MessageService do
   """
   import Ecto.Query, warn: false
   alias Famichat.Repo
-  alias Famichat.Chat.{Message, Conversation}
+  alias Famichat.Chat.{Message, Conversation, ConversationAccess}
   require Logger
 
   @max_limit 100
@@ -151,6 +151,7 @@ defmodule Famichat.Chat.MessageService do
     |> validate_required_fields()
     |> validate_sender()
     |> validate_conversation()
+    |> verify_sender_in_conversation()
     |> process_encryption_metadata()
     |> build_changeset()
     |> persist_message()
@@ -173,7 +174,8 @@ defmodule Famichat.Chat.MessageService do
 
   defp validate_sender(state) do
     if Repo.exists?(
-         from u in Famichat.Chat.User, where: u.id == ^state.params.sender_id
+         from u in Famichat.Accounts.User,
+           where: u.id == ^state.params.sender_id
        ) do
       state
     else
@@ -183,13 +185,29 @@ defmodule Famichat.Chat.MessageService do
 
   defp validate_conversation(%{error: _} = state), do: state
 
-  defp validate_conversation(state) do
-    if Repo.exists?(
-         from c in Conversation, where: c.id == ^state.params.conversation_id
+  defp validate_conversation(
+         %{params: %{conversation_id: conversation_id}} = state
        ) do
-      state
-    else
-      Map.put(state, :error, :conversation_not_found)
+    case Repo.get(Conversation, conversation_id) do
+      %Conversation{} = conversation ->
+        Map.put(state, :conversation, conversation)
+
+      nil ->
+        Map.put(state, :error, :conversation_not_found)
+    end
+  end
+
+  defp verify_sender_in_conversation(%{error: _} = state), do: state
+
+  defp verify_sender_in_conversation(
+         %{params: %{sender_id: sender_id}, conversation: conversation} = state
+       ) do
+    case ConversationAccess.authorize(conversation, sender_id, :send_message) do
+      :ok ->
+        state
+
+      {:error, reason} ->
+        Map.put(state, :error, reason)
     end
   end
 
@@ -276,12 +294,13 @@ defmodule Famichat.Chat.MessageService do
       iex> serialize_message(%{content: "Hello", encryption_metadata: %{key_id: "KEY_1"}})
       %{content: "Hello", metadata: %{"encryption" => %{"key_id" => "KEY_1"}}}
   """
-  @spec serialize_message(map()) :: map()
-  def serialize_message(params) when is_map(params) do
+  @spec serialize_message(map(), Conversation.t() | nil) :: map()
+  def serialize_message(params, conversation \\ nil) when is_map(params) do
     start_time = System.monotonic_time()
 
     with encryption_metadata <- extract_encryption_metadata(params),
-         conversation_type <- get_conversation_type(params),
+         conversation_type <-
+           resolve_conversation_type(conversation, params),
          {updated_params, status} <-
            process_encryption_metadata(
              params,
@@ -304,7 +323,13 @@ defmodule Famichat.Chat.MessageService do
   end
 
   # Gets the conversation type based on the conversation_id in params
-  defp get_conversation_type(params) do
+  defp resolve_conversation_type(
+         %Conversation{conversation_type: type},
+         _params
+       ),
+       do: type
+
+  defp resolve_conversation_type(nil, params) do
     conversation_id =
       Map.get(params, :conversation_id) || Map.get(params, "conversation_id")
 
@@ -535,7 +560,9 @@ defmodule Famichat.Chat.MessageService do
   defp process_encryption_metadata(%{error: _} = state), do: state
 
   defp process_encryption_metadata(state) do
-    updated_params = serialize_message(state.params)
+    updated_params =
+      serialize_message(state.params, Map.get(state, :conversation))
+
     %{state | params: updated_params}
   end
 end

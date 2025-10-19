@@ -29,8 +29,11 @@ defmodule Famichat.Messages.DecryptionTest do
       nil
     )
 
-    user = user_fixture()
-    conversation = conversation_fixture(%{conversation_type: :direct})
+    conversation =
+      conversation_fixture(%{conversation_type: :direct})
+      |> Repo.preload(:users)
+
+    [user | _] = conversation.users
 
     on_exit(fn -> :telemetry.detach(handler_id) end)
 
