@@ -2,14 +2,18 @@ defmodule Famichat.Chat.MessageServiceTest do
   use Famichat.DataCase
   use ExUnit.Case, async: true
 
-  alias Famichat.Chat.{MessageService, Message}
+  alias Famichat.Chat.{ConversationAccess, MessageService, Message}
   alias Famichat.Repo
   import Famichat.ChatFixtures
 
   describe "get_conversation_messages/2" do
     setup do
-      conversation = conversation_fixture(%{conversation_type: :direct})
-      user = Famichat.ChatFixtures.user_fixture()
+      conversation =
+        conversation_fixture(%{conversation_type: :direct})
+        |> Repo.preload(:users)
+
+      [user | _] = conversation.users
+
       {:ok, conversation: conversation, user: user}
     end
 
@@ -63,7 +67,7 @@ defmodule Famichat.Chat.MessageServiceTest do
                  preload: [:sender]
                )
 
-      assert %{sender: %Famichat.Chat.User{}} = msg
+      assert %{sender: %Famichat.Accounts.User{}} = msg
     end
 
     test "returns error for invalid pagination options" do
@@ -77,8 +81,14 @@ defmodule Famichat.Chat.MessageServiceTest do
     end
 
     test "telemetry emits telemetry event" do
-      conv = conversation_fixture(%{conversation_type: :direct})
-      user = Famichat.ChatFixtures.user_fixture()
+      conv =
+        conversation_fixture(%{conversation_type: :direct})
+        |> Repo.preload(:users)
+
+      [user | _] = conv.users
+
+      assert ConversationAccess.member?(conv.id, user.id)
+
       user_id = user.id
       conv_id = conv.id
       params = valid_message_params(user, conv, "Telemetry test message")
@@ -109,9 +119,13 @@ defmodule Famichat.Chat.MessageServiceTest do
 
   describe "send_message/1" do
     setup do
-      user = Famichat.ChatFixtures.user_fixture()
-      conv = conversation_fixture(%{conversation_type: :direct})
-      {:ok, user: user, conv: conv}
+      conv =
+        conversation_fixture(%{conversation_type: :direct})
+        |> Repo.preload(:users)
+
+      [participant | _] = conv.users
+
+      {:ok, user: participant, conv: conv}
     end
 
     test "creates valid message", %{user: user, conv: conv} do
@@ -137,6 +151,55 @@ defmodule Famichat.Chat.MessageServiceTest do
 
       assert {:error, :conversation_not_found} =
                MessageService.send_message(params)
+    end
+
+    test "rejects messages from non-participants", %{conv: conv} do
+      outsider = user_fixture(%{family_id: conv.family_id})
+      params = valid_message_params(outsider, conv)
+
+      assert {:error, :not_participant} = MessageService.send_message(params)
+    end
+
+    test "rejects cross-family messages in family conversation", %{user: user} do
+      family = family_fixture()
+      _member = membership_fixture(user, family)
+
+      family_conversation =
+        conversation_fixture(%{
+          conversation_type: :family,
+          family_id: family.id,
+          user1: user
+        })
+
+      outsider = user_fixture()
+      params = valid_message_params(outsider, family_conversation)
+
+      assert {:error, :wrong_family} = MessageService.send_message(params)
+    end
+
+    test "emits telemetry on authorization failure", %{conv: conv} do
+      outsider = user_fixture(%{family_id: conv.family_id})
+
+      :telemetry.attach_many(
+        "auth-denied-#{inspect(self())}",
+        [[:famichat, :conversation, :authorization_denied]],
+        fn event, measurements, metadata, _ ->
+          send(self(), {event, measurements, metadata})
+        end,
+        nil
+      )
+
+      params = valid_message_params(outsider, conv)
+      assert {:error, :not_participant} = MessageService.send_message(params)
+
+      assert_receive {
+                       [:famichat, :conversation, :authorization_denied],
+                       %{count: 1},
+                       %{action: :send_message, reason: :not_participant}
+                     },
+                     5_000
+
+      :telemetry.detach("auth-denied-#{inspect(self())}")
     end
   end
 
