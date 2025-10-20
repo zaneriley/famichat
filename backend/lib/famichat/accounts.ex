@@ -23,6 +23,7 @@ defmodule Famichat.Accounts do
   alias Ecto.Changeset
 
   import Ecto.Query
+  require Logger
 
   @invite_ttl 7 * 24 * 60 * 60
   @invite_registration_ttl 10 * 60
@@ -32,7 +33,6 @@ defmodule Famichat.Accounts do
   @passkey_challenge_ttl 5 * 60
   @recovery_ttl 24 * 60 * 60
   @passkey_register_token_ttl 10 * 60
-  @passkey_nudge_window 7 * 24 * 60 * 60
 
   @access_ttl 15 * 60
   @refresh_ttl 30 * 24 * 60 * 60
@@ -439,7 +439,7 @@ defmodule Famichat.Accounts do
         {:ok, passkey} ->
           telemetry(:passkey, :register, %{user_id: user.id})
           {:ok, _} = Token.consume(challenge_record)
-          _ = ensure_passkey_due(user)
+          _ = sync_enrollment_requirement(user)
           {:ok, passkey}
 
         error ->
@@ -556,27 +556,77 @@ defmodule Famichat.Accounts do
 
   ## Sessions & device trust -------------------------------------------------
 
-  @spec start_session(
-          User.t(),
-          String.t(),
-          String.t() | nil,
-          String.t() | nil,
-          boolean()
-        ) ::
+  @doc """
+  Starts a new session for a user on a device.
+
+  Options:
+    * `:remember` (boolean) - hints whether the caller would like the device to
+      receive a long-lived trust window. This may be ignored if policy denies.
+  """
+  @spec start_session(User.t(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
-  def start_session(%User{} = user, device_id, user_agent, ip, trust?)
-      when is_binary(device_id) do
+  def start_session(user, device_info, opts \\ [])
+
+  def start_session(%User{} = user, device_info, opts)
+      when is_map(device_info) do
+    want_remember? = Keyword.get(opts, :remember, false)
+    can_remember? = policy_allows_remembering?(user)
+    should_remember? = want_remember? and can_remember?
+
+    if want_remember? and not can_remember? do
+      Logger.info(
+        "[Accounts] Device remember requested but denied by user policy",
+        user_id: user.id
+      )
+    end
+
     Repo.transaction(fn ->
-      with {:ok, device} <-
-             upsert_device(user.id, device_id, user_agent, ip, trust?),
+      with {:ok, normalized_device} <- normalize_device_info(device_info),
+           {:ok, device} <-
+             upsert_device(user, normalized_device, should_remember?),
            {:ok, tokens} <- issue_session_tokens(user, device) do
-        telemetry(:session, :start, %{user_id: user.id, device_id: device_id})
+        telemetry(:session, :start, %{
+          user_id: user.id,
+          device_id: device.device_id,
+          remembered: should_remember?
+        })
+
         tokens
       else
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
   end
+
+  def start_session(user, device_info, opts) do
+    start_session(user, Map.new(device_info), opts)
+  end
+
+  defp normalize_device_info(device_info) when is_map(device_info) do
+    id = device_attr(device_info, :id)
+
+    if is_binary(id) do
+      {:ok,
+       %{
+         id: id,
+         user_agent: device_attr(device_info, :user_agent),
+         ip: device_attr(device_info, :ip)
+       }}
+    else
+      {:error, :invalid_device_info}
+    end
+  end
+
+  defp normalize_device_info(_), do: {:error, :invalid_device_info}
+
+  defp device_attr(map, key) do
+    Map.get(map, key) || Map.get(map, to_string(key))
+  end
+
+  defp policy_allows_remembering?(%User{enrollment_required_since: nil}),
+    do: true
+
+  defp policy_allows_remembering?(%User{}), do: false
 
   @spec refresh_session(String.t(), String.t()) ::
           {:ok, map()} | {:error, term()}
@@ -763,7 +813,7 @@ defmodule Famichat.Accounts do
     Repo.transaction(fn ->
       with {:ok, token} <- Token.fetch("magic_link", raw_token),
            {:ok, user} <- fetch_user(token.payload["user_id"]),
-           {:ok, user} <- ensure_passkey_due(user),
+           {:ok, user} <- sync_enrollment_requirement(user),
            {:ok, _} <- Token.consume(token) do
         telemetry(:magic, :redeem, %{user_id: user.id})
         user
@@ -858,6 +908,7 @@ defmodule Famichat.Accounts do
       with {:ok, token} <- Token.fetch("recovery", raw_token),
            {:ok, user} <- fetch_user(token.payload["user_id"]),
            {:ok, _} <- disable_devices_and_passkeys(user.id),
+           {:ok, user} <- enter_enrollment_required_state(user),
            {:ok, _} <- Token.consume(token) do
         telemetry(:recovery, :redeem, %{user_id: user.id})
         user
@@ -923,9 +974,9 @@ defmodule Famichat.Accounts do
     end
   end
 
-  @spec ensure_passkey_due(User.t()) ::
+  @spec sync_enrollment_requirement(User.t()) ::
           {:ok, User.t()} | {:error, Ecto.Changeset.t()}
-  defp ensure_passkey_due(%User{} = user) do
+  defp sync_enrollment_requirement(%User{} = user) do
     active_count =
       from(p in Passkey,
         where: p.user_id == ^user.id and is_nil(p.disabled_at),
@@ -934,22 +985,28 @@ defmodule Famichat.Accounts do
       |> Repo.one()
 
     cond do
-      active_count == 0 ->
-        due_at =
-          DateTime.add(DateTime.utc_now(), @passkey_nudge_window, :second)
-
+      active_count == 0 and is_nil(user.enrollment_required_since) ->
         user
-        |> Changeset.change(passkey_due_at: due_at)
+        |> Changeset.change(enrollment_required_since: DateTime.utc_now())
         |> Repo.update()
 
-      user.passkey_due_at ->
+      active_count == 0 ->
+        {:ok, user}
+
+      user.enrollment_required_since ->
         user
-        |> Changeset.change(passkey_due_at: nil)
+        |> Changeset.change(enrollment_required_since: nil)
         |> Repo.update()
 
       true ->
         {:ok, user}
     end
+  end
+
+  defp enter_enrollment_required_state(%User{} = user) do
+    user
+    |> User.changeset(%{enrollment_required_since: DateTime.utc_now()})
+    |> Repo.update()
   end
 
   defp fetch_user_by_username(username) do
@@ -989,13 +1046,17 @@ defmodule Famichat.Accounts do
 
   defp resolve_user(_), do: {:error, :user_not_found}
 
-  defp upsert_device(user_id, device_id, user_agent, ip, trust?) do
+  defp upsert_device(
+         %User{id: user_id},
+         %{id: device_id} = device_info,
+         remember?
+       ) do
     attrs = %{
       user_id: user_id,
       device_id: device_id,
-      user_agent: user_agent,
-      ip: ip,
-      trusted_until: trusted_until(trust?),
+      user_agent: Map.get(device_info, :user_agent),
+      ip: Map.get(device_info, :ip),
+      trusted_until: trusted_until(remember?),
       last_active_at: DateTime.utc_now()
     }
 

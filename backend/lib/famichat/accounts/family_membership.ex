@@ -1,0 +1,40 @@
+defmodule Famichat.Accounts.FamilyMembership do
+  @moduledoc """
+  Links a user to a family with a specific role.
+  """
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  alias Famichat.Accounts.User
+  alias Famichat.Chat.Family
+
+  @type t :: %__MODULE__{
+          id: Ecto.UUID.t() | nil,
+          family_id: Ecto.UUID.t(),
+          user_id: Ecto.UUID.t(),
+          role: :admin | :member,
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
+        }
+
+  @primary_key {:id, :binary_id, autogenerate: true}
+  @foreign_key_type :binary_id
+  schema "family_memberships" do
+    belongs_to :family, Family
+    belongs_to :user, User
+    field :role, Ecto.Enum, values: [:admin, :member], default: :member
+
+    timestamps(type: :utc_datetime_usec)
+  end
+
+  @doc false
+  def changeset(membership, attrs) do
+    membership
+    |> cast(attrs, [:family_id, :user_id, :role])
+    |> validate_required([:family_id, :user_id, :role])
+    |> unique_constraint(:membership_uniqueness,
+      name: :family_memberships_family_id_user_id_index,
+      message: "user already belongs to family"
+    )
+  end
+end
