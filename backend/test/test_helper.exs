@@ -1,3 +1,14 @@
+# Ensure Repo uses sandbox pool (runtime config may override)
+Application.put_env(
+  :famichat,
+  Famichat.Repo,
+  Keyword.put(
+    Application.get_env(:famichat, Famichat.Repo) || [],
+    :pool,
+    Ecto.Adapters.SQL.Sandbox
+  )
+)
+
 # Configure ExUnit
 ExUnit.configure(
   exclude: [pending: true],

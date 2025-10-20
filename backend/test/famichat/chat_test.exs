@@ -2,13 +2,15 @@ defmodule Famichat.ChatTest do
   use Famichat.DataCase
 
   alias Famichat.Chat
+  alias Famichat.Repo
 
   import Famichat.ChatFixtures
+  alias Famichat.Accounts.FamilyMembership
 
   describe "users" do
-    alias Famichat.Chat.User
+    alias Famichat.Accounts.User
 
-    @invalid_attrs %{username: nil, family_id: nil}
+    @invalid_attrs %{username: nil}
 
     test "list_users/0 returns all users" do
       user = user_fixture()
@@ -34,8 +36,11 @@ defmodule Famichat.ChatTest do
       assert {:ok, %User{} = user} = Chat.create_user(valid_attrs)
       assert user.username == "some username"
       assert user.email == "some_email@example.com"
-      assert user.family_id == family.id
-      assert user.role == :member
+
+      membership =
+        Repo.get_by!(FamilyMembership, user_id: user.id, family_id: family.id)
+
+      assert membership.role == :member
     end
 
     test "create_user/1 with invalid data returns error changeset" do

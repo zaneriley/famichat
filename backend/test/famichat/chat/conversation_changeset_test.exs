@@ -185,14 +185,15 @@ defmodule Famichat.Chat.ConversationChangesetTest do
 
     test "validate_user_count validates correct user counts", %{
       user1: user1,
-      user2: user2
+      user2: user2,
+      family: family
     } do
       # Direct conversation with 2 users
       changeset =
         %Conversation{}
         |> Conversation.create_changeset(%{
           conversation_type: :direct,
-          family_id: user1.family_id,
+          family_id: family.id,
           direct_key: "key"
         })
         |> Ecto.Changeset.put_assoc(:users, [user1, user2])
@@ -205,7 +206,7 @@ defmodule Famichat.Chat.ConversationChangesetTest do
         %Conversation{}
         |> Conversation.create_changeset(%{
           conversation_type: :direct,
-          family_id: user1.family_id,
+          family_id: family.id,
           direct_key: "key"
         })
         |> Ecto.Changeset.put_assoc(:users, [user1])
@@ -220,7 +221,7 @@ defmodule Famichat.Chat.ConversationChangesetTest do
         %Conversation{}
         |> Conversation.create_changeset(%{
           conversation_type: :self,
-          family_id: user1.family_id
+          family_id: family.id
         })
         |> Ecto.Changeset.put_assoc(:users, [user1])
         |> Conversation.validate_user_count()
@@ -232,7 +233,7 @@ defmodule Famichat.Chat.ConversationChangesetTest do
         %Conversation{}
         |> Conversation.create_changeset(%{
           conversation_type: :self,
-          family_id: user1.family_id
+          family_id: family.id
         })
         |> Ecto.Changeset.put_assoc(:users, [user1, user2])
         |> Conversation.validate_user_count()
@@ -240,13 +241,13 @@ defmodule Famichat.Chat.ConversationChangesetTest do
       assert "self conversations require exactly 1 user" in errors_on(changeset).users
 
       # Group conversation with 3 users
-      user3 = user_fixture(%{family_id: user1.family_id})
+      user3 = user_fixture(%{family_id: family.id})
 
       changeset =
         %Conversation{}
         |> Conversation.create_changeset(%{
           conversation_type: :group,
-          family_id: user1.family_id,
+          family_id: family.id,
           metadata: %{"name" => "Group"}
         })
         |> Ecto.Changeset.put_assoc(:users, [user1, user2, user3])

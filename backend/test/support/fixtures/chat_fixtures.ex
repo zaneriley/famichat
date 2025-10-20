@@ -17,6 +17,8 @@ defmodule Famichat.ChatFixtures do
       conv = ChatFixtures.conversation_fixture()
   """
 
+  alias Famichat.Accounts.FamilyMembership
+
   alias Famichat.Chat.{
     Conversation,
     ConversationParticipant,
@@ -99,20 +101,84 @@ defmodule Famichat.ChatFixtures do
       user_fixture(%{username: "special_user"})
   """
   def user_fixture(attrs \\ %{}) do
-    family = family_fixture()
+    attrs = Map.new(attrs)
+    {_family, family_id} = resolve_family(attrs)
 
-    {:ok, user} =
+    role =
       attrs
+      |> Map.get(:role) ||
+        Map.get(attrs, "role")
+        |> normalize_role()
+
+    clean_attrs =
+      attrs
+      |> Map.drop([:family, :family_id, :role, "family", "family_id", "role"])
       |> Enum.into(%{
         username: unique_user_username(),
         email: unique_user_email(),
-        family_id: family.id,
-        role: :member
+        status: :active,
+        confirmed_at: DateTime.utc_now()
       })
-      |> Famichat.Chat.create_user()
 
+    changeset =
+      Famichat.Accounts.User.changeset(%Famichat.Accounts.User{}, clean_attrs)
+
+    {:ok, user} = Famichat.Repo.insert(changeset)
+    maybe_insert_membership(user, family_id, role)
     user
   end
+
+  defp resolve_family(%{family: %Famichat.Chat.Family{} = family}),
+    do: {family, family.id}
+
+  defp resolve_family(%{"family" => %Famichat.Chat.Family{} = family}),
+    do: {family, family.id}
+
+  defp resolve_family(%{family_id: family_id}) do
+    {Repo.get!(Famichat.Chat.Family, family_id), family_id}
+  end
+
+  defp resolve_family(%{"family_id" => family_id}) do
+    {Repo.get!(Famichat.Chat.Family, family_id), family_id}
+  end
+
+  defp resolve_family(_attrs) do
+    family = family_fixture()
+    {family, family.id}
+  end
+
+  defp maybe_insert_membership(user, family_id, role) do
+    normalized_role = normalize_role(role)
+
+    case Repo.get_by(FamilyMembership, user_id: user.id, family_id: family_id) do
+      nil ->
+        %FamilyMembership{}
+        |> FamilyMembership.changeset(%{
+          user_id: user.id,
+          family_id: family_id,
+          role: normalized_role
+        })
+        |> Repo.insert!()
+
+      _ ->
+        :ok
+    end
+  end
+
+  @doc """
+  Ensures a user has a membership in the given family and returns it.
+  """
+  def membership_fixture(user, family, role \\ :member) do
+    maybe_insert_membership(user, family.id, role)
+
+    Repo.get_by!(FamilyMembership, user_id: user.id, family_id: family.id)
+  end
+
+  defp normalize_role(:admin), do: :admin
+  defp normalize_role(:member), do: :member
+  defp normalize_role("admin"), do: :admin
+  defp normalize_role("member"), do: :member
+  defp normalize_role(_), do: :member
 
   @doc """
   Creates a conversation fixture with participants.
@@ -180,7 +246,10 @@ defmodule Famichat.ChatFixtures do
   end
 
   defp create_conversation_by_type(%{conversation_type: :group} = attrs) do
-    user = user_fixture(%{family_id: attrs.family_id})
+    user =
+      Map.get(attrs, :user1) ||
+        user_fixture(%{family_id: attrs.family_id})
+
     group_name = Map.get(attrs.metadata, "name", "Test Group Conversation")
 
     {:ok, conversation} =
