@@ -38,7 +38,7 @@ defmodule Famichat.MixProject do
   def application do
     [
       mod: {Famichat.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :cloak]
     ]
   end
 
@@ -64,7 +64,7 @@ defmodule Famichat.MixProject do
       {:github_webhook, "~> 0.2.1"},
       {:gettext, "0.24.0"},
       {:heroicons, "0.5.5"},
-      {:jason, "~>1.4.3"},
+      {:jason, "~> 1.2"},
       {:logfmt_ex, "~> 0.4.2"},
       {:mox, "~> 1.2.0", only: :test},
       {:phoenix, "1.7.14"},
@@ -83,7 +83,9 @@ defmodule Famichat.MixProject do
       {:yamerl, "~> 0.10.0"},
       {:uuid, "~> 1.1"},
       {:cors_plug, "~> 3.0"},
-      {:telemetry_test, "~> 0.1.0", only: :test}
+      {:telemetry_test, "~> 0.1.0", only: :test},
+      {:cloak_ecto, "~> 1.3"},
+      {:wax_, "~> 0.6"}
     ]
   end
 
