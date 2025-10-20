@@ -3,8 +3,8 @@ x-app: &default-app
     context: "."
     target: "${MIX_ENV:-dev}"
     args:
-      - "UID=${UID:-1000}"
-      - "GID=${GID:-1000}"
+      - "UID=${HOST_UID:-1000}"
+      - "GID=${HOST_GID:-1000}"
       - "MIX_ENV=${MIX_ENV:-dev}"
       - "NODE_ENV=${NODE_ENV:-development}"
   depends_on:
@@ -24,8 +24,8 @@ x-assets: &default-assets
     context: "."
     target: "assets"
     args:
-      - "UID=${UID:-1000}"
-      - "GID=${GID:-1000}"
+      - "UID=${HOST_UID:-1000}"
+      - "GID=${HOST_GID:-1000}"
       - "MIX_ENV=${MIX_ENV:-dev}"
       - "NODE_ENV=${NODE_ENV:-production}"
   env_file:
@@ -58,6 +58,7 @@ services:
 
   web:
     <<: *default-app
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     deploy:
       resources:
         limits:
