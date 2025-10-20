@@ -96,9 +96,10 @@ defmodule FamichatWeb.MessageChannel do
   alias Famichat.Chat.{
     Conversation,
     ConversationParticipant,
-    MessageService,
-    User
+    MessageService
   }
+
+  alias Famichat.Accounts.{FamilyMembership, User}
 
   alias Famichat.Repo
 
@@ -441,7 +442,7 @@ defmodule FamichatWeb.MessageChannel do
 
         :family ->
           participant?(conversation_id, user_id) ||
-            user.family_id == conversation.family_id
+            shares_family?(user_id, conversation.family_id)
       end
 
     if authorized?, do: :ok, else: {:error, :unauthorized}
@@ -453,6 +454,18 @@ defmodule FamichatWeb.MessageChannel do
         where:
           p.conversation_id == ^conversation_id and
             p.user_id == ^user_id
+
+    Repo.exists?(query)
+  end
+
+  defp shares_family?(_user_id, nil), do: false
+
+  defp shares_family?(user_id, family_id) do
+    query =
+      from m in FamilyMembership,
+        where: m.user_id == ^user_id and m.family_id == ^family_id,
+        limit: 1,
+        select: m.id
 
     Repo.exists?(query)
   end

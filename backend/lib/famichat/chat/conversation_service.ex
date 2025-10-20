@@ -31,8 +31,9 @@ defmodule Famichat.Chat.ConversationService do
 
   alias Famichat.{
     Repo,
+    Accounts.User,
+    Accounts.FamilyMembership,
     Chat.Conversation,
-    Chat.User,
     Chat.ConversationParticipant,
     Chat.GroupConversationPrivileges
   }
@@ -61,7 +62,7 @@ defmodule Famichat.Chat.ConversationService do
     @type t :: %__MODULE__{
             user1_id: String.t(),
             user2_id: String.t(),
-            users: [Famichat.Chat.User.t()] | nil,
+            users: [Famichat.Accounts.User.t()] | nil,
             family_valid?: boolean() | nil,
             existing_conversation: Famichat.Chat.Conversation.t() | nil,
             error: atom() | nil,
@@ -148,10 +149,7 @@ defmodule Famichat.Chat.ConversationService do
   defp do_create_direct_conversation(user1_id, user2_id) do
     with {:ok, user1} <- get_user(user1_id),
          {:ok, user2} <- get_user(user2_id),
-         true <-
-           user1.family_id == user2.family_id || {:error, :different_families} do
-      family_id = user1.family_id
-
+         {:ok, family_id} <- shared_family_id(user1.id, user2.id) do
       direct_key =
         Conversation.compute_direct_key(user1_id, user2_id, family_id)
 
@@ -286,6 +284,37 @@ defmodule Famichat.Chat.ConversationService do
     end
   end
 
+  defp shared_family_id(user1_id, user2_id) do
+    query =
+      from m in FamilyMembership,
+        where: m.user_id == ^user1_id,
+        select: m.family_id
+
+    case Repo.all(query) do
+      [] ->
+        {:error, :not_in_family}
+
+      families ->
+        query2 =
+          from m in FamilyMembership,
+            where: m.user_id == ^user2_id and m.family_id in ^families,
+            limit: 1,
+            select: m.family_id
+
+        case Repo.one(query2) do
+          nil -> {:error, :different_families}
+          family_id -> {:ok, family_id}
+        end
+    end
+  end
+
+  defp member_of_family?(user_id, family_id) do
+    Repo.exists?(
+      from m in FamilyMembership,
+        where: m.user_id == ^user_id and m.family_id == ^family_id
+    )
+  end
+
   defp get_conversations(user_id) do
     query =
       from c in Conversation,
@@ -317,7 +346,8 @@ defmodule Famichat.Chat.ConversationService do
           {:ok, Conversation.t()} | {:error, atom()}
   def create_group_conversation(user_id, family_id, name, metadata \\ %{}) do
     with {:ok, user} <- get_user(user_id),
-         true <- user.family_id == family_id || {:error, :family_mismatch} do
+         true <-
+           member_of_family?(user.id, family_id) || {:error, :family_mismatch} do
       multi =
         Ecto.Multi.new()
         |> Ecto.Multi.insert(:conversation, fn _ ->

@@ -24,7 +24,7 @@ defmodule Famichat.Chat.ConversationParticipant do
     field :user_id, :binary_id, primary_key: true
 
     belongs_to :conversation, Famichat.Chat.Conversation, define_field: false
-    belongs_to :user, Famichat.Chat.User, define_field: false
+    belongs_to :user, Famichat.Accounts.User, define_field: false
 
     timestamps(type: :utc_datetime_usec)
   end

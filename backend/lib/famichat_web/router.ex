@@ -48,6 +48,31 @@ defmodule FamichatWeb.Router do
     pipe_through :api
 
     get "/hello", HelloController, :index
+    post "/auth/invites", AuthController, :issue_invite
+    post "/auth/invites/accept", AuthController, :accept_invite
+    post "/auth/invites/complete", AuthController, :complete_invite
+    post "/auth/pairings", AuthController, :reissue_pairing
+    post "/auth/pairings/redeem", AuthController, :redeem_pairing
+
+    post "/auth/passkeys/register/challenge",
+         AuthController,
+         :passkey_register_challenge
+
+    post "/auth/passkeys/register", AuthController, :passkey_register
+
+    post "/auth/passkeys/assert/challenge",
+         AuthController,
+         :passkey_assert_challenge
+
+    post "/auth/passkeys/assert", AuthController, :passkey_assert
+    post "/auth/sessions/refresh", AuthController, :refresh_session
+    delete "/auth/devices/:device_id", AuthController, :revoke_device
+    post "/auth/magic_link", AuthController, :issue_magic_link
+    post "/auth/magic_link/redeem", AuthController, :redeem_magic_link
+    post "/auth/otp/request", AuthController, :issue_otp
+    post "/auth/otp/verify", AuthController, :verify_otp
+    post "/auth/recovery", AuthController, :issue_recovery
+    post "/auth/recovery/redeem", AuthController, :redeem_recovery
   end
 
   # Enables LiveDashboard only for development.

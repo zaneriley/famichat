@@ -2,11 +2,11 @@ defmodule FamichatWeb.UserSocket do
   use Phoenix.Socket
   require Logger
 
+  alias Famichat.Accounts
+
   # Update channel pattern to support conversation-type-aware topic formats
   # Format: message:<type>:<id> where type is one of: self, direct, group, family
   channel "message:*", FamichatWeb.MessageChannel
-
-  @salt "user_auth"
 
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After
@@ -21,28 +21,25 @@ defmodule FamichatWeb.UserSocket do
   # performing token verification on connect.
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do
-    case verify_token_and_connect(token, socket) do
-      {:ok, socket} -> {:ok, socket}
-      {:error, _reason} = error -> error
+    case Accounts.verify_access_token(token) do
+      {:ok, %{user_id: user_id, device_id: device_id}} ->
+        Logger.debug(
+          "User connected with user_id=#{user_id} device_id=#{device_id}"
+        )
+
+        {:ok, assign(socket, :user_id, user_id)}
+
+      {:error, reason} ->
+        Logger.error(
+          "User connection failed due to invalid token: #{inspect(reason)}"
+        )
+
+        {:error, %{reason: "invalid_token"}}
     end
   end
 
   def connect(_params, _socket, _connect_info) do
     {:error, %{reason: "invalid_token"}}
-  end
-
-  defp verify_token_and_connect(token, socket) do
-    case Phoenix.Token.verify(FamichatWeb.Endpoint, @salt, token,
-           max_age: 86_400
-         ) do
-      {:ok, user_id} ->
-        Logger.debug("User connected with user_id: #{user_id}")
-        {:ok, assign(socket, :user_id, user_id)}
-
-      {:error, reason} ->
-        Logger.error("User connection failed due to invalid token: #{reason}")
-        {:error, %{reason: "invalid_token"}}
-    end
   end
 
   # Socket id's are topics that allow you to identify all sockets for a given user:

@@ -296,15 +296,13 @@
           </h2>
           <div class="bg-[#fdf6e3] rounded-md p-md border border-[#cea569]">
             <div class="flex items-center mb-2">
-              <div
-                class={[
-                  "h-md w-md rounded-full mr-md flex-shrink-0",
-                  if(@encryption_enabled,
-                    do: "bg-[#45bd7f]",
-                    else: "bg-[#ff6b6b]"
-                  )
-                ]}
-              >
+              <div class={[
+                "h-md w-md rounded-full mr-md flex-shrink-0",
+                if(@encryption_enabled,
+                  do: "bg-[#45bd7f]",
+                  else: "bg-[#ff6b6b]"
+                )
+              ]}>
               </div>
               <span class="font-medium">
                 Status: <%= if @encryption_enabled,

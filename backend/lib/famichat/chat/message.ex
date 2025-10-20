@@ -21,7 +21,7 @@ defmodule Famichat.Chat.Message do
           status: status() | nil,
           sender_id: Ecto.UUID.t() | nil,
           conversation_id: Ecto.UUID.t() | nil,
-          sender: Famichat.Chat.User.t() | nil,
+          sender: Famichat.Accounts.User.t() | nil,
           conversation: Famichat.Chat.Conversation.t() | nil,
           inserted_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
@@ -46,7 +46,7 @@ defmodule Famichat.Chat.Message do
     field :timestamp, :utc_datetime_usec
 
     # Sender of the message
-    belongs_to :sender, Famichat.Chat.User,
+    belongs_to :sender, Famichat.Accounts.User,
       foreign_key: :sender_id,
       type: :binary_id
 
