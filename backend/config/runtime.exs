@@ -30,19 +30,64 @@ database =
     database
   end
 
-config :famichat, Famichat.Repo,
-  url: System.get_env("DATABASE_URL"),
-  username: db_user,
-  password: System.get_env("POSTGRES_PASSWORD", "password"),
-  database: database,
-  hostname: System.get_env("POSTGRES_HOST", "postgres"),
-  port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
-  pool_size: String.to_integer(System.get_env("POSTGRES_POOL", "15"))
+repo_config =
+  [
+    url: System.get_env("DATABASE_URL"),
+    username: db_user,
+    password: System.get_env("POSTGRES_PASSWORD", "password"),
+    database: database,
+    hostname: System.get_env("POSTGRES_HOST", "postgres"),
+    port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
+    pool_size: String.to_integer(System.get_env("POSTGRES_POOL", "15"))
+  ]
+  |> then(fn config ->
+    if config_env() == :test do
+      Keyword.put(config, :pool, Ecto.Adapters.SQL.Sandbox)
+    else
+      config
+    end
+  end)
+
+config :famichat, Famichat.Repo, repo_config
+
+if config_env() == :test do
+  config :famichat, Famichat.Repo, pool: Ecto.Adapters.SQL.Sandbox
+end
 
 config :famichat, :github_token, System.get_env("GITHUB_TOKEN")
 
 config :famichat,
   github_webhook_secret: System.get_env("GITHUB_WEBHOOK_SECRET")
+
+vault_key_base64 =
+  case {config_env(), System.get_env("FAMICHAT_VAULT_KEY")} do
+    {:prod, nil} ->
+      raise "environment variable FAMICHAT_VAULT_KEY is required in production"
+
+    {_, nil} ->
+      # Deterministic key for dev/test; DO NOT use in production.
+      "l5sL7dYvF9h2NfGpaPUNYegF8Xfyy7b+PZjv+uN9n2A="
+
+    {_, value} ->
+      value
+  end
+
+vault_key =
+  case Base.decode64(vault_key_base64) do
+    {:ok, decoded} when byte_size(decoded) == 32 ->
+      decoded
+
+    {:ok, _other_size} ->
+      raise "FAMICHAT_VAULT_KEY must decode to 32 bytes"
+
+    :error ->
+      raise "FAMICHAT_VAULT_KEY must be valid base64"
+  end
+
+config :famichat, Famichat.Vault,
+  ciphers: [
+    default: {Cloak.Ciphers.AES.GCM, tag: "AES.GCM.V1", key: vault_key}
+  ]
 
 config :famichat, content_repo_url: System.get_env("CONTENT_REPO_URL")
 
