@@ -6,11 +6,11 @@ defmodule Famichat.Chat.ConversationAccess do
   conversation (send messages, manage membership, etc.) and emits
   telemetry on denied attempts so we can monitor probes.
   """
-  import Ecto.Query, only: [from: 2]
+  import Ecto.Query
   alias Famichat.Repo
-  alias Famichat.Chat.{Conversation, ConversationParticipant}
+  alias Famichat.Chat.{Conversation, ConversationQueries}
 
-  alias Famichat.Accounts.{FamilyMembership, User}
+  alias Famichat.Accounts.User
 
   @typedoc "Allowed authorization actions."
   @type action :: :send_message
@@ -57,19 +57,25 @@ defmodule Famichat.Chat.ConversationAccess do
   """
   @spec member?(Ecto.UUID.t(), Ecto.UUID.t()) :: boolean()
   def member?(conversation_id, user_id) do
-    Repo.exists?(
-      from p in ConversationParticipant,
-        where: p.conversation_id == ^conversation_id and p.user_id == ^user_id
-    )
+    case Repo.get(Conversation, conversation_id) do
+      %Conversation{} = conversation ->
+        membership_exists?(conversation, user_id)
+
+      nil ->
+        false
+    end
   end
 
   defp do_authorize(%Conversation{} = conversation, user_id, :send_message) do
-    case conversation.conversation_type do
-      :direct -> authorize_direct(conversation, user_id)
-      :group -> authorize_group(conversation, user_id)
-      :self -> authorize_self(conversation, user_id)
-      :family -> authorize_family(conversation, user_id)
-      _ -> deny(:send_message, conversation.id, user_id, :unknown_action)
+    if membership_exists?(conversation, user_id) do
+      :ok
+    else
+      deny(
+        :send_message,
+        conversation.id,
+        user_id,
+        denial_reason(conversation.conversation_type)
+      )
     end
   end
 
@@ -77,54 +83,15 @@ defmodule Famichat.Chat.ConversationAccess do
     deny(:unknown, conversation.id, user_id, :unknown_action)
   end
 
-  defp authorize_direct(conversation, user_id) do
-    if participant?(conversation.id, user_id) do
-      :ok
-    else
-      deny(:send_message, conversation.id, user_id, :not_participant)
-    end
+  defp membership_exists?(%Conversation{} = conversation, user_id) do
+    conversation
+    |> ConversationQueries.members()
+    |> where([u], u.id == ^user_id)
+    |> Repo.exists?()
   end
 
-  defp authorize_group(conversation, user_id) do
-    if participant?(conversation.id, user_id) do
-      :ok
-    else
-      deny(:send_message, conversation.id, user_id, :not_participant)
-    end
-  end
-
-  defp authorize_self(conversation, user_id) do
-    if participant?(conversation.id, user_id) do
-      :ok
-    else
-      deny(:send_message, conversation.id, user_id, :not_participant)
-    end
-  end
-
-  defp authorize_family(
-         %Conversation{family_id: family_id} = conversation,
-         user_id
-       ) do
-    if family_member?(family_id, user_id) do
-      :ok
-    else
-      deny(:send_message, conversation.id, user_id, :wrong_family)
-    end
-  end
-
-  defp participant?(conversation_id, user_id) do
-    Repo.exists?(
-      from p in ConversationParticipant,
-        where: p.conversation_id == ^conversation_id and p.user_id == ^user_id
-    )
-  end
-
-  defp family_member?(family_id, user_id) do
-    Repo.exists?(
-      from m in FamilyMembership,
-        where: m.family_id == ^family_id and m.user_id == ^user_id
-    )
-  end
+  defp denial_reason(:family), do: :wrong_family
+  defp denial_reason(_), do: :not_participant
 
   defp deny(action, conversation_id, user_id, reason) do
     emit_denied(action, conversation_id, user_id, reason)

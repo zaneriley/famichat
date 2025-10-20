@@ -181,9 +181,11 @@ defmodule Famichat.ChatTest do
 
     test "list_visible_conversations/2 preloads associations", %{user1: user} do
       conversations =
-        Chat.list_visible_conversations(user.id, preload: [:participants])
+        Chat.list_visible_conversations(user.id,
+          preload: [:explicit_participants]
+        )
 
-      assert hd(conversations).participants != nil
+      assert hd(conversations).explicit_participants != nil
     end
   end
 end

@@ -90,16 +90,16 @@ defmodule FamichatWeb.MessageChannel do
   """
 
   use Phoenix.Channel
-  import Ecto.Query, only: [from: 2]
+  import Ecto.Query
   require Logger
 
   alias Famichat.Chat.{
     Conversation,
-    ConversationParticipant,
+    ConversationQueries,
     MessageService
   }
 
-  alias Famichat.Accounts.{FamilyMembership, User}
+  alias Famichat.Accounts.User
 
   alias Famichat.Repo
 
@@ -425,49 +425,14 @@ defmodule FamichatWeb.MessageChannel do
     end
   end
 
-  defp authorize_conversation(conversation, user, type) do
-    conversation_id = conversation.id
-    user_id = user.id
-
+  defp authorize_conversation(conversation, user, _type) do
     authorized? =
-      case type do
-        :self ->
-          participant?(conversation_id, user_id)
-
-        :direct ->
-          participant?(conversation_id, user_id)
-
-        :group ->
-          participant?(conversation_id, user_id)
-
-        :family ->
-          participant?(conversation_id, user_id) ||
-            shares_family?(user_id, conversation.family_id)
-      end
+      conversation
+      |> ConversationQueries.members()
+      |> where([u], u.id == ^user.id)
+      |> Repo.exists?()
 
     if authorized?, do: :ok, else: {:error, :unauthorized}
-  end
-
-  defp participant?(conversation_id, user_id) do
-    query =
-      from p in ConversationParticipant,
-        where:
-          p.conversation_id == ^conversation_id and
-            p.user_id == ^user_id
-
-    Repo.exists?(query)
-  end
-
-  defp shares_family?(_user_id, nil), do: false
-
-  defp shares_family?(user_id, family_id) do
-    query =
-      from m in FamilyMembership,
-        where: m.user_id == ^user_id and m.family_id == ^family_id,
-        limit: 1,
-        select: m.id
-
-    Repo.exists?(query)
   end
 
   defp encryption_status(%Conversation{conversation_type: type}) do
