@@ -14,10 +14,10 @@ Secure, Self-Hosted Family Communication Platform
 **Current Sprint**: Sprint 7 - Real-Time Messaging (30% complete)
 
 ### Quick Health Check
-- **Backend Core**: 60% complete (messaging works, auth missing)
+- **Backend Core**: 70% complete (messaging + account flows; encryption pending)
 - **Frontend (LiveView)**: 40% complete (messaging UI in progress)
 - **Infrastructure**: 50% complete (dev ready, prod missing)
-- **Critical Blocker**: No authentication system
+- **Critical Blocker**: End-to-end encryption (Signal) still unimplemented
 
 ## Navigation
 
