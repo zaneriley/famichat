@@ -19,7 +19,8 @@ defmodule Famichat.Chat.Family do
     field :name, :string
     field :settings, :map, default: %{}
 
-    has_many :users, Famichat.Chat.User
+    has_many :memberships, Famichat.Accounts.FamilyMembership
+    has_many :users, through: [:memberships, :user]
     has_many :conversations, Famichat.Chat.Conversation
 
     timestamps(type: :utc_datetime_usec)

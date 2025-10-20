@@ -280,14 +280,17 @@ defmodule FamichatWeb.AuthController do
   end
 
   def passkey_assert(conn, params) do
-    trust? = Map.get(params, "trust_device", true)
-    device_id = Map.get(params, "device_id", Ecto.UUID.generate())
-    user_agent = get_req_header(conn, "user-agent") |> List.first()
-    ip = maybe_ip(conn)
+    remember? = Map.get(params, "trust_device", true)
+
+    device_info = %{
+      id: Map.get(params, "device_id", Ecto.UUID.generate()),
+      user_agent: get_req_header(conn, "user-agent") |> List.first(),
+      ip: maybe_ip(conn)
+    }
 
     with {:ok, %{user: user}} <- Accounts.assert_passkey(params),
          {:ok, session} <-
-           Accounts.start_session(user, device_id, user_agent, ip, trust?) do
+           Accounts.start_session(user, device_info, remember: remember?) do
       conn
       |> put_status(:created)
       |> json(session)

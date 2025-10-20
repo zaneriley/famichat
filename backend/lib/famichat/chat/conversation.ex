@@ -31,7 +31,7 @@ defmodule Famichat.Chat.Conversation do
           direct_key: String.t() | nil,
           metadata: map(),
           messages: [Famichat.Chat.Message.t()] | nil,
-          users: [Famichat.Chat.User.t()] | nil,
+          users: [Famichat.Accounts.User.t()] | nil,
           hidden_by_users: [Ecto.UUID.t()],
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
@@ -57,7 +57,7 @@ defmodule Famichat.Chat.Conversation do
 
     has_many :messages, Famichat.Chat.Message, foreign_key: :conversation_id
 
-    many_to_many :users, Famichat.Chat.User,
+    many_to_many :users, Famichat.Accounts.User,
       join_through: Famichat.Chat.ConversationParticipant
 
     has_many :participants, Famichat.Chat.ConversationParticipant,

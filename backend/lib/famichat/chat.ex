@@ -5,7 +5,8 @@ defmodule Famichat.Chat do
 
   import Ecto.Query, warn: false
   alias Famichat.Repo
-  alias Famichat.Chat.{User, Family}
+  alias Famichat.Chat.Family
+  alias Famichat.Accounts.User
 
   @doc """
   Returns the list of families.
@@ -108,16 +109,50 @@ defmodule Famichat.Chat do
           | {:error, Ecto.Changeset.t()}
           | {:error, :invalid_input}
   def create_user(attrs) when is_map(attrs) do
-    try do
-      %User{}
-      |> User.changeset(attrs)
-      |> Repo.insert()
-    rescue
-      _ -> {:error, :invalid_input}
+    family_id = Map.get(attrs, :family_id) || Map.get(attrs, "family_id")
+    role = Map.get(attrs, :role) || Map.get(attrs, "role")
+    user_attrs = Map.drop(attrs, [:family_id, :role, "family_id", "role"])
+
+    Repo.transaction(fn ->
+      with {:ok, user} <- insert_user(user_attrs),
+           {:ok, _} <- ensure_membership(user, family_id, role) do
+        user
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+    |> case do
+      {:ok, user} -> {:ok, user}
+      {:error, reason} -> {:error, reason}
     end
   end
 
   def create_user(_), do: {:error, :invalid_input}
+
+  defp insert_user(attrs) do
+    %User{}
+    |> User.changeset(attrs)
+    |> Repo.insert()
+  rescue
+    _ -> {:error, :invalid_input}
+  end
+
+  defp ensure_membership(_user, nil, _role), do: {:ok, :skipped}
+
+  defp ensure_membership(user, family_id, role) do
+    normalized_role = normalize_role(role)
+
+    %Famichat.Accounts.FamilyMembership{}
+    |> Famichat.Accounts.FamilyMembership.changeset(%{
+      user_id: user.id,
+      family_id: family_id,
+      role: normalized_role
+    })
+    |> Repo.insert(
+      on_conflict: {:replace, [:role]},
+      conflict_target: [:family_id, :user_id]
+    )
+  end
 
   @doc """
   Updates a user.
@@ -165,6 +200,12 @@ defmodule Famichat.Chat do
   def change_user(%User{} = user, attrs \\ %{}) do
     User.changeset(user, attrs)
   end
+
+  defp normalize_role(:admin), do: :admin
+  defp normalize_role(:member), do: :member
+  defp normalize_role("admin"), do: :admin
+  defp normalize_role("member"), do: :member
+  defp normalize_role(_), do: :member
 
   ## Conversation Visibility
 

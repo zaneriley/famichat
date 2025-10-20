@@ -15,6 +15,7 @@ defmodule Famichat.Application do
     children = [
       FamichatWeb.Telemetry,
       Famichat.Repo,
+      Famichat.Vault,
       {DNSCluster,
        query: Application.get_env(:famichat, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Famichat.PubSub},
