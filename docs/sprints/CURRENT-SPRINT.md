@@ -1,47 +1,57 @@
 # Sprint 7: Real–Time Messaging Integration
 
 **Duration**: Oct 1 - Oct 15, 2025
-**Progress**: ████████░░░░░░░░░░░░ 30% (4/9 stories complete)
-**Status**: 🟡 On track with minor blockers
+**Progress**: ███████████░░░░░░░░ 66% (6/9 stories complete)
+**Status**: 🟢 Channel auth hardened; telemetry polish up next
 
 ---
 
 ## 📊 Quick Status
 
-### ✅ Completed (4/9 stories)
+### ✅ Completed (6/9 stories)
 - ✓ 7.1.1-7.1.2: Phoenix Channel module with tests
+- ✓ 7.1.3: Channel routing & authorization (access tokens enforced, EnsureTrusted plug)
 - ✓ 7.10.1: Type-immutable conversation schema
 - ✓ 7.10.8: Conversation hidden_by_users field
 - ✓ 7.10.9: Conversation hiding functionality
+- ✓ 7.9: Accounts context refactor (passkey-first onboarding, device trust, single token model)
 
-### 🚧 In Progress (3/9 stories)
-- 🔄 7.1.3: Channel routing & authorization (80% complete)
+### 🚧 In Progress (2/9 stories)
 - 🔄 7.1.4: Encryption telemetry validation
-- 🔄 7.10.5-6: Group role management tests
+- 🔄 7.10.5-6: Group role management tests (needs membership-aware fixtures)
+
+### ✅ Completed (6/9 stories)
+- ✓ 7.9: **Accounts context refactor** (passkey-first onboarding, tokens, sessions, channel tokens, tests green)
 
 ### ❌ Not Started (2/9 stories)
 - ⏳ 7.2: Broadcast testing
 - ⏳ 7.3: Client integration documentation
-- 🚨 7.9: **Accounts context (CRITICAL - blocks auth!)**
 
 ---
 
 ## 🚨 Current Blockers
 
-1. **Story 7.9 Not Started** (HIGH PRIORITY)
-   - Accounts context missing
-   - No user registration/login
-   - Blocks production demo
-   - **Action**: Must prioritize this week
+1. **Telemetry coverage** (MEDIUM PRIORITY)
+   - Encryption telemetry assertions still pending (Story 7.1.4)
+   - **Action**: Land tests once auth layer stabilized
 
-2. **Auth Flow Design Decision** (MEDIUM PRIORITY)
-   - Token-based vs session-based for channels?
-   - Need to document decision
-   - **Action**: Create ADR in docs/decisions/004-channel-auth.md
+2. **Broadcast & client docs** (MEDIUM PRIORITY)
+   - Broadcast scenarios still lack coverage (Story 7.2)
+   - Client integration guide remains outstanding (Story 7.3)
+   - **Action**: Add channel broadcast tests + ship LiveView hook notes
 
 3. **Test Coverage Unknown** (LOW PRIORITY)
    - Haven't run coverage measurement
-   - **Action**: Run `cd backend && ./run mix coveralls` before sprint end
+   - **Action**: Run `cd backend && ./run mix coveralls` once tests pass
+
+### 🔁 Follow-ups Logged from Auth Hardening
+- ✅ Add `enrollment_required_since` marker and set/clear logic after magic-link logins (MAG-03 probation) — migration & state sync landed Oct 13, 2025
+- ✅ Emit telemetry on OTP issuance to match Section 10 plan — `Accounts.issue_otp/1` now instruments `:otp, :issue`
+- ✅ Harden username login: fingerprint migration + case-insensitive lookups landed Oct 14, 2025 (`20251014090000_add_username_fingerprint_to_users`)
+- ✅ One-invite/one-account enforced — `POST /auth/invites/accept` now mints a 10 min registration JWT and immediately consumes the invite token (Oct 14, 2025)
+- 🔄 Decide whether trusted device window should roll forward on refresh or stay fixed at 30 days
+- ✅ Document `Accounts.reissue_pairing/2` in the API surface (or mark it internal-only) — captured in `docs/API-DESIGN.md` (Oct 13, 2025)
+- 🔄 WebAuthn compliance: `wax_` dependency added, but passkey endpoints still return simplified `{challenge, challenge_token}` payloads; swap to Wax-generated `PublicKeyCredential*Options` and full verification remains open
 
 ---
 
@@ -170,7 +180,7 @@ This provides clearer intent, more predictable validation, and a better develope
   
 - [ ] **7.1.3:** Configure the channel in the socket and backend routing; verify via IEx (using `Endpoint.broadcast!/3`) that dummy messages broadcast correctly.
   - [ ] **Subtask:** Configure conversation-type-aware topic formats (`message:<type>:<id>`) in channel routes
-  - [ ] **Subtask:** Implement proper authorization checks based on conversation type
+  - [ ] **Subtask:** Implement proper authorization checks based on conversation type (blocks on Accounts access tokens)
   - [ ] **Subtask:** Run `cd backend && ./run elixir:lint` and verify there are no issues.
   - [ ] **Subtask:** Run security check (`cd backend && ./run elixir:security-check`) and static analysis (`cd backend && ./run elixir:static-analysis`) to validate changes.
   - [ ] **Subtask (New):** Integrate basic telemetry instrumentation for channel join and broadcast events and verify via logs/telemetry dashboards.
@@ -281,60 +291,15 @@ This provides clearer intent, more predictable validation, and a better develope
   - **Expected Outcome:** The test coverage report should indicate at least 80% overall coverage.
 - **Final Review 7.8:** Once all subtasks for Story 7.8 have been completed and verified, mark off the Story 7.8 checkbox in this Sprint7.md file.
 
-### Story 7.9: Accounts Context Refactor and Sensitive Data Management
-- [ ] **7.9.1:** Create Dedicated Accounts User Schema Module
-  - [ ] **Subtask:** Develop a new file at `backend/lib/famichat/accounts/user.ex` with an Ecto schema that includes the following fields:
-        - `username` (string)
-        - `email` (string, encrypted via Cloak.Ecto)
-        - `password_hash` (string)
-        - `confirmed_at` (utc_datetime)
-        - `confirmation_token` (string)
-        - `reset_token` (string)
-        - `reset_token_sent_at` (utc_datetime)
-        - `last_login_at` (utc_datetime)
-        - Standard timestamps
-  - [ ] **Verification:** Run `cd backend && ./run mix format` to ensure correct formatting and run tests via:
-        ```bash
-        cd backend && ./run elixir:test test/famichat/accounts/user_test.exs
-        ```
-
-- [ ] **7.9.2:** Create Migration for the Accounts_Users Table
-  - [ ] **Subtask:** Write a migration (e.g., `backend/priv/repo/migrations/20250301000000_create_accounts_users.exs`) to create the `accounts_users` table with all fields specified in 7.9.1 and proper unique constraints for `username` and `email`.
-  - [ ] **Verification:** Execute:
-        ```bash
-        cd backend && ./run mix ecto.migrate
-        cd backend && ./run psql -d postgres -c "\d accounts_users"
-        ```
-
-- [ ] **7.9.3:** Write Unit Tests for the Accounts Changeset
-  - [ ] **Subtask:** Develop tests in `backend/test/famichat/accounts/user_test.exs` that verify:
-        - Changeset errors when required fields (`username`, `email`, `password_hash`) are missing.
-        - Email format validation works.
-        - Uniqueness constraints for `email` and `username`.
-  - [ ] **Verification:** Run:
-        ```bash
-        cd backend && ./run elixir:test test/famichat/accounts/user_test.exs
-        ```
-        and confirm all tests pass.
-
-- [ ] **7.9.4:** Update CLI Run Tasks and Documentation
-  - [ ] **Subtask:** Update the README and internal documentation to mention the new Accounts context. Verify that our standard run commands still function:
-        - Migrations: `cd backend && ./run mix ecto.migrate`
-        - Testing: `cd backend && ./run elixir:test`
-  - [ ] **Verification:** Ensure the docs are updated and that the run commands complete without error.
-
-- [ ] **7.9.5:** Integration Test Between Accounts and Chat Context
-  - [ ] **Subtask:** Write an integration test (e.g., in `backend/test/integration/accounts_chat_integration_test.exs`) that:
-        - Creates a user in the Accounts context.
-        - Associates that user with an existing Family from the Chat context.
-        - Verifies that retrieving the family information using the user's account ID works as expected.
-  - [ ] **Verification:** Run:
-        ```bash
-        cd backend && ./run elixir:test test/integration/accounts_chat_integration_test.exs
-        ```
-        and confirm that the integration test passes.
-
-**Final Review 7.9:** Once all subtasks for Story 7.9 have been completed and verified (via appropriate CLI commands and test outputs), mark off the Story 7.9 checkbox in Sprint7.md.
+### Story 7.9: Accounts Context Refactor and Sensitive Data Management ✅
+- Delivered:
+  - `Famichat.Accounts` context with passkey-first onboarding (invite → register → session), QR/admin code fallbacks, device trust window, and consistent token model.
+  - New schemas/tables (`family_memberships`, `user_tokens`, `user_devices`, `passkeys`) plus Cloak-encrypted emails and telemetry/rate limiting.
+  - Message channel/socket tests now use Accounts-issued access tokens; full suite green.
+- Follow-ups (tracked separately):
+  - Remove legacy `users.family_id`/`role` columns after deploy.
+  - Expose HTTP endpoints and LiveView flows (invite, magic link, OTP) using the new APIs.
+  - Run `mix coveralls` + documentation polish for CLI helpers.
 
 ### Story 7.10: Conversation Type Boundary Implementation
 - [ ] **7.10.1:** Enhance conversation schema for type enforcement
@@ -387,8 +352,8 @@ This provides clearer intent, more predictable validation, and a better develope
       # Schema structure
       schema "group_conversation_privileges" do
         belongs_to :conversation, Famichat.Chat.Conversation, type: :binary_id
-        belongs_to :user, Famichat.Chat.User, type: :binary_id
-        belongs_to :granted_by, Famichat.Chat.User, type: :binary_id, foreign_key: :granted_by_id
+        belongs_to :user, Famichat.Accounts.User, type: :binary_id
+        belongs_to :granted_by, Famichat.Accounts.User, type: :binary_id, foreign_key: :granted_by_id
         
         field :role, Ecto.Enum, values: [:admin, :member], default: :member
         field :granted_at, :utc_datetime, default: &DateTime.utc_now/0

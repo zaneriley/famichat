@@ -129,6 +129,8 @@
 - ✅ Type-immutable conversation schema
 - ✅ Conversation hiding/unhiding functionality
 - ✅ Comprehensive channel tests (42KB test file!)
+- ✅ Accounts context refactor (Story 7.9) — passkey-first onboarding, device trust, single token model
+- ✅ Username fingerprint migration + single-use invite acceptance (registration JWT handshake)
 
 **In Progress**:
 - 🔄 Channel routing & authorization (80%)
@@ -138,7 +140,6 @@
 **Not Started**:
 - ❌ Broadcast testing (Story 7.2)
 - ❌ Client integration documentation (Story 7.3)
-- 🚨 **Accounts context (Story 7.9) - CRITICAL BLOCKER!**
 
 **Key Deliverables**:
 - Phoenix Channels configured ✓
@@ -147,8 +148,8 @@
 - **Accounts context** ❌ (MUST START!)
 
 **Blockers**:
-1. Story 7.9 (Accounts) not started - blocks all auth work
-2. Auth flow design decision needed (ADR required)
+1. Encryption telemetry validation still pending (Story 7.1.4)
+2. Auth client integration docs outstanding (Story 7.3)
 3. Test coverage not measured
 
 **Key Files**:
@@ -381,9 +382,9 @@
 **Average Velocity**: ~5 stories per sprint (1 point each)
 
 ### Quality Metrics
-- **Test Coverage**: Unknown (need to measure)
-- **Tests Passing**: 98/98 ✅
-- **Security**: No vulnerabilities (Sobelow) ✅
+- **Test Coverage**: Unknown (run `mix coveralls` post-Accounts refactor)
+- **Tests Passing**: ✅ 155/155 (Accounts + channel suites green)
+- **Security**: No new vulnerabilities (Sobelow) ✅
 - **Performance**: All ops under 200ms budget ✅
 
 ---
@@ -391,9 +392,9 @@
 ## 🚨 Risks & Dependencies
 
 ### High-Risk Items
-1. **Authentication Missing** (Story 7.9)
-   - **Impact**: Blocks Sprint 8 (LiveView UI needs auth)
-   - **Mitigation**: Must start immediately, complete in Sprint 8
+1. **Authentication Refactor Follow-ups** (Story 7.9)
+   - **Impact**: Legacy columns removal + HTTP endpoints still pending, but core flows green
+   - **Mitigation**: Ship cleanup migration, surface invite/magic/OTP endpoints, monitor regression tests
 
 2. **Encryption Complexity**
    - **Impact**: May take longer than 3 weeks (moved to Sprint 9, extended from 2 to 3 weeks)
