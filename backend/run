@@ -5,6 +5,12 @@ set -o pipefail
 
 DC="${DC:-exec}"
 
+# Ensure docker-compose commands run with the host user's uid/gid so the
+# container can safely touch bind-mounted files.
+HOST_UID="${HOST_UID:-$(id -u)}"
+HOST_GID="${HOST_GID:-$(id -g)}"
+export HOST_UID HOST_GID
+
 # If we're running in CI we need to disable TTY allocation for docker compose
 # commands that enable it by default, such as exec and run.
 TTY=""
