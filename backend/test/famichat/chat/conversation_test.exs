@@ -91,11 +91,10 @@ defmodule Famichat.Chat.ConversationTest do
           user1: user1,
           user2: user2
         })
+        |> Repo.preload(:explicit_users)
 
-      conversation = Repo.preload(conversation, :users)
-
-      assert length(conversation.users) == 2
-      user_ids = Enum.map(conversation.users, & &1.id)
+      assert length(conversation.explicit_users) == 2
+      user_ids = Enum.map(conversation.explicit_users, & &1.id)
       assert user1.id in user_ids
       assert user2.id in user_ids
     end
@@ -125,7 +124,7 @@ defmodule Famichat.Chat.ConversationTest do
           metadata: %{"name" => "Group Chat"},
           family_id: family.id
         })
-        |> Ecto.Changeset.put_assoc(:users, [user1, user2])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user1, user2])
 
       assert group_changeset.valid?
 
@@ -137,7 +136,7 @@ defmodule Famichat.Chat.ConversationTest do
           metadata: %{},
           family_id: family.id
         })
-        |> Ecto.Changeset.put_assoc(:users, [user1])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user1])
 
       assert self_changeset.valid?
     end
@@ -185,14 +184,14 @@ defmodule Famichat.Chat.ConversationTest do
           metadata: %{},
           family_id: family.id
         })
-        |> Ecto.Changeset.put_assoc(:users, [user])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user])
 
       assert changeset.valid?
       {:ok, conversation} = Repo.insert(changeset)
-      conversation = Repo.preload(conversation, :users)
+      conversation = Repo.preload(conversation, :explicit_users)
 
-      assert length(conversation.users) == 1
-      assert hd(conversation.users).id == user.id
+      assert length(conversation.explicit_users) == 1
+      assert hd(conversation.explicit_users).id == user.id
     end
 
     test "handles empty users list", %{family: family} do
@@ -207,7 +206,7 @@ defmodule Famichat.Chat.ConversationTest do
           family_id: family.id,
           direct_key: direct_key
         })
-        |> Ecto.Changeset.put_assoc(:users, [])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [])
 
       # Should be valid as users can be added later
       assert changeset.valid?
@@ -229,7 +228,7 @@ defmodule Famichat.Chat.ConversationTest do
           family_id: family.id,
           direct_key: direct_key
         })
-        |> Ecto.Changeset.put_assoc(:users, [user])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user])
 
       # Should be valid initially as users can be added later
       assert direct_changeset.valid?
@@ -242,7 +241,7 @@ defmodule Famichat.Chat.ConversationTest do
           metadata: %{},
           family_id: family.id
         })
-        |> Ecto.Changeset.put_assoc(:users, [user])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user])
 
       assert self_changeset.valid?
 
@@ -254,7 +253,7 @@ defmodule Famichat.Chat.ConversationTest do
           metadata: %{"name" => "Test Group"},
           family_id: family.id
         })
-        |> Ecto.Changeset.put_assoc(:users, [user])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user])
 
       # Should be valid initially as more users can be added later
       assert group_changeset.valid?

@@ -263,9 +263,12 @@ defmodule Famichat.ChatFixtures do
     conversation
   end
 
+  defp create_conversation_by_type(%{conversation_type: :family} = attrs) do
+    create_base_conversation(attrs)
+  end
+
   defp create_conversation_by_type(attrs) do
-    # For other conversation types (e.g. :self, if added later)
-    # This will now only handle types not explicitly matched above.
+    # For other conversation types (e.g. :self)
     user =
       Map.get(attrs, :user1) ||
         user_fixture(%{family_id: attrs.family_id})

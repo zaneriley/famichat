@@ -19,10 +19,9 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
       # Implementation uses direct instead of self
       assert conversation.conversation_type == :direct
-
       membership = Repo.get_by!(FamilyMembership, user_id: user.id)
       assert conversation.family_id == membership.family_id
-      assert Enum.any?(conversation.users, fn u -> u.id == user.id end)
+      assert Enum.any?(conversation.explicit_users, fn u -> u.id == user.id end)
     end
 
     test "returns existing self conversation when already created" do
@@ -104,7 +103,7 @@ defmodule Famichat.Chat.ConversationServiceTest do
       assert conversation.conversation_type == :direct
       assert conversation.family_id == family.id
 
-      user_ids = Enum.map(conversation.users, & &1.id)
+      user_ids = Enum.map(conversation.explicit_users, & &1.id)
       assert user1.id in user_ids
       assert user2.id in user_ids
     end
@@ -205,8 +204,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
       assert length(conversations) == 1
 
       # Verify user associations
-      assert length(conversation.users) == 2
-      user_ids = Enum.map(conversation.users, & &1.id)
+      assert length(conversation.explicit_users) == 2
+      user_ids = Enum.map(conversation.explicit_users, & &1.id)
       assert user1.id in user_ids
       assert user2.id in user_ids
     end
@@ -311,6 +310,68 @@ defmodule Famichat.Chat.ConversationServiceTest do
     end
   end
 
+  describe "membership helpers" do
+    test "list_user_conversations includes family conversations via implicit membership" do
+      family = family_fixture()
+      user = user_fixture(%{family_id: family.id})
+      _other = user_fixture(%{family_id: family.id})
+      conversation_fixture(%{conversation_type: :family, family_id: family.id})
+
+      assert {:ok, conversations} =
+               ConversationService.list_user_conversations(user.id)
+
+      assert Enum.any?(conversations, &(&1.conversation_type == :family))
+    end
+
+    test "list_members includes explicit participants for direct conversations" do
+      conv = conversation_fixture(%{conversation_type: :direct})
+      members = ConversationService.list_members(conv)
+
+      assert Enum.count(members) == 2
+      assert Enum.all?(members, &match?(%Famichat.Accounts.User{}, &1))
+    end
+
+    test "list_members includes implicit family members for family conversations" do
+      family = family_fixture()
+      member = user_fixture(%{family_id: family.id})
+      _other = user_fixture(%{family_id: family.id})
+
+      conv =
+        conversation_fixture(%{
+          conversation_type: :family,
+          family_id: family.id
+        })
+
+      member_ids =
+        conv
+        |> ConversationService.list_members()
+        |> Enum.map(& &1.id)
+
+      assert member.id in member_ids
+    end
+
+    test "get_recipient_ids returns user ids for both membership models" do
+      direct = conversation_fixture(%{conversation_type: :direct})
+      family = family_fixture()
+      family_member = user_fixture(%{family_id: family.id})
+
+      family_conversation =
+        conversation_fixture(%{
+          conversation_type: :family,
+          family_id: family.id
+        })
+
+      direct_recipient_ids = ConversationService.get_recipient_ids(direct)
+
+      family_recipient_ids =
+        ConversationService.get_recipient_ids(family_conversation)
+
+      assert Enum.count(direct_recipient_ids) == 2
+      assert family_member.id in family_recipient_ids
+      assert Enum.all?(family_recipient_ids, &is_binary/1)
+    end
+  end
+
   describe "list_user_conversations/1" do
     test "returns direct conversations for a given user" do
       family = family_fixture()
@@ -406,7 +467,11 @@ defmodule Famichat.Chat.ConversationServiceTest do
       # The group_conversation fixture now handles making its creator an admin.
       # We fetch this creator to use in tests that verify creator privileges
       # or need to target the original admin.
-      group_creator = hd(Repo.preload(group_conversation, :users).users)
+      group_creator =
+        group_conversation
+        |> Repo.preload(:explicit_users)
+        |> Map.fetch!(:explicit_users)
+        |> hd()
 
       # The admin_user defined in the setup is used for tests that require
       # *an* admin to perform actions. If this admin_user is not the

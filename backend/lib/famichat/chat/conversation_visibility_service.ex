@@ -165,7 +165,19 @@ defmodule Famichat.Chat.ConversationVisibilityService do
 
   # Helper function to optionally preload associations
   defp maybe_preload(query, nil), do: query
-  defp maybe_preload(query, preloads), do: from(q in query, preload: ^preloads)
+
+  defp maybe_preload(query, preloads) do
+    normalized_preloads =
+      preloads
+      |> List.wrap()
+      |> Enum.map(&normalize_preload/1)
+
+    from(q in query, preload: ^normalized_preloads)
+  end
+
+  defp normalize_preload(:participants), do: :explicit_participants
+  defp normalize_preload(:users), do: :explicit_users
+  defp normalize_preload(other), do: other
 
   # Helper function to convert result to telemetry-friendly value
   defp result_to_telemetry_value({:ok, _}), do: :success

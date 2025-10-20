@@ -1,7 +1,7 @@
 defmodule Famichat.Messages.DecryptionTest do
   use FamichatWeb.ConnCase, async: true
   import Famichat.ChatFixtures
-  alias Famichat.Chat.MessageService
+  alias Famichat.Chat.{ConversationService, MessageService}
   alias Famichat.Chat.Message
   alias Famichat.Repo
   require Logger
@@ -29,11 +29,8 @@ defmodule Famichat.Messages.DecryptionTest do
       nil
     )
 
-    conversation =
-      conversation_fixture(%{conversation_type: :direct})
-      |> Repo.preload(:users)
-
-    [user | _] = conversation.users
+    conversation = conversation_fixture(%{conversation_type: :direct})
+    [user | _] = ConversationService.list_members(conversation)
 
     on_exit(fn -> :telemetry.detach(handler_id) end)
 

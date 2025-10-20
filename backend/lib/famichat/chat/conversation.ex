@@ -31,7 +31,7 @@ defmodule Famichat.Chat.Conversation do
           direct_key: String.t() | nil,
           metadata: map(),
           messages: [Famichat.Chat.Message.t()] | nil,
-          users: [Famichat.Accounts.User.t()] | nil,
+          explicit_users: [Famichat.Accounts.User.t()] | nil,
           hidden_by_users: [Ecto.UUID.t()],
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
@@ -57,10 +57,10 @@ defmodule Famichat.Chat.Conversation do
 
     has_many :messages, Famichat.Chat.Message, foreign_key: :conversation_id
 
-    many_to_many :users, Famichat.Accounts.User,
+    many_to_many :explicit_users, Famichat.Accounts.User,
       join_through: Famichat.Chat.ConversationParticipant
 
-    has_many :participants, Famichat.Chat.ConversationParticipant,
+    has_many :explicit_participants, Famichat.Chat.ConversationParticipant,
       foreign_key: :conversation_id
 
     timestamps(type: :utc_datetime_usec)
@@ -203,7 +203,7 @@ defmodule Famichat.Chat.Conversation do
   """
   def validate_user_count(changeset) do
     conversation_type = get_field(changeset, :conversation_type)
-    users = get_field(changeset, :users) || []
+    users = get_field(changeset, :explicit_users) || []
     user_count = length(users)
 
     changeset
@@ -229,7 +229,7 @@ defmodule Famichat.Chat.Conversation do
     do:
       add_error(
         changeset,
-        :users,
+        :explicit_users,
         "direct conversations require exactly 2 users"
       )
 
@@ -237,7 +237,11 @@ defmodule Famichat.Chat.Conversation do
 
   defp validate_user_count_by_type(changeset, :self, _),
     do:
-      add_error(changeset, :users, "self conversations require exactly 1 user")
+      add_error(
+        changeset,
+        :explicit_users,
+        "self conversations require exactly 1 user"
+      )
 
   defp validate_user_count_by_type(changeset, :group, n) when n >= 3,
     do: changeset
@@ -246,7 +250,7 @@ defmodule Famichat.Chat.Conversation do
     do:
       add_error(
         changeset,
-        :users,
+        :explicit_users,
         "group conversations require at least 3 users"
       )
 
@@ -257,7 +261,7 @@ defmodule Famichat.Chat.Conversation do
     do:
       add_error(
         changeset,
-        :users,
+        :explicit_users,
         "family conversations require at least 1 user"
       )
 

@@ -2,17 +2,20 @@ defmodule Famichat.Chat.MessageServiceTest do
   use Famichat.DataCase
   use ExUnit.Case, async: true
 
-  alias Famichat.Chat.{ConversationAccess, MessageService, Message}
+  alias Famichat.Chat.{
+    ConversationAccess,
+    ConversationService,
+    MessageService,
+    Message
+  }
+
   alias Famichat.Repo
   import Famichat.ChatFixtures
 
   describe "get_conversation_messages/2" do
     setup do
-      conversation =
-        conversation_fixture(%{conversation_type: :direct})
-        |> Repo.preload(:users)
-
-      [user | _] = conversation.users
+      conversation = conversation_fixture(%{conversation_type: :direct})
+      [user | _] = ConversationService.list_members(conversation)
 
       {:ok, conversation: conversation, user: user}
     end
@@ -81,11 +84,8 @@ defmodule Famichat.Chat.MessageServiceTest do
     end
 
     test "telemetry emits telemetry event" do
-      conv =
-        conversation_fixture(%{conversation_type: :direct})
-        |> Repo.preload(:users)
-
-      [user | _] = conv.users
+      conv = conversation_fixture(%{conversation_type: :direct})
+      [user | _] = ConversationService.list_members(conv)
 
       assert ConversationAccess.member?(conv.id, user.id)
 
@@ -119,11 +119,8 @@ defmodule Famichat.Chat.MessageServiceTest do
 
   describe "send_message/1" do
     setup do
-      conv =
-        conversation_fixture(%{conversation_type: :direct})
-        |> Repo.preload(:users)
-
-      [participant | _] = conv.users
+      conv = conversation_fixture(%{conversation_type: :direct})
+      [participant | _] = ConversationService.list_members(conv)
 
       {:ok, user: participant, conv: conv}
     end

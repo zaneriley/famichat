@@ -35,10 +35,11 @@ defmodule Famichat.Chat.ConversationService do
     Accounts.FamilyMembership,
     Chat.Conversation,
     Chat.ConversationParticipant,
+    Chat.ConversationQueries,
     Chat.GroupConversationPrivileges
   }
 
-  import Ecto.Query, only: [from: 2]
+  import Ecto.Query
   require Logger
 
   defmodule ConversationState do
@@ -99,7 +100,7 @@ defmodule Famichat.Chat.ConversationService do
 
   ## Returns
 
-    - `{:ok, Conversation.t()}` - Created/existing conversation with users preloaded
+    - `{:ok, Conversation.t()}` - Created/existing conversation with explicit users preloaded
     - `{:error, reason}` - Tuple with error atom
 
   ## Errors
@@ -219,7 +220,7 @@ defmodule Famichat.Chat.ConversationService do
           end
         end)
         |> Ecto.Multi.run(:preload, fn repo, %{participants: conversation} ->
-          {:ok, repo.preload(conversation, :users)}
+          {:ok, repo.preload(conversation, :explicit_users)}
         end)
 
       case Repo.transaction(multi) do
@@ -248,7 +249,7 @@ defmodule Famichat.Chat.ConversationService do
 
   ## Features
 
-    - Automatic preloading of participant users
+    - Centralized membership handling (implicit + explicit)
     - Distinct results to prevent duplicates
     - Ordered by recent activity
 
@@ -276,6 +277,28 @@ defmodule Famichat.Chat.ConversationService do
   end
 
   def list_user_conversations(_), do: {:error, :invalid_user_id}
+
+  @doc """
+  Returns the users who are members of the given conversation, whether their
+  membership is implicit (family) or explicit (participant record).
+  """
+  @spec list_members(Conversation.t()) :: [User.t()]
+  def list_members(%Conversation{} = conversation) do
+    conversation
+    |> ConversationQueries.members()
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns the user IDs that should receive updates for a conversation.
+  """
+  @spec get_recipient_ids(Conversation.t()) :: [Ecto.UUID.t()]
+  def get_recipient_ids(%Conversation{} = conversation) do
+    conversation
+    |> ConversationQueries.members()
+    |> select([u], u.id)
+    |> Repo.all()
+  end
 
   defp get_user(user_id) do
     case Repo.get(User, user_id) do
@@ -316,14 +339,10 @@ defmodule Famichat.Chat.ConversationService do
   end
 
   defp get_conversations(user_id) do
-    query =
-      from c in Conversation,
-        join: u in assoc(c, :users),
-        where: u.id == ^user_id and c.conversation_type == ^:direct,
-        distinct: c.id,
-        preload: [:users]
-
-    Repo.all(query)
+    ConversationQueries.for_user(user_id)
+    |> order_by([c], desc: c.updated_at)
+    |> Repo.all()
+    |> Repo.preload(:explicit_users)
   end
 
   defp result_status({:ok, _}), do: "success"
@@ -382,7 +401,7 @@ defmodule Famichat.Chat.ConversationService do
         )
         |> Ecto.Multi.run(:preload_users, fn repo,
                                              %{conversation: conversation} ->
-          {:ok, repo.preload(conversation, :users)}
+          {:ok, repo.preload(conversation, :explicit_users)}
         end)
 
       case Repo.transaction(multi) do

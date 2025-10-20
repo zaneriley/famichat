@@ -196,7 +196,7 @@ defmodule Famichat.Chat.ConversationChangesetTest do
           family_id: family.id,
           direct_key: "key"
         })
-        |> Ecto.Changeset.put_assoc(:users, [user1, user2])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user1, user2])
         |> Conversation.validate_user_count()
 
       assert changeset.valid?
@@ -209,12 +209,12 @@ defmodule Famichat.Chat.ConversationChangesetTest do
           family_id: family.id,
           direct_key: "key"
         })
-        |> Ecto.Changeset.put_assoc(:users, [user1])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user1])
         |> Conversation.validate_user_count()
 
       assert "direct conversations require exactly 2 users" in errors_on(
                changeset
-             ).users
+             ).explicit_users
 
       # Self conversation with 1 user
       changeset =
@@ -223,7 +223,7 @@ defmodule Famichat.Chat.ConversationChangesetTest do
           conversation_type: :self,
           family_id: family.id
         })
-        |> Ecto.Changeset.put_assoc(:users, [user1])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user1])
         |> Conversation.validate_user_count()
 
       assert changeset.valid?
@@ -235,10 +235,10 @@ defmodule Famichat.Chat.ConversationChangesetTest do
           conversation_type: :self,
           family_id: family.id
         })
-        |> Ecto.Changeset.put_assoc(:users, [user1, user2])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user1, user2])
         |> Conversation.validate_user_count()
 
-      assert "self conversations require exactly 1 user" in errors_on(changeset).users
+      assert "self conversations require exactly 1 user" in errors_on(changeset).explicit_users
 
       # Group conversation with 3 users
       user3 = user_fixture(%{family_id: family.id})
@@ -250,7 +250,7 @@ defmodule Famichat.Chat.ConversationChangesetTest do
           family_id: family.id,
           metadata: %{"name" => "Group"}
         })
-        |> Ecto.Changeset.put_assoc(:users, [user1, user2, user3])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [user1, user2, user3])
         |> Conversation.validate_user_count()
 
       assert changeset.valid?
@@ -264,7 +264,7 @@ defmodule Famichat.Chat.ConversationChangesetTest do
           family_id: family.id,
           direct_key: "key"
         })
-        |> Ecto.Changeset.put_assoc(:users, [])
+        |> Ecto.Changeset.put_assoc(:explicit_users, [])
         |> Conversation.validate_user_count()
 
       assert changeset.valid?

@@ -206,14 +206,14 @@ defmodule Famichat.Chat.ConversationVisibilityServiceTest do
       # Test with preloading users
       visible =
         ConversationVisibilityService.list_visible_conversations(user1.id,
-          preload: [:users]
+          preload: [:explicit_users]
         )
 
       assert length(visible) > 0
 
       # All conversations should have users preloaded
       Enum.each(visible, fn conversation ->
-        assert Ecto.assoc_loaded?(conversation.users)
+        assert Ecto.assoc_loaded?(conversation.explicit_users)
       end)
     end
   end
