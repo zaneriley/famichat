@@ -1,6 +1,6 @@
 # Famichat - Comprehensive Status Report
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2025-10-14
 **Sprint**: 7 (Real-Time Messaging Integration)
 **Overall Progress**: 40% to MVP
 
@@ -9,18 +9,18 @@
 ## 📊 Executive Summary
 
 ### Health Indicators
-- 🟢 **Backend Core**: 60% complete - Messaging functional, auth missing
+- 🟢 **Backend Core**: 70% complete - Messaging solid, Accounts passkey/session flows green ✅; username fingerprints + single-use invite JWT shipped
 - 🟡 **Frontend (LiveView)**: 40% complete - Messaging UI in progress
 - 🟡 **Infrastructure**: 50% complete - Dev ready, prod missing
-- 🟡 **Documentation**: 75% complete - Technical docs good, updated for LiveView
+- 🟡 **Documentation**: 80% complete - Architecture/roadmap refreshed for Accounts changes
 
 ### Critical Blockers
-1. 🚨 **No Authentication System** - Cannot demo or deploy to production (Story 7.9, Sprint 8)
-2. 🚨 **No Actual Encryption** - Metadata infrastructure exists, but no crypto implementation
+1. 🚨 **No Actual Encryption** - Metadata infrastructure exists, but no crypto implementation
    - ✅ Encryption metadata storage/serialization works
    - ✅ Telemetry tracks encryption status
    - ❌ No libsignal-client integration (Sprint 9, 3 weeks)
    - ⚠️ **Messages currently stored in plaintext**
+2. ⚠️ **Telemetry Coverage** - Step-up enforcement shipped, but encryption spans still lack assertions (Story 7.1.4)
 
 ---
 
@@ -122,8 +122,8 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 **Location**: `backend/lib/famichat_web/channels/message_channel.ex`
 
 **Features**:
-- ✅ Token-based authentication via Phoenix.Token
 - ✅ Topic format: `message:<type>:<id>` (e.g., `message:direct:uuid`)
+- ✅ Socket auth delegated to `Famichat.Accounts.verify_access_token/1`
 - ✅ `join/3` callback with authorization checks
 - ✅ `handle_in("new_msg", ...)` for message handling
 - ✅ Encryption-aware payload support (preserves metadata)
@@ -139,15 +139,14 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ✅ Mobile background handling notes (iOS ~30s, Android Doze mode)
 
 **Tests**:
-- ✅ Comprehensive: [message_channel_test.exs](backend/test/famichat_web/channels/message_channel_test.exs) (42KB!)
-- ✅ Covers: join with valid/invalid tokens, message handling, telemetry verification
+- ✅ Green: [message_channel_test.exs](backend/test/famichat_web/channels/message_channel_test.exs) now mints access tokens via Accounts helpers (join/broadcast/ack telemetry asserted)
 
 ---
 
 ### Data Model (100% Schema, 90% Logic)
 
-**Database Migrations**: 9 applied
-1. ✅ `20250125021514_create_users.exs` - User schema with family_id
+**Database Migrations**: 11 applied
+1. ✅ `20250125021514_create_users.exs` - Base user schema
 2. ✅ `20250125040001_create_families.exs` - Family grouping
 3. ✅ `20250125122459_create_conversations.exs` - Conversation schema with types
 4. ✅ `20250125241524_create_messages.exs` - Message schema
@@ -156,28 +155,37 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 7. ✅ `20250226123807_create_group_conversation_privileges.exs` - Role tracking
 8. ✅ `20250427123456_add_direct_key_to_conversations.exs` - Deduplication
 9. ✅ `20250427123457_add_hidden_by_users_to_conversations.exs` - Visibility
+10. ✅ `20251005090000_accounts_phase_one.exs` - Family memberships, user_tokens, user_devices, passkeys, email encryption backfill
+11. ✅ `20251012090000_drop_legacy_user_family_fields.exs` - Removed `users.family_id/role` columns + indexes
 
-**Schemas** ([backend/lib/famichat/chat/](backend/lib/famichat/chat/)):
-- ✅ **User** ([user.ex](backend/lib/famichat/chat/user.ex)) - Binary ID, username, role, family_id, email
-- ✅ **Family** ([family.ex](backend/lib/famichat/chat/family.ex)) - Household grouping
-- ✅ **Conversation** ([conversation.ex](backend/lib/famichat/chat/conversation.ex)):
+**Schemas**:
+- ✅ **Accounts.User** ([accounts/user.ex](backend/lib/famichat/accounts/user.ex)) - Encrypted email, status enum, Cloak-backed email fingerprint
+- ✅ **Accounts.FamilyMembership** ([accounts/family_membership.ex](backend/lib/famichat/accounts/family_membership.ex)) - User ↔ family (role enum)
+- ✅ **Accounts.UserToken** ([accounts/user_token.ex](backend/lib/famichat/accounts/user_token.ex)) - Single hashed-token table (invite/magic/pair/reset)
+- ✅ **Accounts.UserDevice** ([accounts/user_device.ex](backend/lib/famichat/accounts/user_device.ex)) - Refresh rotation, trust window, revocation
+- ✅ **Accounts.Passkey** ([accounts/passkey.ex](backend/lib/famichat/accounts/passkey.ex)) - WebAuthn credential storage, sign_count tracking, enable/disable
+- ✅ **Accounts.Token / RateLimiter** ([accounts/token.ex](backend/lib/famichat/accounts/token.ex)) - Issuance + rate limits
+- ✅ **Username normalization** (`backend/priv/repo/migrations/20251014090000_add_username_fingerprint_to_users.exs`) - Case-preserving display with deterministic fingerprint lookups, collision auto-suffixing
+- ✅ **Invite acceptance flow** (`Accounts.accept_invite/1` + `AuthController.accept_invite/2`) - One-use consumption with 10 min registration JWT handshake
+- ✅ **Family** ([chat/family.ex](backend/lib/famichat/chat/family.ex)) - Household grouping
+- ✅ **Conversation** ([chat/conversation.ex](backend/lib/famichat/chat/conversation.ex)):
   - Types: `:direct`, `:self`, `:group`, `:family`
   - Immutable type (enforced via separate create/update changesets)
   - `direct_key` for uniqueness (SHA256 hash)
   - `hidden_by_users` array for per-user soft-delete
-- ✅ **Message** ([message.ex](backend/lib/famichat/chat/message.ex)):
+- ✅ **Message** ([chat/message.ex](backend/lib/famichat/chat/message.ex)):
   - Types: 8 types (only :text actively used)
   - Statuses: 3 statuses (only :sent implemented)
   - `metadata` JSONB field for encryption data
-- ✅ **ConversationParticipant** ([conversation_participant.ex](backend/lib/famichat/chat/conversation_participant.ex)) - Join table
-- ✅ **GroupConversationPrivileges** ([group_conversation_privileges.ex](backend/lib/famichat/chat/group_conversation_privileges.ex)):
+- ✅ **ConversationParticipant** ([chat/conversation_participant.ex](backend/lib/famichat/chat/conversation_participant.ex)) - Join table
+- ✅ **GroupConversationPrivileges** ([chat/group_conversation_privileges.ex](backend/lib/famichat/chat/group_conversation_privileges.ex)):
   - Roles: `:admin`, `:member`
   - Tracks who granted the privilege
   - Prevents last admin removal
 
 **Type Boundaries**:
 - ✅ Immutable after creation (separate changesets enforce this)
-- ✅ Direct: Exactly 2 users, unique via `direct_key` (SHA256 hash)
+- ✅ Direct: Exactly 2 users, unique via `direct_key` (SHA256 hash) + validated family membership
 - ✅ Self: Single user conversations
 - ✅ Group: 3+ users, admin/member roles tracked
 - ⚠️ Family: Type defined but no creation function
@@ -226,6 +234,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ✅ [message_service_test.exs](backend/test/famichat/chat/message_service_test.exs)
 - ✅ [conversation_changeset_test.exs](backend/test/famichat/chat/conversation_changeset_test.exs)
 - ✅ [conversation_test.exs](backend/test/famichat/chat/conversation_test.exs)
+- ✅ [message_channel_test.exs](backend/test/famichat_web/channels/message_channel_test.exs) - access token + telemetry coverage
 
 **Test Infrastructure**:
 - ✅ ExMachina for factories
@@ -235,9 +244,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 **Test Quality**:
 - ✅ Comprehensive scenarios (happy path, edge cases, errors)
-- ✅ Telemetry verification in critical paths
+- ✅ Telemetry verification in critical paths (channels, services)
 - ✅ Performance budget checks in some tests
-- ⚠️ Coverage metrics unknown (need to run `mix coveralls`)
+- ⚠️ Coverage metrics unknown (run `mix coveralls` next)
 
 ---
 
@@ -355,20 +364,10 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - **Scope**: Write guide for LiveView Hooks to connect to channels
 - **Note**: Some examples exist in test LiveViews, needs formal documentation
 
-#### Story 7.9: Accounts Context 🚨 CRITICAL
-- **Status**: Not started (MAJOR BLOCKER!)
-- **Scope**:
-  - Create `Famichat.Accounts` context
-  - User registration/login endpoints
-  - Password hashing (bcrypt_elixir ready but unused)
-  - Session management
-- **Impact**: Blocks all auth-related work, cannot demo or deploy
-- **Files to Create**:
-  - `lib/famichat/accounts/user.ex` (new schema)
-  - `lib/famichat_web/controllers/auth_controller.ex` (new)
-  - Migration for accounts_users table
-- **Effort**: ~2-3 days
-- **Must Start**: This week!
+#### Story 7.9: Accounts Context ✅ COMPLETE
+- **Delivered**: Single-table token model, passkey-first invitations, QR/admin pairing, refresh rotation, recovery flows
+- **New**: `EnsureTrusted` plug gating privileged endpoints, authorization header enforcement, x-test-token header (test env only)
+- **Follow-up**: UI wiring + coverage sweep (Sprint 8), telemetry assertions tracked under Story 7.1.4
 
 ---
 
@@ -376,24 +375,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ### Critical Missing Features
 
-#### 1. Authentication System 🚨 BLOCKER
-- **Impact**: Cannot demo, cannot deploy to production
-- **What's Missing**:
-  - No user registration endpoint
-  - No login/logout flow
-  - No password hashing (bcrypt_elixir installed but unused)
-  - No session management
-  - No JWT tokens
-  - Channel auth exists but no user creation path
-- **Planned**: Story 7.9 (not started)
-- **Files Needed**:
-  - `lib/famichat/accounts/user.ex` (new Accounts context user)
-  - `lib/famichat_web/controllers/auth_controller.ex` (new)
-  - `priv/repo/migrations/*_create_accounts_users.exs` (new)
-- **Effort**: ~2-3 days
-- **Priority**: CRITICAL - must start immediately
-
-#### 2. End-to-End Encryption ❌ INFRASTRUCTURE READY
+#### 1. End-to-End Encryption ❌ INFRASTRUCTURE READY
 - **Impact**: Security risk, cannot market as "secure family chat"
 - **What's Missing**:
   - No actual cryptography (hooks exist but no implementation)
@@ -446,6 +428,17 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
   - No error tracking (Sentry/Rollbar)
 - **Planned**: Sprint 13 (Final Polish)
 - **Effort**: ~1 week
+
+---
+
+## 🔁 Open Follow-ups (Post Auth Hardening)
+- ✅ Add `enrollment_required_since` to `users` and sync it around magic-link flows (MAG-03 probation) — landed via 20251013094500 migration and follow-up state update
+- ✅ Emit telemetry for OTP issuance to align with plan Section 10 — `Accounts.issue_otp/1` now emits `[:famichat, :auth, :otp, :issue]`
+- 🔄 Decide whether trusted device windows should roll forward on refresh (currently fixed 30-day expiry)
+- ✅ Document `Accounts.reissue_pairing/2` in the API surface or mark it internal-only — captured in `docs/API-DESIGN.md`
+- 🔄 Add perf-budget checks for invite issuance & refresh (PERF-01/02)
+- ✅ Explicit DM cross-family isolation tests (FAM-02) now live in `conversation_service_test.exs`
+- 🔄 Passkey spec compliance: `wax_` dependency landed, but registration/assertion flows still bypass WebAuthn verification and return legacy payloads
 
 #### 6. LiveView Messaging UI 🔄 IN PROGRESS
 - **Impact**: Needed to dogfood the product
@@ -646,3 +639,4 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 **Last Updated**: 2025-10-05
 **Next Review**: 2025-10-08 (weekly status update)
+- ✅ Auth endpoints now share `Accounts` helpers (invites, passkeys, sessions, recovery); follow-up migration will remove legacy columns once deployed

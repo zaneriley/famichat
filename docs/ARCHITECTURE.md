@@ -38,7 +38,7 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
   - `MessageService` - Send/retrieve messages
   - `ConversationService` - Create/manage conversations
   - `ConversationVisibilityService` - Hide/unhide conversations
-- `Accounts` - User authentication (NOT YET IMPLEMENTED)
+- `Accounts` - User authentication, invites, passkeys, and device trust (invite completion issues a short-lived passkey register token; passkey challenges only issued after exchanging that token or from trusted sessions)
 
 ### Key Design Decisions
 
@@ -78,20 +78,26 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 
 ### Database Schema
 
-**Current Migrations**: 9 applied
+**Current Migrations**: 10 applied (accounts refactor in progress)
 
 **Core Tables**:
-- `users` - User accounts (with family_id, role)
+- `users` - Account records (encrypted email, status, timestamps)
+- `family_memberships` - User ↔ family join table with role tracking (admin/member)
 - `families` - Household grouping
 - `conversations` - Multi-type conversations (direct, self, group, family)
 - `messages` - Message content with metadata
 - `conversation_participants` - Join table (users ↔ conversations)
-- `group_conversation_privileges` - Role tracking (admin/member)
+- `group_conversation_privileges` - Group admin/member privileges per conversation
+- `user_tokens` - Context-scoped hashed tokens (invite, magic link, pairing, etc.)
+- `user_devices` - Device trust + refresh token rotation (30 day window)
+- `passkeys` - Stored WebAuthn credentials (registration/assertion implemented via Rustler/libsignal integration TBD); server only accepts attestation/assertion requests tied to signed challenge records (no direct credential registration)
 
-**Key Fields**:
+**Key Fields / Notes**:
+- `users.email` uses `EncryptedBinary` (Cloak) with deterministic `email_fingerprint` for uniqueness
 - `conversations.direct_key` - SHA256 hash for deduplication
 - `conversations.hidden_by_users` - Array of user IDs (soft delete)
-- `messages.metadata` - JSONB for encryption data
+- `messages.metadata` - JSONB for encryption data (E2EE stubbed until libsignal lands)
+- Accounts refactor delivered (passkey-first onboarding, single token model). Legacy `users.family_id/role` columns removed in follow-up migration.
 
 ---
 
@@ -99,9 +105,10 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 
 **Phoenix Channels**:
 - Topic format: `message:<type>:<conversation_id>`
-- Token-based authentication (Phoenix.Token)
+- Access tokens issued by `Famichat.Accounts.start_session/3` (with policy-aware `:remember` option) verified in `UserSocket.connect/3`
+- Tests green (join/broadcast/ack telemetry enforced)
 - Performance budget: 200ms
-- Telemetry on all operations
+- Telemetry on all operations (join/broadcast/ack spans, encryption metadata scrubbed)
 
 **Implementation**: [backend/lib/famichat_web/channels/message_channel.ex](../backend/lib/famichat_web/channels/message_channel.ex)
 

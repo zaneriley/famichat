@@ -1,6 +1,6 @@
 # Famichat - API Design Principles
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2025-10-14
 
 ---
 
@@ -89,4 +89,18 @@ end
 
 ---
 
-**Last Updated**: 2025-10-05
+## Accounts API Notes (Auth Hardening – Oct 2025)
+
+- `POST /api/v1/auth/invites/accept` consumes the one-time invite token and returns the sanitized payload plus a 10‑minute `registration_token` (also mirrored in the `x-test-token` header during tests).
+- `POST /api/v1/auth/invites/complete` now requires a Bearer `registration_token` header; the invite token itself is no longer accepted once consumed.
+- Invite completion still returns a `passkey_register_token`; clients must exchange that token for a WebAuthn registration challenge before enrolling a credential.
+- Usernames are persisted case-preserving but stored alongside a deterministic fingerprint; lookups must remain case-insensitive by routing through `Famichat.Accounts.get_user_by_username/1`.
+- `POST /api/v1/auth/passkeys/register/challenge` accepts either a `register_token` (fresh invite flow) or a trusted session (bearer token) to request a challenge.
+- `POST /api/v1/auth/pairings` (reissue) is intentionally admin-only; document its usage when regenerating QR/admin codes for an outstanding invite.
+- Magic-link redemption records `enrollment_required_since` when a user without active passkeys logs in; registering a passkey clears the state.
+- Magic-link, OTP, and recovery endpoints emit `x-test-token` headers only in `MIX_ENV=test` to keep raw tokens out of fixtures/logs.
+- Passkey flows are still returning minimal `{challenge, challenge_token}` payloads. Full WebAuthn `PublicKeyCredentialCreationOptions`/`PublicKeyCredentialRequestOptions` must be surfaced once the Wax integration lands.
+
+---
+
+**Last Updated**: 2025-10-13

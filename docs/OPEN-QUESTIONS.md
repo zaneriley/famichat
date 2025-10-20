@@ -60,9 +60,9 @@ This document tracks architectural and product decisions that require discussion
 
 ### Q2: Encryption Budget Flexibility
 
-**Status**: ✅ **RESOLVED: MLS meets original 200ms budget**
+**Status**: ✅ **RESOLVED: Signal family path meets 200ms budget (MLS benchmark archived)**
 
-**Updated Context**: MLS message encryption is 5-10ms (symmetric AEAD), not 150ms. The 150ms figure applies to infrequent group operations (setup, membership changes, key rotation).
+**Updated Context**: Signal double-ratchet encrypt/decrypt stays within 30-90ms for 2-6 recipients. MLS message encryption clocks 5-10ms (symmetric AEAD) and remains a reference point for large-group contingency planning; the 150ms figure applies only to infrequent group operations (setup, membership changes, key rotation).
 
 **Revised Budget Breakdown**:
 ```
@@ -85,13 +85,13 @@ Group setup/membership change:
 ```
 
 **Conclusion**:
-- **Regular messaging**: Meets original 200ms budget ✅
-- **Group management**: 150ms acceptable (infrequent operations)
+- **Primary path**: Signal Protocol (per ADR 006) continues to meet family-scale budgets ✅
+- **Reference path**: MLS metrics retained for potential Layer 5 fallback (large channels)
 - **No budget adjustment needed**
 
-**User Decision Needed**: None - MLS fits within existing performance constraints
+**User Decision Needed**: None - Protocol locked to Signal unless Layer 5 latency triggers MLS evaluation
 
-**Timeline**: Resolved
+**Timeline**: Resolved (Signal chosen; MLS retained for contingency analysis)
 
 **See**: [ENCRYPTION.md](ENCRYPTION.md#protocol-recommendation) for performance analysis
 
@@ -163,6 +163,20 @@ Group setup/membership change:
 **Decision Needed**: By Sprint 12 (E2EE key management implementation)
 
 **See**: [ENCRYPTION.md](ENCRYPTION.md#planned-implementation)
+
+---
+
+### Q4b: Passkey Nudging & Trusted Window Renewal
+
+**Context**: Plan Section 10 calls for marking an `enrollment_required_since` timestamp when a user logs in via magic link without an enrolled passkey. This state now ships (Oct 13, 2025) and clears once an active passkey exists. We have introduced the `wax_` dependency to drive WebAuthn compliance, but the server continues to return the legacy `{challenge, challenge_token}` payloads until the Wax wiring is complete. Refresh-session handling still keeps the trusted device window as a fixed 30-day expiry (it does not extend when the user refreshes tokens).
+
+**Open Questions**:
+- Should trusted devices roll their `trusted_until` forward on each refresh, or expire exactly 30 days after the user opted in?
+- What is the timeline for swapping to Wax-generated `PublicKeyCredentialCreationOptions`/`PublicKeyCredentialRequestOptions`, and how will we deliver deterministic fixtures for tests?
+
+**Decision Needed**: Before shipping the passwordless fallback UX in Sprint 8.
+
+**See**: Sprint 7 follow-ups in `docs/sprints/STATUS.md`.
 
 ---
 
@@ -343,7 +357,7 @@ Group setup/membership change:
 
 | Question | Priority | Deadline | Status | Owner |
 |----------|----------|----------|--------|-------|
-| Q1: Encryption Protocol | Critical | Sprint 9 | ✅ **Recommended: MLS** | User |
+| Q1: Encryption Protocol | Critical | Sprint 9 | ✅ **Signal Protocol (ADR 006)** | User |
 | Q2: Encryption Budget | Critical | Sprint 9 | ✅ **Resolved: Meets 200ms budget** | N/A |
 | Q5: Token Architecture | High | Sprint 9 | Developer |
 | Q8: Encryption Metadata Schema | High | Sprint 11 | Developer |
