@@ -1,12 +1,9 @@
 defmodule Famichat.Chat.ConversationServiceTest do
   use Famichat.DataCase
 
-  alias Famichat.Chat.{
-    Conversation,
-    ConversationService,
-    GroupConversationPrivileges
-  }
+  alias Famichat.Chat.{Conversation, ConversationService}
 
+  alias Famichat.Accounts.FamilyMembership
   alias Famichat.Repo
   import Famichat.ChatFixtures
   import Ecto.Query
@@ -22,7 +19,9 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
       # Implementation uses direct instead of self
       assert conversation.conversation_type == :direct
-      assert conversation.family_id == user.family_id
+
+      membership = Repo.get_by!(FamilyMembership, user_id: user.id)
+      assert conversation.family_id == membership.family_id
       assert Enum.any?(conversation.users, fn u -> u.id == user.id end)
     end
 
@@ -189,7 +188,11 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
       # Query for direct conversations with the given direct_key
       direct_key =
-        Conversation.compute_direct_key(user1.id, user2.id, user1.family_id)
+        Conversation.compute_direct_key(
+          user1.id,
+          user2.id,
+          conversation.family_id
+        )
 
       query =
         from c in Conversation,
@@ -206,6 +209,46 @@ defmodule Famichat.Chat.ConversationServiceTest do
       user_ids = Enum.map(conversation.users, & &1.id)
       assert user1.id in user_ids
       assert user2.id in user_ids
+    end
+
+    test "users shared across two families get distinct direct conversations",
+         %{
+           family: primary_family,
+           user1: user1,
+           user2: user2
+         } do
+      {:ok, conversation_one} =
+        ConversationService.create_direct_conversation(user1.id, user2.id)
+
+      assert conversation_one.family_id == primary_family.id
+
+      other_family = family_fixture()
+      membership_fixture(user1, other_family)
+      membership_fixture(user2, other_family)
+
+      primary_membership_user1 =
+        Repo.get_by!(
+          FamilyMembership,
+          user_id: user1.id,
+          family_id: primary_family.id
+        )
+
+      primary_membership_user2 =
+        Repo.get_by!(
+          FamilyMembership,
+          user_id: user2.id,
+          family_id: primary_family.id
+        )
+
+      Repo.delete!(primary_membership_user1)
+      Repo.delete!(primary_membership_user2)
+
+      {:ok, conversation_two} =
+        ConversationService.create_direct_conversation(user1.id, user2.id)
+
+      assert conversation_two.family_id == other_family.id
+      refute conversation_two.id == conversation_one.id
+      refute conversation_two.direct_key == conversation_one.direct_key
     end
 
     test "create_direct_conversation/2 emits telemetry events for success case",
@@ -270,8 +313,9 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
   describe "list_user_conversations/1" do
     test "returns direct conversations for a given user" do
-      user1 = user_fixture()
-      user2 = user_fixture(%{family_id: user1.family_id})
+      family = family_fixture()
+      user1 = user_fixture(%{family_id: family.id})
+      user2 = user_fixture(%{family_id: family.id})
 
       # Create a conversation between user1 and user2.
       {:ok, _conversation} =
@@ -373,7 +417,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
           ConversationService.assign_admin(
             group_conversation.id,
             admin_user.id,
-            group_creator.id # The creator (original admin) grants this
+            # The creator (original admin) grants this
+            group_creator.id
           )
       end
 
@@ -391,7 +436,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
     end
 
     test "auto-assigns creator as admin when creating a group conversation", %{
-      group_creator: group_creator, # Use the actual creator from the fixture
+      # Use the actual creator from the fixture
+      group_creator: group_creator,
       group_conversation: group_conversation
     } do
       # Check if the group creator (from the fixture) has admin privileges
@@ -403,17 +449,21 @@ defmodule Famichat.Chat.ConversationServiceTest do
     end
 
     test "prevents removing the last admin from a group", %{
-      group_creator: group_creator, # The actual admin of this specific conversation
+      # The actual admin of this specific conversation
+      group_creator: group_creator,
       group_conversation: group_conversation,
-      admin_user: admin_user # The admin performing the action (could be group_creator or another admin)
+      # The admin performing the action (could be group_creator or another admin)
+      admin_user: admin_user
     } do
       # Ensure the action is performed by an admin (admin_user is now guaranteed to be one for this group)
       # The user whose privilege is being changed is the group_creator (the last admin)
       {:error, :last_admin} =
         ConversationService.assign_member(
           group_conversation.id,
-          group_creator.id, # Target the actual last admin
-          admin_user.id # Action performed by an admin
+          # Target the actual last admin
+          group_creator.id,
+          # Action performed by an admin
+          admin_user.id
         )
 
       # Try to remove the only admin's privileges
@@ -424,8 +474,10 @@ defmodule Famichat.Chat.ConversationServiceTest do
       {:error, :last_admin} =
         ConversationService.remove_privilege(
           group_conversation.id,
-          group_creator.id, # Target the actual last admin
-          admin_user.id # Action performed by an admin (or nil if self-removal)
+          # Target the actual last admin
+          group_creator.id,
+          # Action performed by an admin (or nil if self-removal)
+          admin_user.id
         )
     end
 

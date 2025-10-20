@@ -22,10 +22,8 @@ defmodule FamichatWeb.AuthControllerTest do
     {:ok, admin_session} =
       Accounts.start_session(
         admin,
-        Ecto.UUID.generate(),
-        "test-agent",
-        "127.0.0.1",
-        true
+        %{id: Ecto.UUID.generate(), user_agent: "test-agent", ip: "127.0.0.1"},
+        remember: true
       )
 
     %{family: family, admin: admin, admin_session: admin_session}
@@ -121,7 +119,9 @@ defmodule FamichatWeb.AuthControllerTest do
     assert register_token
 
     created_user = Repo.get!(User, user_id)
-    assert created_user.email |> to_string() |> String.downcase() == "newuser@example.test"
+
+    assert created_user.email |> to_string() |> String.downcase() ==
+             "newuser@example.test"
 
     # Request passkey registration challenge
     challenge_payload =
@@ -239,9 +239,12 @@ defmodule FamichatWeb.AuthControllerTest do
     |> json_response(200)
 
     user = Repo.get!(User, existing_user.id)
-    assert %DateTime{} = user.passkey_due_at
-    diff = DateTime.diff(user.passkey_due_at, DateTime.utc_now(), :second)
-    assert_in_delta(diff, 7 * 24 * 60 * 60, 30)
+    assert %DateTime{} = user.enrollment_required_since
+
+    diff =
+      DateTime.diff(DateTime.utc_now(), user.enrollment_required_since, :second)
+
+    assert_in_delta(diff, 0, 5)
 
     conn
     |> post(~p"/api/v1/auth/magic_link/redeem", %{token: token})

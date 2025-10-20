@@ -4,6 +4,7 @@ defmodule Famichat.Chat.GroupConversationPrivilegesTest do
 
   alias Famichat.Chat.GroupConversationPrivileges
   import Famichat.ChatFixtures
+  import Ecto.Query
 
   describe "schema" do
     setup do
@@ -171,6 +172,13 @@ defmodule Famichat.Chat.GroupConversationPrivilegesTest do
       group_conversation: group_conversation,
       admin_user: admin_user
     } do
+      Repo.delete_all(
+        from g in GroupConversationPrivileges,
+          where:
+            g.conversation_id == ^group_conversation.id and
+              g.user_id == ^admin_user.id
+      )
+
       attrs = %{
         conversation_id: group_conversation.id,
         user_id: admin_user.id,

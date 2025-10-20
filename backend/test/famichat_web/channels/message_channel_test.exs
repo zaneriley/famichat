@@ -3,14 +3,15 @@ defmodule FamichatWeb.MessageChannelTest do
   import Phoenix.ChannelTest
   require Logger
 
-  alias Famichat.Chat.{Conversation, ConversationParticipant, User}
+  alias Famichat.Accounts.{User, UserDevice}
+  alias Famichat.Chat.{Conversation, ConversationParticipant}
   alias Famichat.ChatFixtures
   alias Famichat.Repo
   alias FamichatWeb.MessageChannel
   alias FamichatWeb.UserSocket
 
   @endpoint FamichatWeb.Endpoint
-  @salt "user_auth"
+  @access_salt "user_access_v1"
   @valid_user_id "123e4567-e89b-12d3-a456-426614174000"
   @second_user_id "223e4567-e89b-12d3-a456-426614174001"
   @third_user_id "323e4567-e89b-12d3-a456-426614174002"
@@ -117,6 +118,10 @@ defmodule FamichatWeb.MessageChannelTest do
         third_user.id
       ])
 
+    user_session = issue_access_token(user)
+    second_session = issue_access_token(second_user)
+    third_session = issue_access_token(third_user)
+
     {:ok,
      %{
        handler_id: handler_id,
@@ -125,6 +130,9 @@ defmodule FamichatWeb.MessageChannelTest do
        user: user,
        second_user: second_user,
        third_user: third_user,
+       user_session: user_session,
+       second_session: second_session,
+       third_session: third_session,
        self_conversation: self_conversation,
        direct_conversation: direct_conversation,
        group_conversation: group_conversation,
@@ -140,18 +148,29 @@ defmodule FamichatWeb.MessageChannelTest do
                connect(UserSocket, %{"token" => invalid_token})
     end
 
-    test "successfully connects with valid token" do
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
+    test "successfully connects with valid token", %{user_session: user_session} do
+      token = user_session.access_token
       assert {:ok, socket} = connect(UserSocket, %{"token" => token})
       assert socket.assigns.user_id == @valid_user_id
     end
   end
 
   describe "channel join - type-aware format" do
-    setup %{user: user, family: family} do
-      token = Phoenix.Token.sign(@endpoint, @salt, user.id)
-      {:ok, socket} = connect(UserSocket, %{"token" => token})
-      {:ok, %{socket: socket, family: family}}
+    setup %{
+      user_session: user_session,
+      family: family,
+      second_user: second_user
+    } do
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
+
+      {:ok,
+       %{
+         socket: socket,
+         family: family,
+         second_user: second_user,
+         session: user_session
+       }}
     end
 
     test "successfully joins self conversation channel", %{
@@ -225,6 +244,27 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.status == :success
       assert metadata.conversation_type == "family"
       assert metadata.conversation_id == @family_conversation_id
+    end
+
+    test "allows family conversation join via membership when not a participant",
+         %{socket: socket, family: family, second_user: second_user} do
+      membership_only_conversation =
+        insert_conversation(Ecto.UUID.generate(), :family, family.id, [
+          second_user.id
+        ])
+
+      topic = "message:family:#{membership_only_conversation.id}"
+
+      assert {:ok, _reply, _socket} =
+               subscribe_and_join(socket, MessageChannel, topic)
+
+      assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      assert metadata.status == :success
+      assert metadata.conversation_type == "family"
+      assert metadata.conversation_id == membership_only_conversation.id
     end
 
     test "rejects join when user is not participant in direct conversation", %{
@@ -384,9 +424,9 @@ defmodule FamichatWeb.MessageChannelTest do
   end
 
   describe "message broadcasting - type-aware format" do
-    setup do
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      {:ok, socket} = connect(UserSocket, %{"token" => token})
+    setup %{user_session: user_session} do
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
 
       {:ok, _, socket} =
         subscribe_and_join(
@@ -505,9 +545,10 @@ defmodule FamichatWeb.MessageChannelTest do
 
   # New test blocks for different conversation types
   describe "message broadcasting - self conversation" do
-    setup do
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      {:ok, socket} = connect(UserSocket, %{"token" => token})
+    setup %{user_session: user_session} do
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
+
       topic = "message:self:#{@self_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
       {:ok, %{socket: socket, topic: topic}}
@@ -602,9 +643,10 @@ defmodule FamichatWeb.MessageChannelTest do
   end
 
   describe "message broadcasting - group conversation" do
-    setup do
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      {:ok, socket} = connect(UserSocket, %{"token" => token})
+    setup %{user_session: user_session} do
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
+
       topic = "message:group:#{@group_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
       {:ok, %{socket: socket, topic: topic}}
@@ -701,9 +743,10 @@ defmodule FamichatWeb.MessageChannelTest do
   end
 
   describe "message broadcasting - family conversation" do
-    setup do
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      {:ok, socket} = connect(UserSocket, %{"token" => token})
+    setup %{user_session: user_session} do
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
+
       topic = "message:family:#{@family_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
       {:ok, %{socket: socket, topic: topic}}
@@ -800,9 +843,10 @@ defmodule FamichatWeb.MessageChannelTest do
   end
 
   describe "message broadcasting - error cases and edge cases" do
-    setup do
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      {:ok, socket} = connect(UserSocket, %{"token" => token})
+    setup %{user_session: user_session} do
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
+
       topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
       {:ok, %{socket: socket, topic: topic}}
@@ -868,9 +912,9 @@ defmodule FamichatWeb.MessageChannelTest do
     1. Messages sent to invalid topics are rejected
     2. The appropriate error response is returned
     """
-    test "rejects messages with invalid topic format" do
+    test "rejects messages with invalid topic format", %{user: user} do
       # Create a socket with an invalid topic format
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
+      token = token_for_user(user)
       {:ok, socket} = connect(UserSocket, %{"token" => token})
 
       # Try to join an invalid topic - this should return an error
@@ -939,10 +983,13 @@ defmodule FamichatWeb.MessageChannelTest do
     3. The client receives broadcast messages sent to that channel
     4. The client can send messages that are broadcast to all subscribers
     """
-    test "client can subscribe to channel and receive messages" do
+    test "client can subscribe to channel and receive messages", %{
+      user_session: user_session,
+      second_session: second_session
+    } do
       # Create two clients
-      token1 = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      token2 = Phoenix.Token.sign(@endpoint, @salt, @second_user_id)
+      token1 = user_session.access_token
+      token2 = second_session.access_token
 
       # Connect first client
       {:ok, socket1} = connect(UserSocket, %{"token" => token1})
@@ -985,10 +1032,13 @@ defmodule FamichatWeb.MessageChannelTest do
     3. The client receives encrypted broadcast messages with all encryption metadata preserved
     4. The client can send encrypted messages that are broadcast to all subscribers
     """
-    test "client can subscribe to channel and receive encrypted messages" do
+    test "client can subscribe to channel and receive encrypted messages", %{
+      user_session: user_session,
+      second_session: second_session
+    } do
       # Create two clients
-      token1 = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      token2 = Phoenix.Token.sign(@endpoint, @salt, @second_user_id)
+      token1 = user_session.access_token
+      token2 = second_session.access_token
 
       # Connect first client
       {:ok, socket1} = connect(UserSocket, %{"token" => token1})
@@ -1050,10 +1100,11 @@ defmodule FamichatWeb.MessageChannelTest do
     """
     test "client is rejected when joining unauthorized channel", %{
       family: family,
-      second_user: second_user
+      second_user: second_user,
+      user_session: user_session
     } do
       # Create a client
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
+      token = user_session.access_token
 
       # Connect client
       {:ok, socket} = connect(UserSocket, %{"token" => token})
@@ -1077,9 +1128,11 @@ defmodule FamichatWeb.MessageChannelTest do
     1. A client can successfully connect, disconnect, and reconnect
     2. After reconnecting, the client can still send and receive messages
     """
-    test "client can disconnect and reconnect to channel" do
+    test "client can disconnect and reconnect to channel", %{
+      user_session: user_session
+    } do
       # Create a client
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
+      token = user_session.access_token
 
       # Connect client
       {:ok, socket} = connect(UserSocket, %{"token" => token})
@@ -1120,7 +1173,7 @@ defmodule FamichatWeb.MessageChannelTest do
   end
 
   describe "enhanced broadcast logging and client acknowledgment" do
-    setup do
+    setup %{user_session: user_session} do
       # Start a telemetry handler for ack events
       test_pid = self()
       handler_id = "message-ack-test-#{:erlang.unique_integer()}"
@@ -1149,8 +1202,9 @@ defmodule FamichatWeb.MessageChannelTest do
         )
 
       # Setup socket and join channel
-      token = Phoenix.Token.sign(@endpoint, @salt, @valid_user_id)
-      {:ok, socket} = connect(UserSocket, %{"token" => token})
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
+
       topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
 
@@ -1255,10 +1309,11 @@ defmodule FamichatWeb.MessageChannelTest do
     3. The server logs both the broadcast and the acknowledgment
     """
     test "end-to-end message delivery with acknowledgment logging", %{
-      socket: socket
+      socket: socket,
+      second_session: second_session
     } do
       # Create a second client
-      token2 = Phoenix.Token.sign(@endpoint, @salt, @second_user_id)
+      token2 = second_session.access_token
       {:ok, socket2} = connect(UserSocket, %{"token" => token2})
       topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket2} = subscribe_and_join(socket2, MessageChannel, topic)
@@ -1310,9 +1365,20 @@ defmodule FamichatWeb.MessageChannelTest do
       defaults
       |> Map.merge(Map.take(attrs, [:username, :email, :role, :family_id]))
 
-    %User{id: id}
-    |> User.changeset(user_attrs)
-    |> Repo.insert!()
+    user =
+      %User{id: id}
+      |> User.changeset(user_attrs)
+      |> Repo.insert!()
+
+    family = Repo.get!(Famichat.Chat.Family, family_id)
+
+    ChatFixtures.membership_fixture(
+      user,
+      family,
+      Map.get(user_attrs, :role, :member)
+    )
+
+    user
   end
 
   defp insert_conversation(id, type, family_id, participant_ids, attrs \\ %{}) do
@@ -1342,6 +1408,49 @@ defmodule FamichatWeb.MessageChannelTest do
     end)
 
     conversation
+  end
+
+  defp issue_access_token(user, opts \\ []) do
+    device_id = Keyword.get(opts, :device_id, Ecto.UUID.generate())
+    user_agent = Keyword.get(opts, :user_agent, "test-agent")
+    ip = Keyword.get(opts, :ip, "127.0.0.1")
+    trust? = Keyword.get(opts, :trust?, true)
+
+    trusted_until =
+      if trust? do
+        DateTime.add(DateTime.utc_now(), 30 * 24 * 60 * 60, :second)
+      else
+        nil
+      end
+
+    attrs = %{
+      user_id: user.id,
+      device_id: device_id,
+      user_agent: user_agent,
+      ip: ip,
+      trusted_until: trusted_until,
+      last_active_at: DateTime.utc_now(),
+      refresh_token_hash: Keyword.get(opts, :refresh_token_hash),
+      previous_token_hash: Keyword.get(opts, :previous_token_hash),
+      revoked_at: Keyword.get(opts, :revoked_at)
+    }
+
+    {:ok, device} =
+      %UserDevice{}
+      |> UserDevice.changeset(attrs)
+      |> Repo.insert()
+
+    token =
+      Phoenix.Token.sign(@endpoint, @access_salt, %{
+        "user_id" => user.id,
+        "device_id" => device.device_id
+      })
+
+    %{access_token: token, device: device}
+  end
+
+  defp token_for_user(user, opts \\ []) do
+    issue_access_token(user, opts).access_token
   end
 
   defp maybe_put_direct_key(attrs, :direct, family_id, [user1_id, user2_id | _]) do
