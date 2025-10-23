@@ -197,8 +197,8 @@ This provides clearer intent, more predictable validation, and a better develope
 - **Final Review 7.1:** Once all subtasks for Story 7.1 have been completed and verified, mark off the Story 7.1 checkbox in this Sprint7.md file.
 
 ### Story 7.2: Testing Channel Broadcasts
-- [ ] **7.2.1:** Write unit tests to simulate message sending and assert correct event broadcasting within the channel.
-  - [ ] **Subtask:** Ensure tests are properly documented and include comments.
+- [x] **7.2.1:** Write unit tests to simulate message sending and assert correct event broadcasting within the channel.
+  - [x] **Subtask:** Ensure tests are properly documented and include comments.
   - [ ] **Subtask:** Validate by running:
     - `cd backend && ./run elixir:lint`
     - `cd backend && ./run elixir:test`
@@ -207,8 +207,9 @@ This provides clearer intent, more predictable validation, and a better develope
     - `cd backend && ./run elixir:static-analysis`
   - **Expected Test:** When simulating a message send, the unit test should verify that:
       - The channel broadcasts the event with a payload that matches expected (including any encryption-aware fields, if stubbed).
-- [ ] **7.2.2:** Write integration tests (using `Phoenix.ChannelTest`) to simulate a WebSocket client subscribing to the channel and verify event reception.
-  - [ ] **Subtask:** Ensure test files adhere to code style and include inline documentation.
+      - Persistence is validated at the service layer; channel tests only assert broadcast semantics and telemetry.
+- [x] **7.2.2:** Write integration tests (using `Phoenix.ChannelTest`) to simulate a WebSocket client subscribing to the channel and verify event reception.
+  - [x] **Subtask:** Ensure test files adhere to code style and include inline documentation.
   - [ ] **Subtask:** Verify tests via lint and test runs as mentioned above.
   - [ ] **Subtask:** Run security and static checks:
     - `cd backend && ./run elixir:security-check`
@@ -216,14 +217,14 @@ This provides clearer intent, more predictable validation, and a better develope
 - **Final Review 7.2:** Once all subtassks for Story 7.2 have been completed and verified, mark off the Story 7.2 checkbox in this Sprint7.md file.
 
 ### Story 7.3: Documentation for Channels and API
-- [ ] **7.3.1:** Document the channel subscription process for client integration using sample code, curl commands, or IEx examples.
-  - [ ] **Subtask:** Document conversation type boundaries and their implications for channel subscriptions
-  - [ ] **Subtask:** Explain how conversation types affect authorization and message handling
-  - [ ] **Subtask:** Update the related documentation files (e.g., README, developer docs) and ensure the content is well formatted.
-- [ ] **7.3.2:** Document the API for live updates (list event names, payload formats, and client expectations).
-  - [ ] **Subtask:** Incorporate examples within the documentation and verify consistency.
-  - [ ] **Subtask (New):** Document the encryption-aware payload structure (including version tags and key IDs) for future E2EE integration.
-  - [ ] **Subtask (New):** Document known mobile background handling limitations (e.g., iOS/Android constraints).
+- [x] **7.3.1:** Document the channel subscription process for client integration using sample code, curl commands, or IEx examples.
+  - [x] **Subtask:** Document conversation type boundaries and their implications for channel subscriptions
+  - [x] **Subtask:** Explain how conversation types affect authorization and message handling
+  - [x] **Subtask:** Update the related documentation files (e.g., README, developer docs) and ensure the content is well formatted.
+- [x] **7.3.2:** Document the API for live updates (list event names, payload formats, and client expectations).
+  - [x] **Subtask:** Incorporate examples within the documentation and verify consistency.
+  - [x] **Subtask (New):** Document the encryption-aware payload structure (including version tags and key IDs) for future E2EE integration.
+  - [x] **Subtask (New):** Document known mobile background handling limitations (e.g., iOS/Android constraints).
   - **Expected Documentation Test:** Include an example payload in the docs that shows the encryption-aware structure (e.g., version tags, key IDs) and clearly note mobile background limitations.
 - **Final Review 7.3:** Once all subtasks for Story 7.3 have been completed and verified, mark off the Story 7.3 checkbox in this Sprint7.md file.
 
