@@ -75,12 +75,17 @@ defmodule Famichat.Chat.MessageServiceTest do
 
     test "returns error for invalid pagination options" do
       conversation = conversation_fixture(%{conversation_type: :direct})
-      # Passing non-integer limit.
-      assert {:error, {:error, :invalid_limit}} =
+
+      assert {:error, {:invalid_pagination, changeset}} =
                MessageService.get_conversation_messages(conversation.id,
                  limit: "ten",
                  offset: -1
                )
+
+      assert {"is invalid", _} = Keyword.fetch!(changeset.errors, :limit)
+
+      assert {"must be greater than or equal to %{number}", _} =
+               Keyword.fetch!(changeset.errors, :offset)
     end
 
     test "telemetry emits telemetry event" do

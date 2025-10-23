@@ -55,11 +55,11 @@ defmodule Famichat.Messages.DecryptionTest do
 
       # Check if the message was serialized with encryption requirement warning
       assert_receive {[:famichat, :message, :serialized], _measurements,
-                      %{
-                        warning: :missing_encryption_metadata,
-                        conversation_type: :direct
-                      }},
+                      metadata},
                      @telemetry_timeout
+
+      assert metadata[:warning] == :missing_encryption_metadata
+      assert metadata[:conversation_type] == :direct
     end
 
     test "serializes message with encryption metadata", %{
@@ -91,8 +91,10 @@ defmodule Famichat.Messages.DecryptionTest do
 
       # Check if proper telemetry was emitted
       assert_receive {[:famichat, :message, :serialized], _measurements,
-                      %{encryption_status: "enabled"}},
+                      metadata},
                      @telemetry_timeout
+
+      assert metadata[:encryption_status] == "enabled"
     end
   end
 
@@ -141,8 +143,10 @@ defmodule Famichat.Messages.DecryptionTest do
 
       # Check that proper telemetry was emitted
       assert_receive {[:famichat, :message, :deserialized], _measurements,
-                      %{encryption_status: "enabled"}},
+                      metadata},
                      @telemetry_timeout
+
+      assert metadata[:encryption_status] == "enabled"
     end
   end
 
