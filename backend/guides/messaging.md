@@ -134,3 +134,91 @@ end)
 ```
 
 For more details on telemetry, see the [Telemetry & Performance](telemetry.html) guide.
+
+## Real-Time MessageChannel
+
+Phoenix Channels deliver real-time updates once a message has been accepted by the backend.
+The `FamichatWeb.MessageChannel` exposes conversation-type-aware topics using the format
+`message:<type>:<conversation_id>` where `type` is one of `self`, `direct`, `group`, or `family`.
+
+### Authentication and Subscription
+
+1. Create an access token via the Accounts session API:
+   ```elixir
+   {:ok, session} =
+     Famichat.Accounts.start_session(user, %{
+       id: "browser-session-uuid",
+       user_agent: "Famichat Web",
+       ip: "127.0.0.1"
+     })
+
+   token = session.access_token
+   ```
+2. Connect the socket with the bearer token and join a channel:
+   ```javascript
+   const socket = new Socket("/socket", {params: {token}});
+   socket.connect();
+
+   const channel = socket.channel(`message:direct:${conversationId}`);
+   channel.join()
+     .receive("ok", () => console.log("joined"))
+     .receive("error", (err) => console.error("join failed", err));
+   ```
+
+Tokens are verified on connect via `Accounts.verify_access_token/1`; if verification fails the
+socket connection is rejected.
+
+### Broadcast Payloads and Telemetry
+
+Each `new_msg` push is rebroadcast with the payload:
+
+```json
+{
+  "body": "...",
+  "user_id": "<sender-id>",
+  "version_tag": "...",        // present only for encrypted messages
+  "encryption_flag": true,     // present only for encrypted messages
+  "key_id": "..."              // present only for encrypted messages
+}
+```
+
+Telemetry accompanies every broadcast and acknowledgment:
+
+| Event                                         | Metadata highlights                                                  |
+|-----------------------------------------------|----------------------------------------------------------------------|
+| `[:famichat, :message_channel, :broadcast]`   | `:user_id`, `:conversation_type`, `:conversation_id`, `:message_size`, `:encryption_status` |
+| `[:famichat, :message_channel, :ack]`         | `:user_id`, `:conversation_type`, `:conversation_id`, `:message_id`  |
+
+Sensitive encryption metadata (`key_id`, `version_tag`, `encryption_flag`) is filtered before
+telemetry emission, while the raw payload delivered to subscribers retains the fields intact.
+
+### Manual Smoke Tests
+
+Use the ChannelCase helpers or IEx to send ad-hoc broadcasts:
+
+```elixir
+topic = "message:direct:#{conversation_id}"
+payload = %{"body" => "hello world"}
+
+FamichatWeb.Endpoint.broadcast!(topic, "new_msg", payload)
+```
+
+Attach a temporary telemetry handler to inspect metadata during debugging:
+
+```elixir
+handler_id = "debug-broadcast-#{System.unique_integer()}"
+
+:telemetry.attach(handler_id, [:famichat, :message_channel, :broadcast],
+  fn _event, measurements, metadata, _ ->
+    IO.inspect({measurements, metadata}, label: "broadcast")
+  end,
+  nil
+)
+```
+
+See `test/famichat_web/channels/message_channel_test.exs` for comprehensive examples that assert
+payload content and telemetry for self, direct, group, and family conversations.
+
+> Note: Mobile platforms aggressively limit background WebSocket activity. Expect iOS to suspend
+> connections after roughly 30 seconds and Android Doze mode to delay background delivery. Clients
+> should reconnect when returning to the foreground.
