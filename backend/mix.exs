@@ -7,6 +7,7 @@ defmodule Famichat.MixProject do
       version: "0.0.1",
       elixir: "~> 1.13",
       elixirc_paths: elixirc_paths(Mix.env()),
+      compilers: [:boundary] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
       build_path: "/mix/_build",
       deps_path: "/mix/deps",
@@ -67,6 +68,7 @@ defmodule Famichat.MixProject do
       {:jason, "~> 1.2"},
       {:logfmt_ex, "~> 0.4.2"},
       {:mox, "~> 1.2.0", only: :test},
+      {:stream_data, "~> 0.6", only: :test},
       {:phoenix, "1.7.14"},
       {:phoenix_ecto, "4.6.2"},
       {:phoenix_html, "4.1.1"},
@@ -85,7 +87,8 @@ defmodule Famichat.MixProject do
       {:cors_plug, "~> 3.0"},
       {:telemetry_test, "~> 0.1.0", only: :test},
       {:cloak_ecto, "~> 1.3"},
-      {:wax_, "~> 0.6"}
+      {:wax_, "~> 0.6"},
+      {:boundary, "~> 0.9", runtime: false}
     ]
   end
 

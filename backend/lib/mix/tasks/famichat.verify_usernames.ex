@@ -3,6 +3,7 @@ defmodule Mix.Tasks.Famichat.VerifyUsernames do
   Reports username fingerprint collisions and their case-preserving display values.
   """
 
+  use Boundary, deps: [Famichat], exports: []
   use Mix.Task
 
   alias Famichat.Accounts.User
