@@ -5,10 +5,10 @@ defmodule Famichat.Chat.MessageService do
   """
   import Ecto.Query, warn: false
   alias Famichat.Repo
-  alias Famichat.Chat.{Message, Conversation, ConversationAccess}
+  alias Famichat.Chat.{Conversation, ConversationAccess, Message}
+  alias Famichat.Ecto.Pagination
   require Logger
 
-  @max_limit 100
   @default_preloads [:sender, :conversation]
 
   # Define conversation-type encryption requirements
@@ -37,13 +37,11 @@ defmodule Famichat.Chat.MessageService do
     initial_state = %{
       conversation_id: conversation_id,
       opts: opts,
-      validated?: false,
       query: nil
     }
 
     initial_state
     |> validate_conversation_id()
-    |> validate_pagination_opts()
     |> check_conversation_exists()
     |> build_base_query()
     |> apply_pagination()
@@ -52,14 +50,10 @@ defmodule Famichat.Chat.MessageService do
     |> handle_result()
   end
 
-  defp validate_conversation_id(%{conversation_id: nil} = state) do
-    put_in(state.validated?, false)
-    |> Map.put(:error, :invalid_conversation_id)
-  end
+  defp validate_conversation_id(%{conversation_id: nil} = state),
+    do: Map.put(state, :error, :invalid_conversation_id)
 
-  defp validate_conversation_id(state) do
-    put_in(state.validated?, true)
-  end
+  defp validate_conversation_id(state), do: state
 
   defp check_conversation_exists(%{error: _} = state), do: state
 
@@ -71,19 +65,6 @@ defmodule Famichat.Chat.MessageService do
       state
     else
       Map.put(state, :error, :conversation_not_found)
-    end
-  end
-
-  defp validate_pagination_opts(%{validated?: false} = state), do: state
-
-  defp validate_pagination_opts(state) do
-    with {:ok, limit} <- validate_limit(state.opts[:limit]),
-         {:ok, offset} <- validate_offset(state.opts[:offset]) do
-      state
-      |> put_in([:opts, :limit], limit)
-      |> put_in([:opts, :offset], offset)
-    else
-      error -> Map.put(state, :error, error)
     end
   end
 
@@ -100,11 +81,19 @@ defmodule Famichat.Chat.MessageService do
 
   defp apply_pagination(%{error: _} = state), do: state
 
-  defp apply_pagination(state) do
-    state.query
-    |> maybe_apply(:limit, state.opts[:limit])
-    |> maybe_apply(:offset, state.opts[:offset])
-    |> then(&Map.put(state, :query, &1))
+  defp apply_pagination(%{query: query, opts: opts} = state) do
+    params =
+      opts
+      |> Keyword.take([:limit, :offset])
+      |> Enum.into(%{})
+
+    case Pagination.apply_or_default(query, params) do
+      {:ok, paginated_query} ->
+        Map.put(state, :query, paginated_query)
+
+      {:error, {:invalid_pagination, _changeset} = reason} ->
+        Map.put(state, :error, reason)
+    end
   end
 
   defp execute_query(%{error: _} = state), do: state
@@ -245,26 +234,6 @@ defmodule Famichat.Chat.MessageService do
 
     state
   end
-
-  # Shared helpers
-  defp validate_limit(nil), do: {:ok, nil}
-
-  defp validate_limit(limit)
-       when is_integer(limit) and limit > 0 and limit <= @max_limit,
-       do: {:ok, limit}
-
-  defp validate_limit(_), do: {:error, :invalid_limit}
-
-  defp validate_offset(nil), do: {:ok, nil}
-
-  defp validate_offset(offset) when is_integer(offset) and offset >= 0,
-    do: {:ok, offset}
-
-  defp validate_offset(_), do: {:error, :invalid_offset}
-
-  defp maybe_apply(query, _clause, nil), do: query
-  defp maybe_apply(query, :limit, value), do: from(q in query, limit: ^value)
-  defp maybe_apply(query, :offset, value), do: from(q in query, offset: ^value)
 
   @doc """
   Determines if a conversation type requires encryption based on policy configuration.
