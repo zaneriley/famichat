@@ -17,6 +17,10 @@ defmodule FamichatWeb do
   and import those modules here.
   """
 
+  use Boundary,
+    deps: [Famichat],
+    exports: [Endpoint]
+
   def static_paths,
     do:
       ~w(css fonts images js favicon.ico favicon-32x32.png favicon-16x16.png site.webmanifest mstile

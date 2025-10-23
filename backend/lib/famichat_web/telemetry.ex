@@ -324,6 +324,24 @@ defmodule FamichatWeb.Telemetry do
         description: "Distribution of locale sources"
       ),
 
+      # Auth Session Metrics
+      counter("famichat.auth.session.start.count",
+        event_name: [:famichat, :auth, :session, :start],
+        description: "Sessions started"
+      ),
+      counter("famichat.auth.session.refresh.count",
+        event_name: [:famichat, :auth, :session, :refresh],
+        description: "Successful refreshes"
+      ),
+      counter("famichat.auth.session.refresh.reuse_detected",
+        event_name: [:famichat, :auth, :session, :refresh_reuse_detected],
+        description: "Refresh failures due to token reuse"
+      ),
+      counter("famichat.auth.session.revoke.count",
+        event_name: [:famichat, :auth, :session, :revoke],
+        description: "Device revocations triggered by auth flows"
+      ),
+
       # Phoenix Metrics
       summary("phoenix.endpoint.stop.duration",
         unit: {:native, :millisecond}

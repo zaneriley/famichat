@@ -6,9 +6,16 @@ defmodule FamichatWeb.MessageChannel do
 
   To connect to the messaging channel, clients must:
 
-  1. Obtain an authentication token:
+  1. Obtain an authentication token via the Accounts session API:
      ```elixir
-     token = Phoenix.Token.sign(FamichatWeb.Endpoint, "user_auth", user_id)
+     {:ok, session} =
+       Famichat.Accounts.start_session(current_user, %{
+         id: "browser-session-uuid",
+         user_agent: "Famichat Web Client",
+         ip: "127.0.0.1"
+       })
+
+     token = session.access_token
      ```
 
   2. Connect to the socket with the token:
@@ -24,6 +31,9 @@ defmodule FamichatWeb.MessageChannel do
        .receive("ok", resp => console.log("Joined successfully", resp))
        .receive("error", resp => console.log("Join failed", resp));
      ```
+
+  Access tokens are verified server-side via `Famichat.Accounts.verify_access_token/1`.
+  Treat the token as a short-lived bearer credential tied to a specific device session.
 
   ## Message Payload Format
 
