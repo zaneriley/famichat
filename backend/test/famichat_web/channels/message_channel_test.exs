@@ -20,6 +20,7 @@ defmodule FamichatWeb.MessageChannelTest do
   @group_conversation_id "22222222-2222-2222-2222-222222222222"
   @family_conversation_id "33333333-3333-3333-3333-333333333333"
   @telemetry_timeout 1000
+  @encryption_metadata_fields ~w(version_tag encryption_flag key_id)
 
   setup do
     # Start a telemetry handler for our tests
@@ -439,27 +440,9 @@ defmodule FamichatWeb.MessageChannelTest do
     end
 
     test "broadcasts messages on direct conversation channel", %{socket: socket} do
-      message_body = "Hello from direct conversation!"
-      push(socket, "new_msg", %{"body" => message_body})
-
-      assert_broadcast "new_msg", %{
-        "body" => ^message_body,
-        "user_id" => @valid_user_id
-      }
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], _measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert metadata
-      assert metadata.user_id == @valid_user_id
-      assert metadata.conversation_type == "direct"
-      assert metadata.conversation_id == @direct_conversation_id
+      payload = %{"body" => "Hello from direct conversation!"}
+      {_, metadata} = push_and_assert_broadcast(socket, :direct, payload)
       assert metadata.encryption_status == "disabled"
-      assert Map.has_key?(metadata, :timestamp)
-      assert Map.has_key?(metadata, :message_size)
     end
 
     test "broadcasts encrypted messages on direct conversation channel", %{
@@ -472,31 +455,15 @@ defmodule FamichatWeb.MessageChannelTest do
         "key_id" => "KEY_USER_v1"
       }
 
-      push(socket, "new_msg", encrypted_message)
+      {_, metadata} =
+        push_and_assert_broadcast(socket, :direct, encrypted_message)
 
-      assert_broadcast "new_msg", %{
-        "body" => "encrypted_direct_message",
-        "user_id" => @valid_user_id,
-        "version_tag" => "v1.0.0",
-        "encryption_flag" => true,
-        "key_id" => "KEY_USER_v1"
-      }
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], _measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert encryption status in metadata
       assert metadata.encryption_status == "enabled"
     end
 
-    # New test for encryption-aware telemetry in broadcasts
     test "broadcast telemetry only includes encryption_status field", %{
       socket: socket
     } do
-      # Test with encrypted message
       encrypted_payload = %{
         "body" => "encrypted message",
         "encryption_flag" => true,
@@ -504,42 +471,18 @@ defmodule FamichatWeb.MessageChannelTest do
         "key_id" => "KEY_USER_v1"
       }
 
-      push(socket, "new_msg", encrypted_payload)
+      {_, encrypted_metadata} =
+        push_and_assert_broadcast(socket, :direct, encrypted_payload)
 
-      # Verify telemetry event
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], _measurements,
-                      metadata},
-                     @telemetry_timeout
+      assert encrypted_metadata.encryption_status == "enabled"
 
-      # Assert only encryption_status is present, not other encryption metadata
-      assert Map.has_key?(metadata, :encryption_status)
-      assert metadata.encryption_status == "enabled"
-
-      # Assert sensitive encryption metadata is NOT present
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :version_tag)
-
-      # Test with plain text message
       plain_payload = %{"body" => "plain text message"}
 
-      push(socket, "new_msg", plain_payload)
+      {_, plain_metadata} =
+        push_and_assert_broadcast(socket, :direct, plain_payload)
 
-      # Verify telemetry event
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], _measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert only encryption_status is present, not other encryption metadata
-      assert Map.has_key?(metadata, :encryption_status)
-      assert metadata.encryption_status == "disabled"
-
-      # Assert sensitive encryption metadata is NOT present
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :version_tag)
+      assert plain_metadata.encryption_status == "disabled"
+      assert plain_metadata.user_id == @valid_user_id
     end
   end
 
@@ -549,9 +492,10 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, socket} =
         connect(UserSocket, %{"token" => user_session.access_token})
 
-      topic = "message:self:#{@self_conversation_id}"
-      {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
-      {:ok, %{socket: socket, topic: topic}}
+      {:ok, _, socket} =
+        subscribe_and_join(socket, MessageChannel, conversation_topic(:self))
+
+      {:ok, %{socket: socket}}
     end
 
     @doc """
@@ -565,36 +509,8 @@ defmodule FamichatWeb.MessageChannelTest do
     test "broadcasts plain text messages in self conversation", %{
       socket: socket
     } do
-      # Prepare test message
-      message_body = "Note to self: Remember to buy milk"
-
-      # Send the message
-      push(socket, "new_msg", %{"body" => message_body})
-
-      # Verify the message is broadcast with correct payload
-      assert_broadcast "new_msg", %{
-        "body" => ^message_body,
-        "user_id" => @valid_user_id
-      }
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert telemetry measurements
-      assert is_map(measurements)
-      assert Map.has_key?(measurements, :duration_ms)
-      assert Map.has_key?(measurements, :start_time)
-
-      # Assert telemetry metadata
-      assert metadata.user_id == @valid_user_id
-      assert metadata.conversation_type == "self"
-      assert metadata.conversation_id == @self_conversation_id
-      assert metadata.encryption_status == "disabled"
-      assert Map.has_key?(metadata, :timestamp)
-      assert Map.has_key?(metadata, :message_size)
+      payload = %{"body" => "Note to self: Remember to buy milk"}
+      push_and_assert_broadcast(socket, :self, payload)
     end
 
     @doc """
@@ -606,7 +522,6 @@ defmodule FamichatWeb.MessageChannelTest do
     3. The payload preserves all encryption-related fields
     """
     test "broadcasts encrypted messages in self conversation", %{socket: socket} do
-      # Prepare encrypted message
       encrypted_message = %{
         "body" => "encrypted_self_note",
         "version_tag" => "v1.0.0",
@@ -614,31 +529,10 @@ defmodule FamichatWeb.MessageChannelTest do
         "key_id" => "KEY_USER_v1"
       }
 
-      # Send the message
-      push(socket, "new_msg", encrypted_message)
+      {_, metadata} =
+        push_and_assert_broadcast(socket, :self, encrypted_message)
 
-      # Verify the message is broadcast with all encryption metadata preserved
-      assert_broadcast "new_msg", %{
-        "body" => "encrypted_self_note",
-        "user_id" => @valid_user_id,
-        "version_tag" => "v1.0.0",
-        "encryption_flag" => true,
-        "key_id" => "KEY_USER_v1"
-      }
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], _measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert encryption status in telemetry metadata
       assert metadata.encryption_status == "enabled"
-
-      # Assert sensitive encryption metadata is NOT present in telemetry
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :version_tag)
     end
   end
 
@@ -647,9 +541,10 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, socket} =
         connect(UserSocket, %{"token" => user_session.access_token})
 
-      topic = "message:group:#{@group_conversation_id}"
-      {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
-      {:ok, %{socket: socket, topic: topic}}
+      {:ok, _, socket} =
+        subscribe_and_join(socket, MessageChannel, conversation_topic(:group))
+
+      {:ok, %{socket: socket}}
     end
 
     @doc """
@@ -663,36 +558,8 @@ defmodule FamichatWeb.MessageChannelTest do
     test "broadcasts plain text messages in group conversation", %{
       socket: socket
     } do
-      # Prepare test message
-      message_body = "Hello group members!"
-
-      # Send the message
-      push(socket, "new_msg", %{"body" => message_body})
-
-      # Verify the message is broadcast with correct payload
-      assert_broadcast "new_msg", %{
-        "body" => ^message_body,
-        "user_id" => @valid_user_id
-      }
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert telemetry measurements
-      assert is_map(measurements)
-      assert Map.has_key?(measurements, :duration_ms)
-      assert Map.has_key?(measurements, :start_time)
-
-      # Assert telemetry metadata
-      assert metadata.user_id == @valid_user_id
-      assert metadata.conversation_type == "group"
-      assert metadata.conversation_id == @group_conversation_id
-      assert metadata.encryption_status == "disabled"
-      assert Map.has_key?(metadata, :timestamp)
-      assert Map.has_key?(metadata, :message_size)
+      payload = %{"body" => "Hello group members!"}
+      push_and_assert_broadcast(socket, :group, payload)
     end
 
     @doc """
@@ -706,7 +573,6 @@ defmodule FamichatWeb.MessageChannelTest do
     test "broadcasts encrypted messages in group conversation", %{
       socket: socket
     } do
-      # Prepare encrypted message
       encrypted_message = %{
         "body" => "encrypted_group_message",
         "version_tag" => "v1.0.0",
@@ -714,31 +580,10 @@ defmodule FamichatWeb.MessageChannelTest do
         "key_id" => "KEY_GROUP_v1"
       }
 
-      # Send the message
-      push(socket, "new_msg", encrypted_message)
+      {_, metadata} =
+        push_and_assert_broadcast(socket, :group, encrypted_message)
 
-      # Verify the message is broadcast with all encryption metadata preserved
-      assert_broadcast "new_msg", %{
-        "body" => "encrypted_group_message",
-        "user_id" => @valid_user_id,
-        "version_tag" => "v1.0.0",
-        "encryption_flag" => true,
-        "key_id" => "KEY_GROUP_v1"
-      }
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], _measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert encryption status in telemetry metadata
       assert metadata.encryption_status == "enabled"
-
-      # Assert sensitive encryption metadata is NOT present in telemetry
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :version_tag)
     end
   end
 
@@ -747,9 +592,10 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, socket} =
         connect(UserSocket, %{"token" => user_session.access_token})
 
-      topic = "message:family:#{@family_conversation_id}"
-      {:ok, _, socket} = subscribe_and_join(socket, MessageChannel, topic)
-      {:ok, %{socket: socket, topic: topic}}
+      {:ok, _, socket} =
+        subscribe_and_join(socket, MessageChannel, conversation_topic(:family))
+
+      {:ok, %{socket: socket}}
     end
 
     @doc """
@@ -763,36 +609,8 @@ defmodule FamichatWeb.MessageChannelTest do
     test "broadcasts plain text messages in family conversation", %{
       socket: socket
     } do
-      # Prepare test message
-      message_body = "Family announcement: Dinner at 7pm"
-
-      # Send the message
-      push(socket, "new_msg", %{"body" => message_body})
-
-      # Verify the message is broadcast with correct payload
-      assert_broadcast "new_msg", %{
-        "body" => ^message_body,
-        "user_id" => @valid_user_id
-      }
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert telemetry measurements
-      assert is_map(measurements)
-      assert Map.has_key?(measurements, :duration_ms)
-      assert Map.has_key?(measurements, :start_time)
-
-      # Assert telemetry metadata
-      assert metadata.user_id == @valid_user_id
-      assert metadata.conversation_type == "family"
-      assert metadata.conversation_id == @family_conversation_id
-      assert metadata.encryption_status == "disabled"
-      assert Map.has_key?(metadata, :timestamp)
-      assert Map.has_key?(metadata, :message_size)
+      payload = %{"body" => "Family announcement: Dinner at 7pm"}
+      push_and_assert_broadcast(socket, :family, payload)
     end
 
     @doc """
@@ -806,7 +624,6 @@ defmodule FamichatWeb.MessageChannelTest do
     test "broadcasts encrypted messages in family conversation", %{
       socket: socket
     } do
-      # Prepare encrypted message
       encrypted_message = %{
         "body" => "encrypted_family_message",
         "version_tag" => "v1.0.0",
@@ -814,31 +631,10 @@ defmodule FamichatWeb.MessageChannelTest do
         "key_id" => "KEY_FAMILY_v1"
       }
 
-      # Send the message
-      push(socket, "new_msg", encrypted_message)
+      {_, metadata} =
+        push_and_assert_broadcast(socket, :family, encrypted_message)
 
-      # Verify the message is broadcast with all encryption metadata preserved
-      assert_broadcast "new_msg", %{
-        "body" => "encrypted_family_message",
-        "user_id" => @valid_user_id,
-        "version_tag" => "v1.0.0",
-        "encryption_flag" => true,
-        "key_id" => "KEY_FAMILY_v1"
-      }
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], _measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert encryption status in telemetry metadata
       assert metadata.encryption_status == "enabled"
-
-      # Assert sensitive encryption metadata is NOT present in telemetry
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :version_tag)
     end
   end
 
@@ -1300,6 +1096,35 @@ defmodule FamichatWeb.MessageChannelTest do
       assert logs =~ "message_id=test-message-123"
     end
 
+    test "acknowledgment telemetry captures non-direct conversations", %{
+      socket: socket
+    } do
+      {:ok, _, group_socket} =
+        subscribe_and_join(socket, MessageChannel, conversation_topic(:group))
+
+      push(group_socket, "message_ack", %{"message_id" => "group-msg"})
+
+      assert_receive {:ack_telemetry_event, [:famichat, :message_channel, :ack],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      assert metadata.conversation_type == "group"
+      assert metadata.conversation_id == @group_conversation_id
+      assert metadata.message_id == "group-msg"
+    end
+
+    test "acknowledgment telemetry defaults message_id when missing", %{
+      socket: socket
+    } do
+      push(socket, "message_ack", %{})
+
+      assert_receive {:ack_telemetry_event, [:famichat, :message_channel, :ack],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      assert metadata.message_id == "unknown"
+    end
+
     @doc """
     Tests the end-to-end flow where a client receives a message and sends an acknowledgment.
 
@@ -1348,6 +1173,81 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.conversation_id == @direct_conversation_id
     end
   end
+
+  defp push_and_assert_broadcast(socket, type, payload, opts \\ []) do
+    user_id = Keyword.get(opts, :user_id, @valid_user_id)
+
+    expected_payload =
+      payload
+      |> Map.take(["body"] ++ @encryption_metadata_fields)
+      |> Map.put("user_id", user_id)
+
+    push(socket, "new_msg", payload)
+    assert_broadcast("new_msg", ^expected_payload)
+
+    encryption_status =
+      if Map.get(payload, "encryption_flag"), do: "enabled", else: "disabled"
+
+    message_size =
+      case Map.get(payload, "body") do
+        body when is_binary(body) -> byte_size(body)
+        _ -> 0
+      end
+
+    {measurements, metadata} =
+      assert_broadcast_telemetry(
+        type,
+        conversation_id(type),
+        user_id: user_id,
+        encryption_status: encryption_status,
+        message_size: message_size
+      )
+
+    {measurements, metadata}
+  end
+
+  defp assert_broadcast_telemetry(type, conversation_id, opts) do
+    user_id = Keyword.get(opts, :user_id, @valid_user_id)
+    encryption_status = Keyword.get(opts, :encryption_status, "disabled")
+    message_size = Keyword.get(opts, :message_size, 0)
+
+    assert_receive {:broadcast_telemetry_event,
+                    [:famichat, :message_channel, :broadcast], measurements,
+                    metadata},
+                   @telemetry_timeout
+
+    assert Map.has_key?(measurements, :duration_ms)
+    assert Map.has_key?(measurements, :start_time)
+
+    assert metadata.user_id == user_id
+    assert metadata.conversation_type == type_to_string(type)
+    assert metadata.conversation_id == conversation_id
+    assert metadata.encryption_status == encryption_status
+    assert metadata.message_size == message_size
+    assert Map.has_key?(metadata, :timestamp)
+
+    refute Map.has_key?(metadata, :key_id)
+    refute Map.has_key?(metadata, :encryption_flag)
+    refute Map.has_key?(metadata, :version_tag)
+
+    {measurements, metadata}
+  end
+
+  defp conversation_topic(type) do
+    case type do
+      :self -> "message:self:#{@self_conversation_id}"
+      :direct -> "message:direct:#{@direct_conversation_id}"
+      :group -> "message:group:#{@group_conversation_id}"
+      :family -> "message:family:#{@family_conversation_id}"
+    end
+  end
+
+  defp conversation_id(:self), do: @self_conversation_id
+  defp conversation_id(:direct), do: @direct_conversation_id
+  defp conversation_id(:group), do: @group_conversation_id
+  defp conversation_id(:family), do: @family_conversation_id
+
+  defp type_to_string(type) when is_atom(type), do: Atom.to_string(type)
 
   defp socket_without_user_id do
     socket(UserSocket, nil, %{})
