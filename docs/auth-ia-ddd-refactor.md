@@ -350,7 +350,7 @@ Each phase is a small PR with explicit acceptance checks and rollbacks.
 
 **B4. Tokens vocabulary normalization**
 
-* `%Auth.Tokens.Issue{}` → `%Auth.IssuedToken{}` (export a type alias for one release).
+* `%Auth.Tokens.Issue{}` → `%Auth.IssuedToken{}` (keep `Auth.Tokens.Issue` as a deprecated type alias for one release).
 * `audience` strictly atom in policy; convert at write time only.
 * `subject_strategy` strictly atoms.
 * Canonicalize kinds and mapping in `Auth.Tokens.Policy`.

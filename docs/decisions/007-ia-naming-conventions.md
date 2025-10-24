@@ -162,7 +162,7 @@ use these atoms in code; map to legacy `user_tokens.kind` strings centrally.
 
 ```elixir
 # before
-{:ok, %Auth.Tokens.Issue{raw: r}} = Auth.Tokens.issue(:passkey_reg, %{"user_id" => uid})
+{:ok, %Auth.IssuedToken{raw: r}} = Auth.Tokens.issue(:passkey_registration, %{"user_id" => uid})
 
 # after
 {:ok, %Auth.IssuedToken{raw: r}}  = Auth.Tokens.issue(:passkey_registration, %{"user_id" => uid})
