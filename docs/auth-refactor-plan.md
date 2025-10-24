@@ -25,8 +25,8 @@ None.
 
 **Feature Flags**
 
-- `:auth_boundary_enforced` (compile-time; CI only).  
-- `:auth_error_enums_enabled` (façade starts returning typed errors while old functions also return their current shapes; façade translates).
+- `:auth_boundary_enforced` (compile-time; CI only) *(deferred – no runtime toggle yet)*.  
+- `:auth_error_enums_enabled` (façade starts returning typed errors while old functions also return their current shapes; façade translates) *(deferred)*.
 
 **Tests**
 
@@ -35,8 +35,8 @@ None.
 
 **Observability**
 
-- Define the canonical telemetry prefix `[:famichat, :auth, <context>, <action>]`.  
-- Add null-op `Instrumentation.span/3` macro and replace two or three sample call sites to validate naming.
+- ✅ Canonical telemetry prefix `[:famichat, :auth, <context>, <action>]` adopted across new contexts.  
+- ✅ Null-op `Instrumentation.span/3` macro in place (used by Sessions & Accounts) to keep call sites ready for real spans.
 
 **Rollout**  
 Ship scaffolding + façade in one PR; no runtime changes.
@@ -76,11 +76,15 @@ None (uses existing `user_devices` columns). If `previous_token_hash` is missing
 
 - Property tests (`StreamData`): after _n_ rotations, only last and previous hashes are acceptable; any older token → `:reuse_detected` and device revoked.  
 - Unit tests for trust window (`trusted_until`) expiry paths.
+- Telemetry harness: verifies success/reuse/invalid events fire once per refresh attempt.
 
 **Observability**
 
-- Counters: `auth_sessions.refresh.success`, `auth_sessions.refresh.reuse_detected`, `auth_sessions.refresh.invalid`.  
-- Add a short dashboard and alert: reuse spikes or >1% invalids.
+- ✅ Counters emitted via telemetry:  
+  - `[:auth_sessions, :refresh, :success]`  
+  - `[:auth_sessions, :refresh, :reuse_detected]`  
+  - `[:auth_sessions, :refresh, :invalid]`  
+- Follow-up: wire dashboards/alerts once metrics backend is configured.
 
 **Rollout**  
 Deploy with flag off, run shadow calls in façade (call new path, discard result, log diff). Turn on per pod; watch reuse and error rates.
