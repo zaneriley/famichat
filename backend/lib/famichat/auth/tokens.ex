@@ -4,14 +4,14 @@ defmodule Famichat.Auth.Tokens do
 
   Callers receive a single `Issue` struct regardless of storage backend,
   and all policy decisions (TTL, audience, storage) flow through
-  `Famichat.Auth.TokenPolicy`.  Legacy code should call this module rather
+  `Famichat.Auth.Tokens.Policy`.  Legacy code should call this module rather
   than reaching into infra helpers directly.
   """
 
   alias Famichat.Accounts.UserToken
-  alias Famichat.Auth.Infra.Tokens, as: Infra
-  alias Famichat.Auth.TokenPolicy
-  alias Famichat.Auth.TokenPolicy.Policy
+  alias Famichat.Auth.Tokens.Storage, as: Storage
+  alias Famichat.Auth.Tokens.Policy
+  alias Famichat.Auth.Tokens.Policy.Definition
 
   @typedoc "Token kinds supported by the auth refactor."
   @type kind ::
@@ -55,7 +55,7 @@ defmodule Famichat.Auth.Tokens do
 
     @type t :: %__MODULE__{
             kind: Famichat.Auth.Tokens.kind(),
-            class: Famichat.Auth.TokenPolicy.storage(),
+            class: Famichat.Auth.Tokens.Policy.storage(),
             raw: String.t(),
             hash: binary() | nil,
             record: UserToken.t() | nil,
@@ -68,11 +68,11 @@ defmodule Famichat.Auth.Tokens do
 
   @doc "Returns the default TTL for the provided kind."
   @spec default_ttl(kind()) :: pos_integer()
-  def default_ttl(kind), do: TokenPolicy.default_ttl(kind)
+  def default_ttl(kind), do: Policy.default_ttl(kind)
 
   @doc "Returns the maximum TTL for the provided kind."
   @spec max_ttl(kind()) :: pos_integer()
-  def max_ttl(kind), do: TokenPolicy.max_ttl(kind)
+  def max_ttl(kind), do: Policy.max_ttl(kind)
 
   @doc """
   Issues a token for the requested kind and returns a unified `Issue`
@@ -81,7 +81,7 @@ defmodule Famichat.Auth.Tokens do
   @spec issue(kind(), map(), issue_opts()) ::
           {:ok, Issue.t()} | {:error, term()}
   def issue(kind, payload, opts \\ []) when is_map(payload) do
-    policy = TokenPolicy.policy!(kind)
+    policy = Policy.policy!(kind)
     opts_with_ttl = Keyword.put_new(opts, :ttl, policy.ttl)
 
     kind
@@ -89,7 +89,7 @@ defmodule Famichat.Auth.Tokens do
     |> with_telemetry(:issued, policy)
   end
 
-  defp do_issue(kind, %Policy{storage: :ledgered} = policy, payload, opts) do
+  defp do_issue(kind, %Definition{storage: :ledgered} = policy, payload, opts) do
     context = ledgered_context(policy, opts)
     audience = audience_string(policy.audience)
     raw_subject_id = subject_id_from_policy(policy, payload, opts, context)
@@ -104,7 +104,7 @@ defmodule Famichat.Auth.Tokens do
       |> maybe_put(:audience, audience)
       |> maybe_put(:subject_id, subject_id)
 
-    case Infra.issue_ledgered(
+    case Storage.issue_ledgered(
            context,
            payload,
            token_opts
@@ -127,10 +127,10 @@ defmodule Famichat.Auth.Tokens do
     end
   end
 
-  defp do_issue(kind, %Policy{storage: :signed} = policy, payload, opts) do
+  defp do_issue(kind, %Definition{storage: :signed} = policy, payload, opts) do
     salt = policy.signing_salt || raise_missing_salt(kind)
     max_age = Keyword.fetch!(opts, :ttl)
-    token = Infra.sign(payload, salt, Keyword.delete(opts, :ttl))
+    token = Storage.sign(payload, salt, Keyword.delete(opts, :ttl))
     issued_at = DateTime.utc_now()
 
     {:ok,
@@ -144,8 +144,13 @@ defmodule Famichat.Auth.Tokens do
      }}
   end
 
-  defp do_issue(kind, %Policy{storage: :device_secret} = policy, _payload, opts) do
-    case Infra.issue_device_secret(opts) do
+  defp do_issue(
+         kind,
+         %Definition{storage: :device_secret} = policy,
+         _payload,
+         opts
+       ) do
+    case Storage.issue_device_secret(opts) do
       {:ok, raw, hash} ->
         issued_at = DateTime.utc_now()
 
@@ -173,7 +178,7 @@ defmodule Famichat.Auth.Tokens do
   @spec fetch(kind(), String.t(), fetch_opts()) ::
           {:ok, UserToken.t()} | {:error, :invalid | :expired | :used}
   def fetch(kind, raw_token, opts \\ []) when is_binary(raw_token) do
-    policy = TokenPolicy.policy!(kind)
+    policy = Policy.policy!(kind)
 
     case policy.storage do
       :ledgered ->
@@ -190,19 +195,19 @@ defmodule Famichat.Auth.Tokens do
   """
   @spec consume(UserToken.t()) ::
           {:ok, UserToken.t()} | {:error, Ecto.Changeset.t()}
-  def consume(%UserToken{} = token), do: Infra.consume_ledgered(token)
+  def consume(%UserToken{} = token), do: Storage.consume_ledgered(token)
 
   @doc """
   Signs a Phoenix token using the configured kind.
   """
   @spec sign(kind(), term(), keyword()) :: String.t()
   def sign(kind, payload, opts \\ []) do
-    policy = TokenPolicy.policy!(kind)
+    policy = Policy.policy!(kind)
 
     case policy.storage do
       :signed ->
         salt = policy.signing_salt || raise_missing_salt(kind)
-        Infra.sign(payload, salt, opts)
+        Storage.sign(payload, salt, opts)
 
       storage ->
         raise ArgumentError,
@@ -216,13 +221,13 @@ defmodule Famichat.Auth.Tokens do
   @spec verify(kind(), String.t(), keyword()) ::
           {:ok, term()} | {:error, :expired | :invalid | :missing}
   def verify(kind, token, opts \\ []) do
-    policy = TokenPolicy.policy!(kind)
+    policy = Policy.policy!(kind)
 
     case policy.storage do
       :signed ->
         salt = policy.signing_salt || raise_missing_salt(kind)
         max_age = Keyword.get(opts, :max_age, policy.ttl)
-        Infra.verify(token, salt, Keyword.put(opts, :max_age, max_age))
+        Storage.verify(token, salt, Keyword.put(opts, :max_age, max_age))
 
       storage ->
         raise ArgumentError,
@@ -234,15 +239,15 @@ defmodule Famichat.Auth.Tokens do
   Generates a device secret (raw + hash).
   """
   @spec issue_device_secret(keyword()) :: {:ok, String.t(), binary()}
-  def issue_device_secret(opts \\ []), do: Infra.issue_device_secret(opts)
+  def issue_device_secret(opts \\ []), do: Storage.issue_device_secret(opts)
 
   @doc """
   Convenience hash helper for raw tokens.
   """
   @spec hash(String.t()) :: binary()
-  def hash(raw), do: Infra.hash(raw)
+  def hash(raw), do: Storage.hash(raw)
 
-  defp ledgered_context(%Policy{legacy_context: nil}, opts) do
+  defp ledgered_context(%Definition{legacy_context: nil}, opts) do
     case Keyword.get(opts, :context) do
       value when is_binary(value) ->
         value
@@ -255,7 +260,7 @@ defmodule Famichat.Auth.Tokens do
     end
   end
 
-  defp ledgered_context(%Policy{legacy_context: context}, opts) do
+  defp ledgered_context(%Definition{legacy_context: context}, opts) do
     Keyword.get(opts, :context, context)
   end
 
@@ -264,7 +269,7 @@ defmodule Famichat.Auth.Tokens do
   defp audience_string(aud) when is_binary(aud), do: aud
 
   defp subject_id_from_policy(
-         %Policy{subject_strategy: :none},
+         %Definition{subject_strategy: :none},
          _payload,
          opts,
          _context
@@ -273,7 +278,7 @@ defmodule Famichat.Auth.Tokens do
   end
 
   defp subject_id_from_policy(
-         %Policy{subject_strategy: {:user_id}},
+         %Definition{subject_strategy: {:user_id}},
          payload,
          opts,
          _context
@@ -282,7 +287,7 @@ defmodule Famichat.Auth.Tokens do
   end
 
   defp subject_id_from_policy(
-         %Policy{subject_strategy: {:device_id}},
+         %Definition{subject_strategy: {:device_id}},
          payload,
          opts,
          _context
@@ -291,7 +296,7 @@ defmodule Famichat.Auth.Tokens do
   end
 
   defp subject_id_from_policy(
-         %Policy{subject_strategy: {:email_sha256}},
+         %Definition{subject_strategy: {:email_sha256}},
          payload,
          opts,
          context
@@ -317,9 +322,9 @@ defmodule Famichat.Auth.Tokens do
   defp normalize_string(value) when is_atom(value), do: Atom.to_string(value)
   defp normalize_string(value), do: to_string(value)
 
-  defp fetch_ledgered(%Policy{} = policy, raw_token, opts) do
+  defp fetch_ledgered(%Definition{} = policy, raw_token, opts) do
     context = ledgered_context(policy, opts)
-    Infra.fetch_ledgered(context, raw_token)
+    Storage.fetch_ledgered(context, raw_token)
   end
 
   defp maybe_emit_subject_metric(_kind, :none, _subject_id), do: :ok
@@ -358,7 +363,7 @@ defmodule Famichat.Auth.Tokens do
 
   defp with_telemetry({:ok, %Issue{} = issue} = ok, action, policy) do
     :telemetry.execute(
-      [:famichat, :auth, :token, action],
+      [:famichat, :auth, :tokens, action],
       %{count: 1},
       %{
         kind: issue.kind,

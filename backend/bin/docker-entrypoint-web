@@ -49,7 +49,8 @@ elif [ "$MIX_ENV" = "prod" ]; then
     log "MIX_ENV is set to prod, but release files not found. This might be an error."
 else
     log "Running in local development mode"
-    # Add any local development specific commands here if needed
+    log "Ensuring Mix dependencies are installed..."
+    mix deps.get --only "${MIX_ENV:-dev}"
 fi
 
 # Execute the main command

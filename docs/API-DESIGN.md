@@ -99,7 +99,7 @@ end
 - `POST /api/v1/auth/pairings` (reissue) is intentionally admin-only; document its usage when regenerating QR/admin codes for an outstanding invite.
 - Magic-link redemption records `enrollment_required_since` when a user without active passkeys logs in; registering a passkey clears the state.
 - Magic-link, OTP, and recovery endpoints emit `x-test-token` headers only in `MIX_ENV=test` to keep raw tokens out of fixtures/logs.
-- Passkey flows are still returning minimal `{challenge, challenge_token}` payloads. Full WebAuthn `PublicKeyCredentialCreationOptions`/`PublicKeyCredentialRequestOptions` must be surfaced once the Wax integration lands.
+- Passkey challenge endpoints now return WebAuthn-shaped `publicKey` options alongside an opaque `challenge_handle`. The legacy `{challenge, challenge_token}` payload has been removed.
 
 ---
 

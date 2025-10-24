@@ -9,7 +9,7 @@ defmodule Famichat.Auth.Recovery do
       Famichat.Auth.Identity,
       Famichat.Auth.Households,
       Famichat.Auth.Sessions,
-      Famichat.Auth.Authenticators,
+      Famichat.Auth.Passkeys,
       Famichat.Auth.Infra
     ]
 end

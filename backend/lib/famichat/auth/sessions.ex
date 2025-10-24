@@ -15,15 +15,15 @@ defmodule Famichat.Auth.Sessions do
   require Famichat.Auth.Infra.Instrumentation
   alias Famichat.Accounts.{RateLimiter, User, UserDevice}
   alias Famichat.Auth.Infra.Instrumentation
-  alias Famichat.Auth.TokenPolicy
+  alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens
-  alias Famichat.Auth.Sessions.Device
-  alias Famichat.Auth.Sessions.RotationPolicy
+  alias Famichat.Auth.Sessions.DeviceStore
+  alias Famichat.Auth.Sessions.RefreshRotation
   alias Famichat.Repo
 
   @access_kind :access
   @refresh_kind :device_refresh
-  @refresh_ttl TokenPolicy.default_ttl(@refresh_kind)
+  @refresh_ttl Policy.default_ttl(@refresh_kind)
 
   @spec start_session(User.t(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
@@ -49,9 +49,14 @@ defmodule Famichat.Auth.Sessions do
     end
 
     Repo.transaction(fn ->
-      with {:ok, normalized} <- Device.normalize_info(device_info),
+      with {:ok, normalized} <- DeviceStore.normalize_info(device_info),
            {:ok, device} <-
-             Device.upsert(user, normalized, should_remember?, @refresh_ttl),
+             DeviceStore.upsert(
+               user,
+               normalized,
+               should_remember?,
+               @refresh_ttl
+             ),
            {:ok, tokens, _user_id, updated_device} <-
              issue_session_tokens(user, device) do
         telemetry(:start, %{
@@ -79,11 +84,11 @@ defmodule Famichat.Auth.Sessions do
       %{device_id: device_id},
       do:
         with :ok <- rate_limit_refresh(device_id),
-             {:ok, device} <- Device.fetch(device_id),
+             {:ok, device} <- DeviceStore.fetch(device_id),
              :ok <- ensure_not_revoked(device),
              :ok <- ensure_trust_active(device, []),
              result <-
-               RotationPolicy.verify_and_rotate(
+               RefreshRotation.verify_and_rotate(
                  device,
                  raw_refresh,
                  &issue_session_tokens/2
@@ -146,7 +151,7 @@ defmodule Famichat.Auth.Sessions do
           | {:error, term()}
   def verify_access_token(token) when is_binary(token) do
     with {:ok, payload} <- Tokens.verify(@access_kind, token),
-         {:ok, device} <- Device.fetch(payload["device_id"]),
+         {:ok, device} <- DeviceStore.fetch(payload["device_id"]),
          :ok <- ensure_device_matches(device, payload["user_id"]),
          :ok <- ensure_trust_active(device, allow_nil: true) do
       {:ok, %{user_id: device.user_id, device_id: device.device_id}}
@@ -157,7 +162,7 @@ defmodule Famichat.Auth.Sessions do
 
   @spec require_reauth?(Ecto.UUID.t(), String.t(), atom()) :: boolean()
   def require_reauth?(user_id, device_id, _action) do
-    with {:ok, device} <- Device.fetch(device_id),
+    with {:ok, device} <- DeviceStore.fetch(device_id),
          true <- device.user_id == user_id,
          false <- is_nil(device.trusted_until) do
       DateTime.compare(device.trusted_until, DateTime.utc_now()) == :lt

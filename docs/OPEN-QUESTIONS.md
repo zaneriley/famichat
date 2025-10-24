@@ -168,7 +168,7 @@ Group setup/membership change:
 
 ### Q4b: Passkey Nudging & Trusted Window Renewal
 
-**Context**: Plan Section 10 calls for marking an `enrollment_required_since` timestamp when a user logs in via magic link without an enrolled passkey. This state now ships (Oct 13, 2025) and clears once an active passkey exists. We have introduced the `wax_` dependency to drive WebAuthn compliance, but the server continues to return the legacy `{challenge, challenge_token}` payloads until the Wax wiring is complete. Refresh-session handling still keeps the trusted device window as a fixed 30-day expiry (it does not extend when the user refreshes tokens).
+**Context**: Plan Section 10 calls for marking an `enrollment_required_since` timestamp when a user logs in via magic link without an enrolled passkey. This state now ships (Oct 13, 2025) and clears once an active passkey exists. The Wax-backed implementation now emits WebAuthn `publicKey` payloads plus an opaque handle (legacy `{challenge, challenge_token}` payload removed). Refresh-session handling still keeps the trusted device window as a fixed 30-day expiry (it does not extend when the user refreshes tokens).
 
 **Open Questions**:
 - Should trusted devices roll their `trusted_until` forward on each refresh, or expire exactly 30 days after the user opted in?
