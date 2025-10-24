@@ -79,9 +79,10 @@ defmodule FamichatWeb.MessageTestLive do
       user = ensure_test_user!()
 
       ensure_membership!(user.id, family.id)
-      ensure_self_conversation!(family, user)
+      conversation = ensure_self_conversation!(family, user)
 
-      start_test_session!(user)
+      session_data = start_test_session!(user)
+      Map.put(session_data, :conversation_id, conversation.id)
     end)
   end
 

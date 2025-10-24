@@ -1,16 +1,16 @@
-defmodule Famichat.Auth.AuthenticatorsTest do
+defmodule Famichat.Auth.PasskeysTest do
   use Famichat.DataCase, async: false
 
   import Ecto.Query
   import Famichat.ChatFixtures
 
-  alias Famichat.Auth.Authenticators
-  alias Famichat.Auth.Authenticators.Challenge
+  alias Famichat.Auth.Passkeys
+  alias Famichat.Auth.Passkeys.Challenge
   alias Famichat.Repo
 
-  @issued_event [:famichat, :auth, :authenticators, :challenge_issued]
-  @consumed_event [:famichat, :auth, :authenticators, :challenge_consumed]
-  @invalid_event [:famichat, :auth, :authenticators, :challenge_invalid]
+  @issued_event [:famichat, :auth, :passkeys, :challenge_issued]
+  @consumed_event [:famichat, :auth, :passkeys, :challenge_consumed]
+  @invalid_event [:famichat, :auth, :passkeys, :challenge_invalid]
 
   setup do
     %{user: user_fixture()}
@@ -20,7 +20,7 @@ defmodule Famichat.Auth.AuthenticatorsTest do
     events =
       capture(@issued_event, fn ->
         assert {:ok, payload} =
-                 Authenticators.issue_registration_challenge(user)
+                 Passkeys.issue_registration_challenge(user)
 
         payload
       end)
@@ -32,19 +32,19 @@ defmodule Famichat.Auth.AuthenticatorsTest do
     assert event.metadata.user_id == user.id
     assert event.metadata.challenge_id
 
-    assert {:ok, payload} = Authenticators.issue_registration_challenge(user)
+    assert {:ok, payload} = Passkeys.issue_registration_challenge(user)
     refute Map.has_key?(payload, "challenge_token")
   end
 
   test "consume challenge emits telemetry and prevents replay", %{user: user} do
-    {:ok, payload} = Authenticators.issue_registration_challenge(user)
+    {:ok, payload} = Passkeys.issue_registration_challenge(user)
     handle = payload["challenge_handle"]
 
-    {:ok, challenge} = Authenticators.fetch_registration_challenge(handle)
+    {:ok, challenge} = Passkeys.fetch_registration_challenge(handle)
 
     events =
       capture(@consumed_event, fn ->
-        assert {:ok, _} = Authenticators.consume_challenge(challenge)
+        assert {:ok, _} = Passkeys.consume_challenge(challenge)
       end)
 
     assert [event] = events
@@ -53,14 +53,14 @@ defmodule Famichat.Auth.AuthenticatorsTest do
     assert event.metadata.challenge_id == challenge.id
     assert event.metadata.user_id == challenge.user_id
 
-    assert {:error, :already_used} = Authenticators.consume_challenge(challenge)
+    assert {:error, :already_used} = Passkeys.consume_challenge(challenge)
   end
 
   test "invalid handle emits telemetry", %{user: _user} do
     events =
       capture(@invalid_event, fn ->
         assert {:error, :invalid_challenge} =
-                 Authenticators.fetch_registration_challenge("bad-handle")
+                 Passkeys.fetch_registration_challenge("bad-handle")
       end)
 
     assert [event] = events
@@ -71,7 +71,7 @@ defmodule Famichat.Auth.AuthenticatorsTest do
   end
 
   test "expired challenge returns :expired", %{user: user} do
-    {:ok, payload} = Authenticators.issue_registration_challenge(user)
+    {:ok, payload} = Passkeys.issue_registration_challenge(user)
     handle = payload["challenge_handle"]
 
     challenge = latest_challenge(user)
@@ -84,7 +84,7 @@ defmodule Famichat.Auth.AuthenticatorsTest do
     events =
       capture(@invalid_event, fn ->
         assert {:error, :expired} =
-                 Authenticators.fetch_registration_challenge(handle)
+                 Passkeys.fetch_registration_challenge(handle)
       end)
 
     assert [event] = events
@@ -92,13 +92,13 @@ defmodule Famichat.Auth.AuthenticatorsTest do
   end
 
   test "type mismatch returns invalid challenge", %{user: user} do
-    {:ok, payload} = Authenticators.issue_registration_challenge(user)
+    {:ok, payload} = Passkeys.issue_registration_challenge(user)
     handle = payload["challenge_handle"]
 
     events =
       capture(@invalid_event, fn ->
         assert {:error, :invalid_challenge} =
-                 Authenticators.fetch_assertion_challenge(handle)
+                 Passkeys.fetch_assertion_challenge(handle)
       end)
 
     assert [event] = events
@@ -108,17 +108,17 @@ defmodule Famichat.Auth.AuthenticatorsTest do
   test "consume prevents replay and invalid telemetry not emitted", %{
     user: user
   } do
-    {:ok, payload} = Authenticators.issue_registration_challenge(user)
+    {:ok, payload} = Passkeys.issue_registration_challenge(user)
     handle = payload["challenge_handle"]
 
-    {:ok, challenge} = Authenticators.fetch_registration_challenge(handle)
+    {:ok, challenge} = Passkeys.fetch_registration_challenge(handle)
 
-    assert {:ok, _} = Authenticators.consume_challenge(challenge)
+    assert {:ok, _} = Passkeys.consume_challenge(challenge)
 
     events =
       capture(@invalid_event, fn ->
         assert {:error, :already_used} =
-                 Authenticators.consume_challenge(challenge)
+                 Passkeys.consume_challenge(challenge)
       end)
 
     assert events == []
@@ -135,7 +135,7 @@ defmodule Famichat.Auth.AuthenticatorsTest do
 
   defp capture(event, fun) do
     handler_id =
-      "authenticators-telemetry-#{System.unique_integer([:positive])}"
+      "passkeys-telemetry-#{System.unique_integer([:positive])}"
 
     :telemetry.attach(handler_id, event, &forward_event/4, self())
 

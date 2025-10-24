@@ -51,7 +51,7 @@
 - ✅ One-invite/one-account enforced — `POST /auth/invites/accept` now mints a 10 min registration JWT and immediately consumes the invite token (Oct 14, 2025)
 - 🔄 Decide whether trusted device window should roll forward on refresh or stay fixed at 30 days
 - ✅ Document `Accounts.reissue_pairing/2` in the API surface (or mark it internal-only) — captured in `docs/API-DESIGN.md` (Oct 13, 2025)
-- 🔄 WebAuthn compliance: `wax_` dependency added, but passkey endpoints still return simplified `{challenge, challenge_token}` payloads; swap to Wax-generated `PublicKeyCredential*Options` and full verification remains open
+- ✅ WebAuthn compliance: challenge endpoints now emit `publicKey` options and opaque handles only; legacy `{challenge, challenge_token}` payload removed
 
 ---
 

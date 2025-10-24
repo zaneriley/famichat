@@ -17,7 +17,7 @@ defmodule Famichat.Accounts.Legacy do
     UserToken
   }
 
-  alias Famichat.Auth.Authenticators
+  alias Famichat.Auth.Passkeys
   alias Famichat.Auth.Sessions
   alias Famichat.Auth.Tokens
   alias Famichat.Auth.Infra.Instrumentation
@@ -336,7 +336,7 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp do_issue_passkey_registration_challenge(%User{} = user) do
-    case Authenticators.issue_registration_challenge(user) do
+    case Passkeys.issue_registration_challenge(user) do
       {:ok, response} -> {:ok, response}
       {:error, reason} -> {:error, reason}
     end
@@ -358,7 +358,7 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp build_passkey_assertion_challenge(%User{} = user) do
-    Authenticators.issue_assertion_challenge(user)
+    Passkeys.issue_assertion_challenge(user)
   end
 
   @spec register_passkey(map()) :: {:ok, Passkey.t()} | {:error, term()}
@@ -440,7 +440,7 @@ defmodule Famichat.Accounts.Legacy do
   defp resolve_registration_challenge(payload) do
     with {:ok, handle} <-
            fetch_binary_param(payload, ["challenge_handle", :challenge_handle]),
-         {:ok, challenge} <- Authenticators.fetch_registration_challenge(handle) do
+         {:ok, challenge} <- Passkeys.fetch_registration_challenge(handle) do
       {:ok, challenge_context(challenge)}
     end
   end
@@ -448,7 +448,7 @@ defmodule Famichat.Accounts.Legacy do
   defp resolve_assertion_challenge(payload) do
     with {:ok, handle} <-
            fetch_binary_param(payload, ["challenge_handle", :challenge_handle]),
-         {:ok, challenge} <- Authenticators.fetch_assertion_challenge(handle) do
+         {:ok, challenge} <- Passkeys.fetch_assertion_challenge(handle) do
       {:ok, challenge_context(challenge)}
     end
   end
@@ -465,14 +465,14 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp finalize_registration_challenge(%{record: record}) do
-    case Authenticators.consume_challenge(record) do
+    case Passkeys.consume_challenge(record) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp finalize_assertion_challenge(%{record: record}) do
-    case Authenticators.consume_challenge(record) do
+    case Passkeys.consume_challenge(record) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
     end

@@ -146,27 +146,28 @@ Reads still support context; disable writes to `kind`.
 
 ---
 
-## Phase 3 — Authenticators V2: Single WebAuthn Challenge Builder with Opaque Handle
+## Phase 3 — Passkeys V2: Single WebAuthn Challenge Builder with Opaque Handle
+
+**Status**  
+✅ Completed – `Famichat.Auth.Passkeys` now issues/consumes WebAuthn challenges and responses carry only `publicKey` options plus an opaque `challenge_handle`.
 
 **Goal**  
 Eliminate legacy `{challenge, challenge_token}` shape and duplication; return WebAuthn-shaped options and a signed opaque handle.
 
 **Scope**
 
-- Create `Auth.Authenticators` with:
-  - `issue_challenge(type, user)` → `%{publicKey: options, challenge_handle, expires_at}`.  
-  - `register_passkey/1` and `assert_passkey/1` using `challenge_handle` verification and `webauthn_challenges` table.
-- Keep a façade shim to return both shapes for one release:
-  - `{challenge, challenge_token}` (legacy).  
-  - `{publicKey, challenge_handle}` (new).
-- Remove in-file duplication of reg/assert challenge builders; a single builder parameterized by type + TTL.
+- Create `Famichat.Auth.Passkeys` with:
+  - `issue_registration_challenge/2` and `issue_assertion_challenge/2` → `%{publicKey: options, challenge_handle, expires_at}`.  
+  - `fetch_*` helpers plus `consume_challenge/1` backed by `Famichat.Auth.Passkeys.Challenge` and the `webauthn_challenges` table.
+- Update passkey flows in `Accounts.Legacy` to require handles (legacy token fallback removed) and share finalization helpers.
+- Extend controller coverage to assert the new handle + `publicKey` payload.
 
 **Migrations**  
 Create `webauthn_challenges` table (`id`, `type`, `user_id`, `challenge`, `expires_at`, `consumed_at`).
 
 **Feature Flags**
 
-- `:webauthn_handle_v1` (controls whether façade returns dual shape or new only).
+- None
 
 **Tests**
 
@@ -176,17 +177,15 @@ Create `webauthn_challenges` table (`id`, `type`, `user_id`, `challenge`, `expir
 
 **Observability**
 
-- Metrics: `auth_authenticators.challenge.issued.{registration|assertion}`, `.consumed`, `.invalid`.  
+- Metrics: `auth_passkeys.challenge.issued.{registration|assertion}`, `.consumed`, `.invalid`.  
 - Alert on high invalid rate (possible replay or client desync).
 
 **Rollout**
 
-- Enable on staging with dual-shape.  
-- Upgrade clients to use `publicKey + challenge_handle`.  
-- Cut legacy shape when client adoption is complete.
+- Deploy alongside the `webauthn_challenges` migration; clients must echo `challenge_handle` when responding.
 
 **Rollback**  
-Keep dual-shape on; challenges are stored independently and safe to ignore by clients.
+Re-introducing `{challenge, challenge_token}` would require reverting this phase.
 
 ---
 
@@ -199,7 +198,7 @@ Move invitation lifecycle into `Auth.Onboarding` and ensure it composes with `Ho
 
 - Onboarding context: `issue_invite/3`, `accept_invite/1`, `issue_pairing/1`, `redeem_pairing/1`, `complete_registration/2`.  
 - Households context: expose `add_member/3`, `member_role/2`; no change to schema.  
-- Façade flows: `Accounts.onboard_via_invite(invite_token, user_attrs)` returns `%{user_id, registration_challenge, …}` using Authenticators v2.
+- Façade flows: `Accounts.onboard_via_invite(invite_token, user_attrs)` returns `%{user_id, registration_challenge, …}` using Passkeys façade.
 
 **Migrations**  
 None (reuses `auth_tokens` and existing family/membership tables).
@@ -240,7 +239,7 @@ Stop “nuke all” by default, add scoped blast radius, and make actions audita
   - `issue_recovery(admin_id, user_id, scope \\ :target_user)`.  
   - `redeem_recovery(token)` orchestrates via contracts only:
     - `Sessions.revoke_device/2` | `revoke_all_for_user/1` | `revoke_all_for_household/3`.  
-    - `Authenticators.disable_all_for_user/1`.  
+    - `Passkeys.disable_all_for_user/1`.  
   - `Identity.mark_enrollment_required/1` after containment.
 - `Audit.record/…` called for both issue and redeem with scope and `family_id`.
 
