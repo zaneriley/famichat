@@ -343,12 +343,11 @@ defmodule Famichat.Accounts.Legacy do
       "challenge" => challenge
     }
 
-    with {:ok, challenge_token, _record} <-
-           Token.issue(
-             "passkey_register_challenge",
-             payload,
+    with {:ok, %Tokens.Issue{raw: challenge_token}} <-
+           Tokens.issue(:passkey_reg, payload,
              user_id: user.id,
-             ttl: Tokens.default_ttl(:passkey_assert)
+             context: "passkey_register_challenge",
+             ttl: Tokens.default_ttl(:passkey_reg)
            ) do
       {:ok,
        %{
@@ -382,11 +381,10 @@ defmodule Famichat.Accounts.Legacy do
       "challenge" => challenge
     }
 
-    with {:ok, challenge_token, _record} <-
-           Token.issue(
-             "passkey_assert_challenge",
-             payload,
+    with {:ok, %Tokens.Issue{raw: challenge_token}} <-
+           Tokens.issue(:passkey_assert, payload,
              user_id: user.id,
+             context: "passkey_assert_challenge",
              ttl: Tokens.default_ttl(:passkey_assert)
            ) do
       {:ok,
@@ -402,7 +400,9 @@ defmodule Famichat.Accounts.Legacy do
     with {:ok, challenge_token} <-
            Map.fetch(attestation_payload, "challenge_token"),
          {:ok, challenge_record} <-
-           Token.fetch("passkey_register_challenge", challenge_token),
+           Tokens.fetch(:passkey_reg, challenge_token,
+             context: "passkey_register_challenge"
+           ),
          {:ok, user} <- fetch_user(challenge_record.payload["user_id"]),
          true <-
            challenge_record.payload["user_id"] == user.id ||
@@ -470,7 +470,9 @@ defmodule Famichat.Accounts.Legacy do
            decode_base64(payload, ["credential_id", :credential_id]),
          {:ok, challenge_token} <- Map.fetch(payload, "challenge_token"),
          {:ok, challenge_record} <-
-           Token.fetch("passkey_assert_challenge", challenge_token),
+           Tokens.fetch(:passkey_assert, challenge_token,
+             context: "passkey_assert_challenge"
+           ),
          {:ok, passkey} <- find_active_passkey(credential_id),
          true <-
            passkey.user_id == challenge_record.payload["user_id"] ||

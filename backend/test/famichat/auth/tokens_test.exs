@@ -7,13 +7,16 @@ defmodule Famichat.Auth.TokensTest do
   alias Famichat.Repo
 
   describe "issue/3 for ledgered kinds" do
-    test "applies default ttl and context" do
+    test "applies default ttl and populates ledger metadata" do
       payload = %{"family_id" => Ecto.UUID.generate(), "role" => "member"}
 
       assert {:ok, %Issue{} = issued} = Tokens.issue(:invite, payload)
       assert issued.class == :ledgered
       assert issued.record.context == "invite"
+      assert issued.record.kind == "invite"
+      assert issued.record.audience == "invitee"
       assert is_binary(issued.raw)
+      assert issued.record.subject_id == nil
 
       diff = DateTime.diff(issued.expires_at, issued.issued_at)
       assert_in_delta diff, Tokens.default_ttl(:invite), 2
@@ -37,6 +40,7 @@ defmodule Famichat.Auth.TokensTest do
                Tokens.issue(:invite_registration, payload)
 
       assert issued.class == :signed
+      assert issued.audience == :invitee
 
       assert {:ok, ^payload} =
                Tokens.verify(:invite_registration, issued.raw)
@@ -45,16 +49,34 @@ defmodule Famichat.Auth.TokensTest do
 
   describe "issue/3 for OTP" do
     test "requires a context override" do
-      payload = %{"user_id" => Ecto.UUID.generate(), "code" => "123456"}
+      user = insert_user(%{})
+      email = "otp-test@example.com"
+      normalized = String.downcase(email)
+
+      fingerprint =
+        :crypto.hash(:sha256, normalized)
+        |> Base.encode16(case: :lower)
+
+      payload = %{
+        "user_id" => user.id,
+        "code" => "123456",
+        "email_fingerprint" => fingerprint
+      }
 
       assert_raise ArgumentError, fn ->
         Tokens.issue(:otp, payload)
       end
 
       assert {:ok, %Issue{} = issued} =
-               Tokens.issue(:otp, payload, context: "otp:test", ttl: 30)
+               Tokens.issue(:otp, payload,
+                 context: "otp:" <> fingerprint,
+                 ttl: 30
+               )
 
-      assert issued.record.context == "otp:test"
+      assert issued.record.context == "otp:" <> fingerprint
+      assert issued.record.kind == "otp"
+      assert issued.record.subject_id == fingerprint
+      assert issued.record.audience == "user"
       diff = DateTime.diff(issued.expires_at, issued.issued_at)
       assert_in_delta diff, 30, 2
     end
@@ -70,6 +92,9 @@ defmodule Famichat.Auth.TokensTest do
 
       assert {:ok, fetched} = Tokens.fetch(:magic_link, raw)
       assert fetched.id == record.id
+      assert fetched.kind == "magic_link"
+      assert fetched.audience == "user"
+      assert fetched.subject_id == user.id
     end
   end
 

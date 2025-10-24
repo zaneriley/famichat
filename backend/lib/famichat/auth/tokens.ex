@@ -91,12 +91,24 @@ defmodule Famichat.Auth.Tokens do
 
   defp do_issue(kind, %Policy{storage: :ledgered} = policy, payload, opts) do
     context = ledgered_context(policy, opts)
+    audience = audience_string(policy.audience)
+    raw_subject_id = subject_id_from_policy(policy, payload, opts, context)
+    subject_id = normalize_string(raw_subject_id)
+
+    maybe_emit_subject_metric(kind, policy.subject_strategy, subject_id)
 
     token_opts =
       opts
       |> Keyword.delete(:context)
+      |> Keyword.put(:kind, Atom.to_string(kind))
+      |> maybe_put(:audience, audience)
+      |> maybe_put(:subject_id, subject_id)
 
-    case Infra.issue_ledgered(context, payload, token_opts) do
+    case Infra.issue_ledgered(
+           context,
+           payload,
+           token_opts
+         ) do
       {:ok, raw, %UserToken{} = record} ->
         {:ok,
          %Issue{
@@ -105,6 +117,7 @@ defmodule Famichat.Auth.Tokens do
            raw: raw,
            record: record,
            audience: policy.audience,
+           subject_id: record.subject_id,
            issued_at: to_datetime(record.inserted_at),
            expires_at: to_datetime(record.expires_at)
          }}
@@ -164,8 +177,7 @@ defmodule Famichat.Auth.Tokens do
 
     case policy.storage do
       :ledgered ->
-        context = ledgered_context(policy, opts)
-        Infra.fetch_ledgered(context, raw_token)
+        fetch_ledgered(policy, raw_token, opts)
 
       storage ->
         raise ArgumentError,
@@ -245,6 +257,91 @@ defmodule Famichat.Auth.Tokens do
 
   defp ledgered_context(%Policy{legacy_context: context}, opts) do
     Keyword.get(opts, :context, context)
+  end
+
+  defp audience_string(nil), do: nil
+  defp audience_string(aud) when is_atom(aud), do: Atom.to_string(aud)
+  defp audience_string(aud) when is_binary(aud), do: aud
+
+  defp subject_id_from_policy(
+         %Policy{subject_strategy: :none},
+         _payload,
+         opts,
+         _context
+       ) do
+    Keyword.get(opts, :subject_id)
+  end
+
+  defp subject_id_from_policy(
+         %Policy{subject_strategy: {:user_id}},
+         payload,
+         opts,
+         _context
+       ) do
+    opts[:subject_id] || Map.get(payload, "user_id") || opts[:user_id]
+  end
+
+  defp subject_id_from_policy(
+         %Policy{subject_strategy: {:device_id}},
+         payload,
+         opts,
+         _context
+       ) do
+    opts[:subject_id] || Map.get(payload, "device_id") || opts[:device_id]
+  end
+
+  defp subject_id_from_policy(
+         %Policy{subject_strategy: {:email_sha256}},
+         payload,
+         opts,
+         context
+       ) do
+    opts[:subject_id] || Map.get(payload, "email_fingerprint") ||
+      extract_email_hash(context)
+  end
+
+  defp subject_id_from_policy(_policy, _payload, opts, _context) do
+    Keyword.get(opts, :subject_id)
+  end
+
+  defp extract_email_hash("otp:" <> hash) when byte_size(hash) > 0, do: hash
+  defp extract_email_hash(_), do: nil
+
+  defp maybe_put(opts, _key, nil), do: opts
+
+  defp maybe_put(opts, key, value),
+    do: Keyword.put(opts, key, normalize_string(value))
+
+  defp normalize_string(nil), do: nil
+  defp normalize_string(value) when is_binary(value), do: value
+  defp normalize_string(value) when is_atom(value), do: Atom.to_string(value)
+  defp normalize_string(value), do: to_string(value)
+
+  defp fetch_ledgered(%Policy{} = policy, raw_token, opts) do
+    context = ledgered_context(policy, opts)
+    Infra.fetch_ledgered(context, raw_token)
+  end
+
+  defp maybe_emit_subject_metric(_kind, :none, _subject_id), do: :ok
+
+  defp maybe_emit_subject_metric(kind, _strategy, nil) do
+    :telemetry.execute(
+      [:auth_tokens, :issue, :missing_subject_id],
+      %{count: 1},
+      %{kind: kind}
+    )
+
+    :ok
+  end
+
+  defp maybe_emit_subject_metric(kind, _strategy, _subject_id) do
+    :telemetry.execute(
+      [:auth_tokens, :issue, :subject_id_present],
+      %{count: 1},
+      %{kind: kind}
+    )
+
+    :ok
   end
 
   defp to_datetime(%NaiveDateTime{} = naive) do

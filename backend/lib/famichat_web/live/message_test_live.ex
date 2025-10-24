@@ -13,32 +13,185 @@ defmodule FamichatWeb.MessageTestLive do
   use FamichatWeb, :live_view
   require Logger
 
-  @salt "user_auth"
-  @test_user_id "test-user-123"
-  @default_conversation_id "test-conversation-123"
+  alias Famichat.Auth.Sessions
+  alias Famichat.Chat.{Conversation, ConversationParticipant, Family}
+  alias Famichat.Repo
+  alias Famichat.Accounts.FamilyMembership
+
+  @test_username "test-user"
 
   @impl true
   def mount(_params, _session, socket) do
-    # Generate a token for the test user - this would typically come from auth
-    token = Phoenix.Token.sign(FamichatWeb.Endpoint, @salt, @test_user_id)
+    # Create or fetch test user and session with real auth tokens
+    # This validates the auth refactor works end-to-end
+    case ensure_test_user_and_session() do
+      {:ok,
+       %{
+         access_token: access_token,
+         user: user,
+         conversation_id: conversation_id
+       }} ->
+        {:ok,
+         assign(socket,
+           channel_joined: false,
+           conversation_type: "self",
+           conversation_id: conversation_id,
+           messages: [],
+           current_message: "",
+           encryption_enabled: false,
+           key_id: "KEY_TEST_v1",
+           version_tag: "v1.0.0",
+           user_id: user.id,
+           error_message: nil,
+           show_options: false,
+           auth_token: access_token,
+           topic: nil
+         )}
 
-    # Initialize state with default values
-    {:ok,
-     assign(socket,
-       channel_joined: false,
-       conversation_type: "direct",
-       conversation_id: @default_conversation_id,
-       messages: [],
-       current_message: "",
-       encryption_enabled: false,
-       key_id: "KEY_TEST_v1",
-       version_tag: "v1.0.0",
-       user_id: @test_user_id,
-       error_message: nil,
-       show_options: false,
-       auth_token: token,
-       topic: nil
-     )}
+      {:error, reason} ->
+        Logger.error("Failed to create test session: #{inspect(reason)}")
+
+        {:ok,
+         assign(socket,
+           channel_joined: false,
+           conversation_type: "self",
+           conversation_id: nil,
+           messages: [],
+           current_message: "",
+           encryption_enabled: false,
+           key_id: "KEY_TEST_v1",
+           version_tag: "v1.0.0",
+           user_id: nil,
+           error_message:
+             "Failed to initialize test session: #{inspect(reason)}",
+           show_options: false,
+           auth_token: nil,
+           topic: nil
+         )}
+    end
+  end
+
+  # Create test user and session using real auth system
+  # This fires actual telemetry events visible in the dashboard
+  defp ensure_test_user_and_session do
+    Repo.transaction(fn ->
+      # Find or create test family
+      family =
+        case Repo.get_by(Family, name: "Test Family") do
+          nil ->
+            {:ok, family} =
+              %Family{}
+              |> Family.changeset(%{name: "Test Family"})
+              |> Repo.insert()
+
+            family
+
+          family ->
+            family
+        end
+
+      # Find or create test user
+      user =
+        case Repo.get_by(Famichat.Accounts.User, username: @test_username) do
+          nil ->
+            {:ok, user} =
+              %Famichat.Accounts.User{}
+              |> Famichat.Accounts.User.changeset(%{username: @test_username})
+              |> Repo.insert()
+
+            user
+
+          user ->
+            user
+        end
+
+      ensure_membership!(user.id, family.id)
+
+      # Find or create test conversation (use self type to avoid direct_key complexity)
+      conversation =
+        case Repo.get_by(Conversation,
+               conversation_type: :self,
+               family_id: family.id
+             ) do
+          nil ->
+            {:ok, conversation} =
+              %Conversation{}
+              |> Conversation.changeset(%{
+                conversation_type: :self,
+                family_id: family.id,
+                name: "Test Self Conversation"
+              })
+              |> Repo.insert()
+
+            # Add user as participant via join table
+            %ConversationParticipant{}
+            |> ConversationParticipant.changeset(%{
+              conversation_id: conversation.id,
+              user_id: user.id
+            })
+            |> Repo.insert!()
+
+            conversation
+
+          conversation ->
+            # Ensure user is a participant
+            existing =
+              Repo.get_by(ConversationParticipant,
+                conversation_id: conversation.id,
+                user_id: user.id
+              )
+
+            if is_nil(existing) do
+              %ConversationParticipant{}
+              |> ConversationParticipant.changeset(%{
+                conversation_id: conversation.id,
+                user_id: user.id
+              })
+              |> Repo.insert!()
+            end
+
+            conversation
+        end
+
+      # Start a real session - this fires telemetry!
+      # [:famichat, :auth, :session, :start]
+      # [:famichat, :auth, :token, :issued] (for access token)
+      device_info = %{
+        id: "test-device-#{System.unique_integer([:positive])}",
+        user_agent: "MessageTestLive",
+        ip: "127.0.0.1"
+      }
+
+      case Sessions.start_session(user, device_info, remember: false) do
+        {:ok, %{access_token: access_token}} ->
+          %{
+            access_token: access_token,
+            user: user,
+            conversation_id: conversation.id
+          }
+
+        {:error, reason} ->
+          Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp ensure_membership!(user_id, family_id) do
+    case Repo.get_by(FamilyMembership, user_id: user_id, family_id: family_id) do
+      %FamilyMembership{} ->
+        :ok
+
+      nil ->
+        %FamilyMembership{}
+        |> FamilyMembership.changeset(%{
+          user_id: user_id,
+          family_id: family_id,
+          role: :admin
+        })
+        |> Repo.insert!()
+
+        :ok
+    end
   end
 
   @impl true
