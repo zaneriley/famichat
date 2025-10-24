@@ -1,0 +1,53 @@
+defmodule Famichat.Auth.Authenticators.Challenge do
+  @moduledoc """
+  WebAuthn challenge persistence layer.
+
+  Challenges are single-use and expire based on token TTLs:
+  * Registration: #{Famichat.Auth.TokenPolicy.default_ttl(:passkey_reg)} seconds
+  * Assertion: #{Famichat.Auth.TokenPolicy.default_ttl(:passkey_assert)} seconds
+
+  Consumed challenges are soft-deleted via `consumed_at`. A periodic cleanup job
+  should remove expired or consumed rows to keep the table lean.
+  """
+
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  alias Famichat.Accounts.User
+
+  @typedoc "Supported WebAuthn challenge types."
+  @type challenge_type :: :registration | :assertion
+
+  @type t :: %__MODULE__{
+          id: Ecto.UUID.t() | nil,
+          user_id: Ecto.UUID.t(),
+          type: challenge_type(),
+          challenge: binary(),
+          expires_at: DateTime.t(),
+          consumed_at: DateTime.t() | nil,
+          inserted_at: DateTime.t() | nil
+        }
+
+  @primary_key {:id, :binary_id, autogenerate: true}
+  @foreign_key_type :binary_id
+  schema "webauthn_challenges" do
+    belongs_to :user, User
+
+    field :type, Ecto.Enum,
+      values: [registration: "registration", assertion: "assertion"]
+
+    field :challenge, :binary
+    field :expires_at, :utc_datetime_usec
+    field :consumed_at, :utc_datetime_usec
+
+    timestamps(type: :utc_datetime_usec, updated_at: false)
+  end
+
+  @doc false
+  @spec changeset(t(), map()) :: Ecto.Changeset.t()
+  def changeset(challenge, attrs) do
+    challenge
+    |> cast(attrs, [:user_id, :type, :challenge, :expires_at, :consumed_at])
+    |> validate_required([:user_id, :type, :challenge, :expires_at])
+  end
+end

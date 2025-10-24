@@ -132,8 +132,14 @@ defmodule FamichatWeb.AuthControllerTest do
       |> json_response(200)
 
     challenge = challenge_payload["challenge"]
-    challenge_token = challenge_payload["challenge_token"]
+    challenge_handle = challenge_payload["challenge_handle"]
     refute Map.has_key?(challenge_payload, "user")
+    refute Map.has_key?(challenge_payload, "challenge_token")
+    assert challenge_handle
+
+    public_key_opts = challenge_payload["publicKey"]
+    assert public_key_opts
+    assert public_key_opts["challenge"] == challenge
 
     credential_id = Base.encode64("credential-123")
     public_key = Base.encode64("public-key-123")
@@ -144,7 +150,7 @@ defmodule FamichatWeb.AuthControllerTest do
       credential_id: credential_id,
       public_key: public_key,
       challenge: challenge,
-      challenge_token: challenge_token,
+      challenge_handle: challenge_handle,
       sign_count: 0
     })
     |> json_response(201)
@@ -158,8 +164,14 @@ defmodule FamichatWeb.AuthControllerTest do
       |> json_response(200)
 
     assert_challenge = assert_payload["challenge"]
-    assert_token = assert_payload["challenge_token"]
+    assert_handle = assert_payload["challenge_handle"]
     refute Map.has_key?(assert_payload, "user")
+    refute Map.has_key?(assert_payload, "challenge_token")
+    assert assert_handle
+
+    assert_public_key = assert_payload["publicKey"]
+    assert assert_public_key
+    assert assert_public_key["challenge"] == assert_challenge
 
     device_id = Ecto.UUID.generate()
 
@@ -169,7 +181,7 @@ defmodule FamichatWeb.AuthControllerTest do
       |> post(~p"/api/v1/auth/passkeys/assert", %{
         credential_id: credential_id,
         challenge: assert_challenge,
-        challenge_token: assert_token,
+        challenge_handle: assert_handle,
         sign_count: 1,
         device_id: device_id,
         trust_device: true
