@@ -5,6 +5,10 @@
 # is restricted to this project.
 import Config
 
+config :famichat, :webauthn,
+  rp_id: System.get_env("WEBAUTHN_RP_ID") || "localhost",
+  rp_name: System.get_env("WEBAUTHN_RP_NAME") || "Famichat"
+
 config :famichat,
   ecto_repos: [Famichat.Repo],
   generators: [timestamp_type: :utc_datetime],

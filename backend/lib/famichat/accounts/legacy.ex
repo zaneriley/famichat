@@ -17,6 +17,7 @@ defmodule Famichat.Accounts.Legacy do
     UserToken
   }
 
+  alias Famichat.Auth.Authenticators
   alias Famichat.Auth.Sessions
   alias Famichat.Auth.Tokens
   alias Famichat.Auth.Infra.Instrumentation
@@ -335,25 +336,9 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp do_issue_passkey_registration_challenge(%User{} = user) do
-    challenge =
-      Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
-
-    payload = %{
-      "user_id" => user.id,
-      "challenge" => challenge
-    }
-
-    with {:ok, %Tokens.Issue{raw: challenge_token}} <-
-           Tokens.issue(:passkey_reg, payload,
-             user_id: user.id,
-             context: "passkey_register_challenge",
-             ttl: Tokens.default_ttl(:passkey_reg)
-           ) do
-      {:ok,
-       %{
-         challenge: challenge,
-         challenge_token: challenge_token
-       }}
+    case Authenticators.issue_registration_challenge(user) do
+      {:ok, response} -> {:ok, response}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -373,49 +358,21 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp build_passkey_assertion_challenge(%User{} = user) do
-    challenge =
-      Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
-
-    payload = %{
-      "user_id" => user.id,
-      "challenge" => challenge
-    }
-
-    with {:ok, %Tokens.Issue{raw: challenge_token}} <-
-           Tokens.issue(:passkey_assert, payload,
-             user_id: user.id,
-             context: "passkey_assert_challenge",
-             ttl: Tokens.default_ttl(:passkey_assert)
-           ) do
-      {:ok,
-       %{
-         challenge: challenge,
-         challenge_token: challenge_token
-       }}
-    end
+    Authenticators.issue_assertion_challenge(user)
   end
 
   @spec register_passkey(map()) :: {:ok, Passkey.t()} | {:error, term()}
   def register_passkey(attestation_payload) do
-    with {:ok, challenge_token} <-
-           Map.fetch(attestation_payload, "challenge_token"),
-         {:ok, challenge_record} <-
-           Tokens.fetch(:passkey_reg, challenge_token,
-             context: "passkey_register_challenge"
+    with {:ok, challenge_ctx} <-
+           resolve_registration_challenge(attestation_payload),
+         {:ok, user} <- fetch_user(challenge_ctx.user_id),
+         :ok <-
+           verify_payload_challenge(
+             attestation_payload,
+             challenge_ctx.challenge_binary
            ),
-         {:ok, user} <- fetch_user(challenge_record.payload["user_id"]),
-         true <-
-           challenge_record.payload["user_id"] == user.id ||
-             {:error, :invalid_challenge},
-         challenge <- challenge_record.payload["challenge"],
-         true <-
-           challenge == Map.get(attestation_payload, "challenge") ||
-             {:error, :invalid_challenge},
          {:ok, credential_id} <-
-           decode_base64(attestation_payload, [
-             "credential_id",
-             :credential_id
-           ]),
+           decode_base64(attestation_payload, ["credential_id", :credential_id]),
          {:ok, public_key} <-
            decode_base64(attestation_payload, ["public_key", :public_key]) do
       attrs = %{
@@ -432,15 +389,13 @@ defmodule Famichat.Accounts.Legacy do
         last_used_at: DateTime.utc_now()
       }
 
-      %Passkey{}
-      |> Passkey.changeset(attrs)
-      |> Repo.insert()
-      |> case do
+      case Repo.insert(Passkey.changeset(%Passkey{}, attrs)) do
         {:ok, passkey} ->
-          telemetry(:passkey, :register, %{user_id: user.id})
-          {:ok, _} = Tokens.consume(challenge_record)
-          _ = sync_enrollment_requirement(user)
-          {:ok, passkey}
+          with :ok <- finalize_registration_challenge(challenge_ctx) do
+            telemetry(:passkey, :register, %{user_id: user.id})
+            _ = sync_enrollment_requirement(user)
+            {:ok, passkey}
+          end
 
         error ->
           error
@@ -468,26 +423,109 @@ defmodule Famichat.Accounts.Legacy do
   defp do_assert_passkey(payload) do
     with {:ok, credential_id} <-
            decode_base64(payload, ["credential_id", :credential_id]),
-         {:ok, challenge_token} <- Map.fetch(payload, "challenge_token"),
-         {:ok, challenge_record} <-
-           Tokens.fetch(:passkey_assert, challenge_token,
-             context: "passkey_assert_challenge"
-           ),
+         {:ok, challenge_ctx} <- resolve_assertion_challenge(payload),
          {:ok, passkey} <- find_active_passkey(credential_id),
-         true <-
-           passkey.user_id == challenge_record.payload["user_id"] ||
-             {:error, :invalid_credentials},
-         true <-
-           challenge_record.payload["challenge"] ==
-             Map.get(payload, "challenge") || {:error, :invalid_challenge},
+         :ok <- verify_assertion_user(passkey, challenge_ctx.user_id),
+         :ok <-
+           verify_payload_challenge(payload, challenge_ctx.challenge_binary),
          :ok <- validate_sign_count(passkey, payload),
-         {:ok, passkey} <- touch_passkey(passkey, payload) do
+         {:ok, passkey} <- touch_passkey(passkey, payload),
+         :ok <- finalize_assertion_challenge(challenge_ctx) do
       user = Repo.preload(passkey, :user).user
       telemetry(:passkey, :assert, %{user_id: user.id})
-      {:ok, _} = Tokens.consume(challenge_record)
       {:ok, %{user: user, passkey: passkey}}
     end
   end
+
+  defp resolve_registration_challenge(payload) do
+    with {:ok, handle} <-
+           fetch_binary_param(payload, ["challenge_handle", :challenge_handle]),
+         {:ok, challenge} <- Authenticators.fetch_registration_challenge(handle) do
+      {:ok, challenge_context(challenge)}
+    end
+  end
+
+  defp resolve_assertion_challenge(payload) do
+    with {:ok, handle} <-
+           fetch_binary_param(payload, ["challenge_handle", :challenge_handle]),
+         {:ok, challenge} <- Authenticators.fetch_assertion_challenge(handle) do
+      {:ok, challenge_context(challenge)}
+    end
+  end
+
+  defp challenge_context(challenge) do
+    binary = challenge.challenge
+
+    %{
+      record: challenge,
+      user_id: challenge.user_id,
+      challenge_binary: binary,
+      challenge_b64: Base.url_encode64(binary, padding: false)
+    }
+  end
+
+  defp finalize_registration_challenge(%{record: record}) do
+    case Authenticators.consume_challenge(record) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp finalize_assertion_challenge(%{record: record}) do
+    case Authenticators.consume_challenge(record) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp verify_payload_challenge(payload, expected_binary) do
+    with {:ok, provided} <-
+           fetch_binary_param(payload, ["challenge", :challenge]),
+         {:ok, decoded} <- decode_challenge_string(provided),
+         true <- decoded == expected_binary || {:error, :invalid_challenge} do
+      :ok
+    end
+  end
+
+  defp verify_assertion_user(%Passkey{user_id: user_id}, user_id), do: :ok
+  defp verify_assertion_user(_passkey, _), do: {:error, :invalid_credentials}
+
+  defp fetch_binary_param(payload, keys) do
+    case first_binary(payload, keys) do
+      nil -> {:error, :invalid_challenge}
+      value -> {:ok, value}
+    end
+  end
+
+  defp first_binary(map, keys) do
+    Enum.reduce_while(keys, nil, fn key, _acc ->
+      case Map.get(map, key) do
+        value when is_binary(value) ->
+          value |> String.trim() |> continue_or_halt()
+
+        _ ->
+          {:cont, nil}
+      end
+    end)
+  end
+
+  defp continue_or_halt(""), do: {:cont, nil}
+  defp continue_or_halt(trimmed), do: {:halt, trimmed}
+
+  defp decode_challenge_string(challenge) when is_binary(challenge) do
+    case Base.url_decode64(challenge, padding: false) do
+      {:ok, decoded} ->
+        {:ok, decoded}
+
+      :error ->
+        case Base.decode64(challenge) do
+          {:ok, decoded} -> {:ok, decoded}
+          :error -> {:error, :invalid_challenge}
+        end
+    end
+  end
+
+  defp decode_challenge_string(_), do: {:error, :invalid_challenge}
 
   defp passkey_rate_key(payload) do
     Map.get(payload, "device_id") ||
