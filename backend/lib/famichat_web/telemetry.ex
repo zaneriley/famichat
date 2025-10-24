@@ -61,6 +61,7 @@ defmodule FamichatWeb.Telemetry do
 
       # Build standard measurements
       measurements = %{
+        count: 1,
         start_time: start_time,
         end_time: end_time,
         duration_ms: duration_ms,
@@ -281,104 +282,237 @@ defmodule FamichatWeb.Telemetry do
 
   def metrics do
     [
-      # Message Channel Metrics
-      summary("famichat.message_channel.join.duration",
+      # =========================================================================
+      # SECTION 1: SYSTEM VITAL SIGNS & SATURATION
+      # =========================================================================
+      # Question: Is the system stable? Are we hitting resource limits?
+      # Critical: High utilization (>80%) indicates CPU saturation
+
+      # 1.1 BEAM Scheduler Utilization
+      summary("vm.total_run_queue_lengths.total",
+        description: "Tasks waiting for CPU - saturation indicator"
+      ),
+      summary("vm.total_run_queue_lengths.cpu",
+        description: "CPU scheduler queue length"
+      ),
+      summary("vm.total_run_queue_lengths.io",
+        description: "IO scheduler queue length"
+      ),
+
+      # 1.2 P95 Endpoint Latency (must stay below 200ms SLO)
+      summary("phoenix.router_dispatch.stop.duration",
+        tags: [:route],
         unit: {:native, :millisecond},
-        description: "The time spent processing a channel join"
+        description: "Request latency by route - watch P95/P99"
       ),
-      counter("famichat.message_channel.join.total",
-        event_name: [:famichat, :message_channel, :join],
-        description: "Total number of channel joins"
+
+      # 1.3 Application Throughput
+      summary("phoenix.endpoint.stop.duration",
+        unit: {:native, :millisecond},
+        description: "Overall endpoint latency - correlate with load"
       ),
-      distribution("famichat.message_channel.join.status",
-        event_name: [:famichat, :message_channel, :join],
-        measurement: :status,
-        description: "Distribution of channel join statuses"
+
+      # 1.4 VM Memory Usage
+      summary("vm.memory.total",
+        unit: {:byte, :kilobyte},
+        description: "Total VM memory - watch for leaks"
+      ),
+
+      # =========================================================================
+      # SECTION 2: AUTHENTICATION SECURITY & INTEGRITY
+      # =========================================================================
+      # Monitors auth refactor (Phases 1-2) and token rotation (ADR-004)
+
+      # 2.1 CRITICAL: Refresh Token Reuse Detection (MUST BE ZERO)
+      counter("famichat.auth.session.refresh.reuse_detected",
+        event_name: [:famichat, :auth, :session, :refresh_reuse_detected],
+        description: "⚠️ CRITICAL: Token theft indicator - must be zero"
+      ),
+
+      # 2.2 Session Lifecycle Events
+      counter("famichat.auth.session.start.count",
+        event_name: [:famichat, :auth, :session, :start],
+        description: "New sessions started"
+      ),
+      counter("famichat.auth.session.refresh.count",
+        event_name: [:famichat, :auth, :session, :refresh],
+        description: "Session refreshes - ratio to starts shows stickiness"
+      ),
+      counter("famichat.auth.session.revoke.count",
+        event_name: [:famichat, :auth, :session, :revoke],
+        description: "Session revocations - spikes need investigation"
+      ),
+
+      # 2.3 Token Issuance Distribution
+      counter("famichat.auth.token.issued.total",
+        event_name: [:famichat, :auth, :token, :issued],
+        measurement: :count,
+        tags: [:kind, :class, :audience],
+        description: "Tokens issued grouped by kind/class/audience"
+      ),
+      counter("famichat.auth.token.subject_id_present.total",
+        event_name: [:auth_tokens, :issue, :subject_id_present],
+        measurement: :count,
+        tags: [:kind],
+        tag_values: &%{kind: (Map.get(&1, :kind) || :unknown) |> to_string()},
+        description: "Issued tokens with subject_id populated"
+      ),
+      counter("famichat.auth.token.subject_id_missing.total",
+        event_name: [:auth_tokens, :issue, :missing_subject_id],
+        measurement: :count,
+        tags: [:kind],
+        tag_values: &%{kind: (Map.get(&1, :kind) || :unknown) |> to_string()},
+        description: "Issued tokens missing subject_id (should remain zero)"
+      ),
+
+      # 2.4 Rate Limiter Activations
+      counter("famichat.rate_limiter.throttled.total",
+        event_name: [:famichat, :rate_limiter, :throttled],
+        measurement: :count,
+        tags: [:bucket],
+        tag_values: &%{bucket: Map.get(&1, :bucket)},
+        description: "Rate limiter throttles by bucket"
+      ),
+
+      # =========================================================================
+      # SECTION 3: REAL-TIME MESSAGING PERFORMANCE (CRITICAL PATH)
+      # =========================================================================
+      # Track latency against 200ms budget and WebSocket stability
+
+      # 3.1 Message Broadcast Latency (major component of end-to-end budget)
+      summary("famichat.message_channel.broadcast.duration",
+        unit: {:native, :millisecond},
+        description: "Server-side message fan-out time - watch P95"
       ),
       counter("famichat.message_channel.broadcast.total",
         event_name: [:famichat, :message_channel, :broadcast],
-        description: "Total number of messages broadcast"
-      ),
-      summary("famichat.message_channel.broadcast.duration",
-        unit: {:native, :millisecond},
-        description: "The time spent broadcasting a message"
+        description: "Total messages broadcast"
       ),
 
-      # SetLocale Plug Metrics
+      # 3.2 Channel Join Latency (impacts initial connection)
+      summary("famichat.message_channel.join.duration",
+        unit: {:native, :millisecond},
+        description: "Auth + authorization time for channel join"
+      ),
+      counter("famichat.message_channel.join.total",
+        event_name: [:famichat, :message_channel, :join],
+        description: "Total channel joins"
+      ),
+
+      # 3.3 Message Acknowledgments
+      counter("famichat.message_channel.ack.total",
+        event_name: [:famichat, :message_channel, :ack],
+        measurement: :count,
+        description: "Message acknowledgments received from clients"
+      ),
+      summary("famichat.message_channel.ack.duration",
+        event_name: [:famichat, :message_channel, :ack],
+        measurement: :duration_ms,
+        unit: :millisecond,
+        description: "ACK processing latency"
+      ),
+
+      # 3.4 Channel Authorization Failures
+      distribution("famichat.message_channel.join.status",
+        event_name: [:famichat, :message_channel, :join],
+        measurement: :status,
+        description: "Join outcomes - filter by error for auth failures"
+      ),
+
+      # =========================================================================
+      # SECTION 4: ENCRYPTION POLICY ADHERENCE
+      # =========================================================================
+      # Metadata infrastructure live, actual crypto pending Sprint 9
+
+      # 4.1 Encryption Status Coverage
+      counter("famichat.message.serialized.total",
+        event_name: [:famichat, :message, :serialized],
+        measurement: :count,
+        tags: [:encryption_status],
+        tag_values:
+          &%{
+            encryption_status:
+              (Map.get(&1, :encryption_status) || :unknown) |> to_string()
+          },
+        description: "Messages serialized grouped by encryption status"
+      ),
+
+      # 4.2 Decryption Error Rate
+      counter("famichat.message.decryption_error.total",
+        event_name: [:famichat, :message, :decryption_error],
+        measurement: :count,
+        tags: [:error_type],
+        tag_values:
+          &%{error_type: (Map.get(&1, :error_type) || :unknown) |> to_string()},
+        description: "Decryption errors (should remain near zero)"
+      ),
+
+      # 4.3 Serialization/Deserialization Latency
+      summary("famichat.message.serialized.duration",
+        event_name: [:famichat, :message, :serialized],
+        measurement: :duration_ms,
+        unit: :millisecond,
+        description: "Serialization latency (metadata pipeline)"
+      ),
+      summary("famichat.message.deserialized.duration",
+        event_name: [:famichat, :message, :deserialized],
+        measurement: :duration_ms,
+        unit: :millisecond,
+        description: "Deserialization latency"
+      ),
+
+      # =========================================================================
+      # SECTION 5: DATABASE (ECTO) PERFORMANCE INSIGHTS
+      # =========================================================================
+      # Identify bottlenecks: query execution, decoding, connection pool
+
+      # 5.1 Database Latency Breakdown
+      summary("famichat.repo.query.total_time",
+        unit: {:native, :millisecond},
+        description: "Total DB operation time (query + decode + queue)"
+      ),
+      summary("famichat.repo.query.query_time",
+        unit: {:native, :millisecond},
+        description: "SQL execution time - high values = inefficient queries"
+      ),
+      summary("famichat.repo.query.decode_time",
+        unit: {:native, :millisecond},
+        description: "Result decoding time"
+      ),
+      summary("famichat.repo.query.queue_time",
+        unit: {:native, :millisecond},
+        description: "Pool wait time - high values = saturation"
+      ),
+      summary("famichat.repo.query.idle_time",
+        unit: {:native, :millisecond},
+        description: "Connection checkout wait time"
+      ),
+
+      # 5.2 Ecto Pool Saturation
+      # ⚠️ Approximated from high queue_time - no direct metric available
+
+      # =========================================================================
+      # SECTION 6: OTHER INSTRUMENTATION
+      # =========================================================================
+
+      # Locale Detection (not in control panel spec)
       summary("famichat.plug.set_locale.call.duration",
         unit: {:native, :millisecond},
-        description: "The time spent in the SetLocale plug's call function"
+        description: "SetLocale plug processing time"
       ),
       summary("famichat.plug.set_locale.extract_locale.duration",
         unit: {:native, :millisecond},
-        description:
-          "The time spent extracting the locale in the SetLocale plug"
+        description: "Locale extraction time"
       ),
       summary("famichat.plug.set_locale.set_locale.duration",
         unit: {:native, :millisecond},
-        description: "The time spent setting the locale in the SetLocale plug"
+        description: "Locale setting time"
       ),
       distribution("famichat.plug.set_locale.extract_locale.source",
         event_name: [:famichat, :plug, :set_locale, :extract_locale],
         measurement: :source,
-        description: "Distribution of locale sources"
-      ),
-
-      # Auth Session Metrics
-      counter("famichat.auth.session.start.count",
-        event_name: [:famichat, :auth, :session, :start],
-        description: "Sessions started"
-      ),
-      counter("famichat.auth.session.refresh.count",
-        event_name: [:famichat, :auth, :session, :refresh],
-        description: "Successful refreshes"
-      ),
-      counter("famichat.auth.session.refresh.reuse_detected",
-        event_name: [:famichat, :auth, :session, :refresh_reuse_detected],
-        description: "Refresh failures due to token reuse"
-      ),
-      counter("famichat.auth.session.revoke.count",
-        event_name: [:famichat, :auth, :session, :revoke],
-        description: "Device revocations triggered by auth flows"
-      ),
-
-      # Phoenix Metrics
-      summary("phoenix.endpoint.stop.duration",
-        unit: {:native, :millisecond}
-      ),
-      summary("phoenix.router_dispatch.stop.duration",
-        tags: [:route],
-        unit: {:native, :millisecond}
-      ),
-
-      # Database Metrics
-      summary("famichat.repo.query.total_time",
-        unit: {:native, :millisecond},
-        description: "The sum of the other measurements"
-      ),
-      summary("famichat.repo.query.decode_time",
-        unit: {:native, :millisecond},
-        description: "Time spent decoding the data received from the database"
-      ),
-      summary("famichat.repo.query.query_time",
-        unit: {:native, :millisecond},
-        description: "Time spent executing the query"
-      ),
-      summary("famichat.repo.query.queue_time",
-        unit: {:native, :millisecond},
-        description: "Time spent waiting for a database connection"
-      ),
-      summary("famichat.repo.query.idle_time",
-        unit: {:native, :millisecond},
-        description:
-          "Time spent waiting for the conn to be checked out for the query"
-      ),
-
-      # VM Metrics
-      summary("vm.memory.total", unit: {:byte, :kilobyte}),
-      summary("vm.total_run_queue_lengths.total"),
-      summary("vm.total_run_queue_lengths.cpu"),
-      summary("vm.total_run_queue_lengths.io")
+        description: "Locale source distribution"
+      )
     ]
   end
 

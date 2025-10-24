@@ -75,105 +75,87 @@ defmodule FamichatWeb.MessageTestLive do
   # This fires actual telemetry events visible in the dashboard
   defp ensure_test_user_and_session do
     Repo.transaction(fn ->
-      # Find or create test family
-      family =
-        case Repo.get_by(Family, name: "Test Family") do
-          nil ->
-            {:ok, family} =
-              %Family{}
-              |> Family.changeset(%{name: "Test Family"})
-              |> Repo.insert()
-
-            family
-
-          family ->
-            family
-        end
-
-      # Find or create test user
-      user =
-        case Repo.get_by(Famichat.Accounts.User, username: @test_username) do
-          nil ->
-            {:ok, user} =
-              %Famichat.Accounts.User{}
-              |> Famichat.Accounts.User.changeset(%{username: @test_username})
-              |> Repo.insert()
-
-            user
-
-          user ->
-            user
-        end
+      family = ensure_test_family!()
+      user = ensure_test_user!()
 
       ensure_membership!(user.id, family.id)
+      ensure_self_conversation!(family, user)
 
-      # Find or create test conversation (use self type to avoid direct_key complexity)
-      conversation =
-        case Repo.get_by(Conversation,
-               conversation_type: :self,
-               family_id: family.id
-             ) do
-          nil ->
-            {:ok, conversation} =
-              %Conversation{}
-              |> Conversation.changeset(%{
-                conversation_type: :self,
-                family_id: family.id,
-                name: "Test Self Conversation"
-              })
-              |> Repo.insert()
-
-            # Add user as participant via join table
-            %ConversationParticipant{}
-            |> ConversationParticipant.changeset(%{
-              conversation_id: conversation.id,
-              user_id: user.id
-            })
-            |> Repo.insert!()
-
-            conversation
-
-          conversation ->
-            # Ensure user is a participant
-            existing =
-              Repo.get_by(ConversationParticipant,
-                conversation_id: conversation.id,
-                user_id: user.id
-              )
-
-            if is_nil(existing) do
-              %ConversationParticipant{}
-              |> ConversationParticipant.changeset(%{
-                conversation_id: conversation.id,
-                user_id: user.id
-              })
-              |> Repo.insert!()
-            end
-
-            conversation
-        end
-
-      # Start a real session - this fires telemetry!
-      # [:famichat, :auth, :session, :start]
-      # [:famichat, :auth, :token, :issued] (for access token)
-      device_info = %{
-        id: "test-device-#{System.unique_integer([:positive])}",
-        user_agent: "MessageTestLive",
-        ip: "127.0.0.1"
-      }
-
-      case Sessions.start_session(user, device_info, remember: false) do
-        {:ok, %{access_token: access_token}} ->
-          %{
-            access_token: access_token,
-            user: user,
-            conversation_id: conversation.id
-          }
-
-        {:error, reason} ->
-          Repo.rollback(reason)
-      end
+      start_test_session!(user)
     end)
+  end
+
+  defp ensure_test_family! do
+    Repo.get_by(Family, name: "Test Family") ||
+      %Family{}
+      |> Family.changeset(%{name: "Test Family"})
+      |> Repo.insert!()
+  end
+
+  defp ensure_test_user! do
+    Repo.get_by(Famichat.Accounts.User, username: @test_username) ||
+      %Famichat.Accounts.User{}
+      |> Famichat.Accounts.User.changeset(%{username: @test_username})
+      |> Repo.insert!()
+  end
+
+  defp ensure_self_conversation!(family, user) do
+    conversation =
+      Repo.get_by(Conversation, conversation_type: :self, family_id: family.id) ||
+        create_self_conversation!(family, user)
+
+    ensure_participant!(conversation.id, user.id)
+    conversation
+  end
+
+  defp create_self_conversation!(family, user) do
+    {:ok, conversation} =
+      %Conversation{}
+      |> Conversation.changeset(%{
+        conversation_type: :self,
+        family_id: family.id,
+        name: "Test Self Conversation"
+      })
+      |> Repo.insert()
+
+    ensure_participant!(conversation.id, user.id)
+    conversation
+  end
+
+  defp ensure_participant!(conversation_id, user_id) do
+    case Repo.get_by(ConversationParticipant,
+           conversation_id: conversation_id,
+           user_id: user_id
+         ) do
+      %ConversationParticipant{} ->
+        :ok
+
+      nil ->
+        %ConversationParticipant{}
+        |> ConversationParticipant.changeset(%{
+          conversation_id: conversation_id,
+          user_id: user_id
+        })
+        |> Repo.insert!()
+
+        :ok
+    end
+  end
+
+  defp start_test_session!(user) do
+    device_info = %{
+      id: "test-device-#{System.unique_integer([:positive])}",
+      user_agent: "MessageTestLive",
+      ip: "127.0.0.1"
+    }
+
+    case Sessions.start_session(user, device_info, remember: false) do
+      {:ok, %{access_token: access_token}} ->
+        %{access_token: access_token, user: user}
+
+      {:error, reason} ->
+        Repo.rollback(reason)
+    end
   end
 
   defp ensure_membership!(user_id, family_id) do
