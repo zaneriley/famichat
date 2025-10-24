@@ -14,14 +14,16 @@ defmodule Famichat.Auth.Sessions do
   require Logger
   require Famichat.Auth.Infra.Instrumentation
   alias Famichat.Accounts.{RateLimiter, User, UserDevice}
-  alias Famichat.Auth.Infra.{Instrumentation, Tokens}
+  alias Famichat.Auth.Infra.Instrumentation
+  alias Famichat.Auth.TokenPolicy
+  alias Famichat.Auth.Tokens
   alias Famichat.Auth.Sessions.Device
   alias Famichat.Auth.Sessions.RotationPolicy
   alias Famichat.Repo
 
-  @access_ttl 15 * 60
-  @refresh_ttl 30 * 24 * 60 * 60
-  @access_salt "user_access_v1"
+  @access_kind :access
+  @refresh_kind :device_refresh
+  @refresh_ttl TokenPolicy.default_ttl(@refresh_kind)
 
   @spec start_session(User.t(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
@@ -87,23 +89,31 @@ defmodule Famichat.Auth.Sessions do
                  &issue_session_tokens/2
                ) do
           handle_rotation_result(device_id, result)
+        else
+          {:error, reason} = error ->
+            emit_refresh_metric(:invalid, %{device_id: device_id, reason: reason})
+            error
         end
     )
   end
 
   defp handle_rotation_result(device_id, {:ok, tokens, user_id, _new_device}) do
     telemetry(:refresh, %{user_id: user_id, device_id: device_id})
+    emit_refresh_metric(:success, %{user_id: user_id, device_id: device_id})
     {:ok, tokens}
   end
 
   defp handle_rotation_result(device_id, {:reuse_detected, user_id}) do
     telemetry(:refresh_reuse_detected, %{user_id: user_id, device_id: device_id})
+    emit_refresh_metric(:reuse_detected, %{user_id: user_id, device_id: device_id})
 
     {:error, :reuse_detected}
   end
 
-  defp handle_rotation_result(_device_id, {:error, reason}),
-    do: {:error, reason}
+  defp handle_rotation_result(device_id, {:error, reason}) do
+    emit_refresh_metric(:invalid, %{device_id: device_id, reason: reason})
+    {:error, reason}
+  end
 
   @spec revoke_device(Ecto.UUID.t(), String.t()) ::
           {:ok, :revoked} | {:error, :not_found}
@@ -127,10 +137,7 @@ defmodule Famichat.Auth.Sessions do
           {:ok, %{user_id: Ecto.UUID.t(), device_id: String.t()}}
           | {:error, term()}
   def verify_access_token(token) when is_binary(token) do
-    with {:ok, payload} <-
-           Phoenix.Token.verify(FamichatWeb.Endpoint, @access_salt, token,
-             max_age: @access_ttl
-           ),
+    with {:ok, payload} <- Tokens.verify(@access_kind, token),
          {:ok, device} <- Device.fetch(payload["device_id"]),
          :ok <- ensure_device_matches(device, payload["user_id"]),
          :ok <- ensure_trust_active(device, allow_nil: true) do
@@ -157,7 +164,8 @@ defmodule Famichat.Auth.Sessions do
     now = DateTime.utc_now()
     trusted_until = device.trusted_until
 
-    {:ok, refresh_raw, refresh_hash} = Tokens.generate_refresh()
+    {:ok, %Tokens.Issue{raw: refresh_raw, hash: refresh_hash}} =
+      Tokens.issue(@refresh_kind, %{"device_id" => device.device_id})
 
     {:ok, device} =
       device
@@ -170,7 +178,9 @@ defmodule Famichat.Auth.Sessions do
       |> Repo.update()
 
     access_payload = %{"user_id" => user.id, "device_id" => device.device_id}
-    access = Tokens.sign_access(access_payload, @access_salt)
+
+    {:ok, %Tokens.Issue{raw: access}} =
+      Tokens.issue(@access_kind, access_payload)
 
     {:ok,
      %{
@@ -224,6 +234,14 @@ defmodule Famichat.Auth.Sessions do
   defp telemetry(action, metadata) do
     :telemetry.execute(
       [:famichat, :auth, :session, action],
+      %{count: 1},
+      metadata
+    )
+  end
+
+  defp emit_refresh_metric(action, metadata) do
+    :telemetry.execute(
+      [:auth_sessions, :refresh, action],
       %{count: 1},
       metadata
     )
