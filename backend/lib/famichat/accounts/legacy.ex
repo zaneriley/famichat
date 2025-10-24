@@ -18,6 +18,7 @@ defmodule Famichat.Accounts.Legacy do
   }
 
   alias Famichat.Auth.Sessions
+  alias Famichat.Auth.Tokens
   alias Famichat.Auth.Infra.Instrumentation
   alias Famichat.Chat.Family
   alias Famichat.Vault
@@ -26,17 +27,6 @@ defmodule Famichat.Accounts.Legacy do
 
   import Ecto.Query
   require Famichat.Auth.Infra.Instrumentation
-
-  @invite_ttl 7 * 24 * 60 * 60
-  @invite_registration_ttl 10 * 60
-  @magic_link_ttl 15 * 60
-  @otp_ttl 10 * 60
-  @pairing_ttl 10 * 60
-  @passkey_challenge_ttl 5 * 60
-  @recovery_ttl 24 * 60 * 60
-  @passkey_register_token_ttl 10 * 60
-
-  @invite_registration_salt "invite_registration_v1"
 
   @typedoc "Opaque token string returned to the client"
   @type token :: String.t()
@@ -70,8 +60,8 @@ defmodule Famichat.Accounts.Legacy do
            true <- membership.role == :admin || {:error, :forbidden},
            {:ok, _family} <- fetch_family(family_id),
            payload_map <- invite_payload(payload, email),
-           {:ok, invite_raw, invite_record} <-
-             Token.issue("invite", payload_map, ttl: @invite_ttl),
+           {:ok, %Tokens.Issue{raw: invite_raw, record: invite_record}} <-
+             Tokens.issue(:invite, payload_map),
            {:ok, pairing_bundle} <-
              issue_pairing_tokens(invite_record, invite_raw) do
         telemetry(:invite, :issue, %{family_id: family_id, inviter: inviter_id})
@@ -106,16 +96,13 @@ defmodule Famichat.Accounts.Legacy do
         Base.encode64(Vault.encrypt!(invite_raw))
       )
 
-    with {:ok, qr_raw, _qr_record} <-
-           Token.issue("pair", Map.put(payload_base, "mode", "qr"),
-             ttl: @pairing_ttl
-           ),
+    with {:ok, %Tokens.Issue{raw: qr_raw}} <-
+           Tokens.issue(:pair_qr, Map.put(payload_base, "mode", "qr")),
          admin_code <- admin_code(),
-         {:ok, _code_token, _code_record} <-
-           Token.issue(
-             "pair",
+         {:ok, %Tokens.Issue{}} <-
+           Tokens.issue(
+             :pair_admin_code,
              Map.put(payload_base, "mode", "admin_code"),
-             ttl: @pairing_ttl,
              raw: admin_code
            ) do
       {:ok, %{qr: qr_raw, admin_code: admin_code}}
@@ -166,9 +153,10 @@ defmodule Famichat.Accounts.Legacy do
           | {:error,
              :invalid | :expired | :used | {:rate_limited, pos_integer()}}
   def accept_invite(raw_token) when is_binary(raw_token) do
-    with :ok <- rate_limit(:invite_accept, raw_token, 5, @invite_ttl),
-         {:ok, invite} <- Token.fetch("invite", raw_token),
-         {:ok, _} <- Token.consume(invite) do
+    with :ok <-
+           rate_limit(:invite_accept, raw_token, 5, Tokens.default_ttl(:invite)),
+         {:ok, invite} <- Tokens.fetch(:invite, raw_token),
+         {:ok, _} <- Tokens.consume(invite) do
       payload = sanitize_invite_payload(invite.payload)
 
       registration_token =
@@ -196,14 +184,19 @@ defmodule Famichat.Accounts.Legacy do
           {:ok, %{invite_token: String.t(), payload: map()}} | {:error, term()}
   def redeem_pairing_token(raw_token) when is_binary(raw_token) do
     with :ok <-
-           rate_limit(:pairing_attempt, raw_token, 5, @pairing_ttl),
-         {:ok, pairing} <- Token.fetch("pair", raw_token),
+           rate_limit(
+             :pairing_attempt,
+             raw_token,
+             5,
+             Tokens.default_ttl(:pair_qr)
+           ),
+         {:ok, pairing} <- Tokens.fetch(:pair_qr, raw_token),
          invite_id when is_binary(invite_id) <-
            pairing.payload["invite_token_id"] || {:error, :invalid_pair},
          {:ok, invite} <- Token.fetch_by_id(invite_id),
          {:ok, invite_raw} <-
            decrypt_invite_token(pairing.payload["invite_token_ciphertext"]),
-         {:ok, _} <- Token.consume(pairing) do
+         {:ok, _} <- Tokens.consume(pairing) do
       {:ok,
        %{
          invite_token: invite_raw,
@@ -217,7 +210,7 @@ defmodule Famichat.Accounts.Legacy do
   @spec reissue_pairing(Ecto.UUID.t(), String.t()) ::
           {:ok, %{qr: String.t(), admin_code: String.t()}} | {:error, term()}
   def reissue_pairing(requester_id, invite_raw) when is_binary(invite_raw) do
-    with {:ok, invite} <- Token.fetch("invite", invite_raw),
+    with {:ok, invite} <- Tokens.fetch(:invite, invite_raw),
          {:ok, membership} <-
            ensure_membership(requester_id, invite.payload["family_id"]),
          true <- membership.role == :admin || {:error, :forbidden} do
@@ -233,13 +226,19 @@ defmodule Famichat.Accounts.Legacy do
     with {:ok, claims} <- verify_invite_registration_token(registration_token),
          rate_key <- claims["invite_token_id"] || registration_token,
          :ok <-
-           rate_limit(:invite_register, rate_key, 5, @invite_registration_ttl) do
+           rate_limit(
+             :invite_register,
+             rate_key,
+             5,
+             Tokens.default_ttl(:invite_registration)
+           ) do
       Repo.transaction(fn ->
         with {:ok, family} <- fetch_family(claims["family_id"]),
              {:ok, user} <- create_user_from_invite(claims, attrs),
              {:ok, _membership} <-
                upsert_membership(user.id, family.id, claims["role"]),
-             {:ok, register_token, _} <- issue_passkey_register_token(user.id) do
+             {:ok, %Tokens.Issue{raw: register_token}} <-
+               issue_passkey_register_token(user.id) do
           telemetry(:invite, :complete, %{
             family_id: family.id,
             user_id: user.id,
@@ -308,10 +307,7 @@ defmodule Famichat.Accounts.Legacy do
   defp assert_invite_email_match(_, _), do: :ok
 
   defp issue_passkey_register_token(user_id) do
-    Token.issue("passkey_register", %{"user_id" => user_id},
-      user_id: user_id,
-      ttl: @passkey_register_token_ttl
-    )
+    Tokens.issue(:passkey_reg, %{"user_id" => user_id}, user_id: user_id)
   end
 
   ## Passkeys ----------------------------------------------------------------
@@ -319,9 +315,9 @@ defmodule Famichat.Accounts.Legacy do
   @spec exchange_passkey_register_token(token()) ::
           {:ok, User.t()} | {:error, term()}
   def exchange_passkey_register_token(raw_token) when is_binary(raw_token) do
-    with {:ok, token} <- Token.fetch("passkey_register", raw_token),
+    with {:ok, token} <- Tokens.fetch(:passkey_reg, raw_token),
          {:ok, user} <- fetch_user(token.payload["user_id"]),
-         {:ok, _} <- Token.consume(token) do
+         {:ok, _} <- Tokens.consume(token) do
       {:ok, user}
     end
   end
@@ -352,7 +348,7 @@ defmodule Famichat.Accounts.Legacy do
              "passkey_register_challenge",
              payload,
              user_id: user.id,
-             ttl: @passkey_challenge_ttl
+             ttl: Tokens.default_ttl(:passkey_assert)
            ) do
       {:ok,
        %{
@@ -391,7 +387,7 @@ defmodule Famichat.Accounts.Legacy do
              "passkey_assert_challenge",
              payload,
              user_id: user.id,
-             ttl: @passkey_challenge_ttl
+             ttl: Tokens.default_ttl(:passkey_assert)
            ) do
       {:ok,
        %{
@@ -442,7 +438,7 @@ defmodule Famichat.Accounts.Legacy do
       |> case do
         {:ok, passkey} ->
           telemetry(:passkey, :register, %{user_id: user.id})
-          {:ok, _} = Token.consume(challenge_record)
+          {:ok, _} = Tokens.consume(challenge_record)
           _ = sync_enrollment_requirement(user)
           {:ok, passkey}
 
@@ -486,7 +482,7 @@ defmodule Famichat.Accounts.Legacy do
          {:ok, passkey} <- touch_passkey(passkey, payload) do
       user = Repo.preload(passkey, :user).user
       telemetry(:passkey, :assert, %{user_id: user.id})
-      {:ok, _} = Token.consume(challenge_record)
+      {:ok, _} = Tokens.consume(challenge_record)
       {:ok, %{user: user, passkey: passkey}}
     end
   end
@@ -611,11 +607,8 @@ defmodule Famichat.Accounts.Legacy do
   defp do_issue_magic_link(email) do
     with {:ok, user} <- fetch_user_by_email(email),
          payload <- %{"user_id" => user.id},
-         {:ok, token, record} <-
-           Token.issue("magic_link", payload,
-             user_id: user.id,
-             ttl: @magic_link_ttl
-           ) do
+         {:ok, %Tokens.Issue{raw: token, record: record}} <-
+           Tokens.issue(:magic_link, payload, user_id: user.id) do
       telemetry(:magic, :issue, %{user_id: user.id})
       {:ok, token, record}
     end
@@ -624,10 +617,10 @@ defmodule Famichat.Accounts.Legacy do
   @spec redeem_magic_link(token()) :: {:ok, User.t()} | {:error, term()}
   def redeem_magic_link(raw_token) do
     Repo.transaction(fn ->
-      with {:ok, token} <- Token.fetch("magic_link", raw_token),
+      with {:ok, token} <- Tokens.fetch(:magic_link, raw_token),
            {:ok, user} <- fetch_user(token.payload["user_id"]),
            {:ok, user} <- sync_enrollment_requirement(user),
-           {:ok, _} <- Token.consume(token) do
+           {:ok, _} <- Tokens.consume(token) do
         telemetry(:magic, :redeem, %{user_id: user.id})
         user
       else
@@ -656,12 +649,14 @@ defmodule Famichat.Accounts.Legacy do
       hashed_email = email_hash(normalize_email(email))
       context = "otp:" <> Base.encode16(hashed_email, case: :lower)
 
-      context
-      |> Token.issue(payload, user_id: user.id, ttl: @otp_ttl, raw: code)
-      |> case do
-        {:ok, _raw_code, _record} = result ->
+      case Tokens.issue(:otp, payload,
+             context: context,
+             user_id: user.id,
+             raw: code
+           ) do
+        {:ok, %Tokens.Issue{raw: raw_code, record: record}} ->
           telemetry(:otp, :issue, %{user_id: user.id})
-          result
+          {:ok, raw_code, record}
 
         other ->
           other
@@ -675,10 +670,10 @@ defmodule Famichat.Accounts.Legacy do
     hashed_email = email_hash(normalize_email(email))
     context = "otp:" <> Base.encode16(hashed_email, case: :lower)
 
-    with {:ok, token} <- Token.fetch(context, code),
+    with {:ok, token} <- Tokens.fetch(:otp, code, context: context),
          true <- token.payload["code"] == code || {:error, :invalid},
          {:ok, user} <- fetch_user(token.payload["user_id"]),
-         {:ok, _} <- Token.consume(token) do
+         {:ok, _} <- Tokens.consume(token) do
       telemetry(:otp, :verify, %{user_id: user.id})
       {:ok, user}
     end
@@ -690,11 +685,8 @@ defmodule Famichat.Accounts.Legacy do
     with {:ok, admin} <- fetch_user(admin_id),
          true <-
            admin.id == user_id || member_role(admin_id, user_id) == :admin,
-         {:ok, token, record} <-
-           Token.issue("recovery", %{"user_id" => user_id},
-             user_id: admin_id,
-             ttl: @recovery_ttl
-           ) do
+         {:ok, %Tokens.Issue{raw: token, record: record}} <-
+           Tokens.issue(:recovery, %{"user_id" => user_id}, user_id: admin_id) do
       telemetry(:recovery, :issue, %{user_id: user_id, admin_id: admin_id})
       {:ok, token, record}
     else
@@ -718,11 +710,11 @@ defmodule Famichat.Accounts.Legacy do
   @spec redeem_recovery(token()) :: {:ok, User.t()} | {:error, term()}
   def redeem_recovery(raw_token) do
     Repo.transaction(fn ->
-      with {:ok, token} <- Token.fetch("recovery", raw_token),
+      with {:ok, token} <- Tokens.fetch(:recovery, raw_token),
            {:ok, user} <- fetch_user(token.payload["user_id"]),
            {:ok, _} <- disable_devices_and_passkeys(user.id),
            {:ok, user} <- enter_enrollment_required_state(user),
-           {:ok, _} <- Token.consume(token) do
+           {:ok, _} <- Tokens.consume(token) do
         telemetry(:recovery, :redeem, %{user_id: user.id})
         user
       else
@@ -883,20 +875,14 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp sign_invite_registration_token(payload) do
-    Phoenix.Token.sign(
-      FamichatWeb.Endpoint,
-      @invite_registration_salt,
-      payload
-    )
+    {:ok, %Tokens.Issue{raw: token}} =
+      Tokens.issue(:invite_registration, payload)
+
+    token
   end
 
   defp verify_invite_registration_token(token) do
-    Phoenix.Token.verify(
-      FamichatWeb.Endpoint,
-      @invite_registration_salt,
-      token,
-      max_age: @invite_registration_ttl
-    )
+    Tokens.verify(:invite_registration, token)
   end
 
   defp decode_optional(map, keys) do
