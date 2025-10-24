@@ -20,6 +20,7 @@ defmodule Famichat.Accounts.Legacy do
   alias Famichat.Auth.Passkeys
   alias Famichat.Auth.Sessions
   alias Famichat.Auth.Tokens
+  alias Famichat.Auth.IssuedToken
   alias Famichat.Auth.Infra.Instrumentation
   alias Famichat.Chat.Family
   alias Famichat.Vault
@@ -61,7 +62,7 @@ defmodule Famichat.Accounts.Legacy do
            true <- membership.role == :admin || {:error, :forbidden},
            {:ok, _family} <- fetch_family(family_id),
            payload_map <- invite_payload(payload, email),
-           {:ok, %Tokens.Issue{raw: invite_raw, record: invite_record}} <-
+           {:ok, %IssuedToken{raw: invite_raw, record: invite_record}} <-
              Tokens.issue(:invite, payload_map),
            {:ok, pairing_bundle} <-
              issue_pairing_tokens(invite_record, invite_raw) do
@@ -97,10 +98,10 @@ defmodule Famichat.Accounts.Legacy do
         Base.encode64(Vault.encrypt!(invite_raw))
       )
 
-    with {:ok, %Tokens.Issue{raw: qr_raw}} <-
+    with {:ok, %IssuedToken{raw: qr_raw}} <-
            Tokens.issue(:pair_qr, Map.put(payload_base, "mode", "qr")),
          admin_code <- admin_code(),
-         {:ok, %Tokens.Issue{}} <-
+         {:ok, %IssuedToken{}} <-
            Tokens.issue(
              :pair_admin_code,
              Map.put(payload_base, "mode", "admin_code"),
@@ -238,7 +239,7 @@ defmodule Famichat.Accounts.Legacy do
              {:ok, user} <- create_user_from_invite(claims, attrs),
              {:ok, _membership} <-
                upsert_membership(user.id, family.id, claims["role"]),
-             {:ok, %Tokens.Issue{raw: register_token}} <-
+             {:ok, %IssuedToken{raw: register_token}} <-
                issue_passkey_register_token(user.id) do
           telemetry(:invite, :complete, %{
             family_id: family.id,
@@ -647,7 +648,7 @@ defmodule Famichat.Accounts.Legacy do
   defp do_issue_magic_link(email) do
     with {:ok, user} <- fetch_user_by_email(email),
          payload <- %{"user_id" => user.id},
-         {:ok, %Tokens.Issue{raw: token, record: record}} <-
+         {:ok, %IssuedToken{raw: token, record: record}} <-
            Tokens.issue(:magic_link, payload, user_id: user.id) do
       telemetry(:magic, :issue, %{user_id: user.id})
       {:ok, token, record}
@@ -694,7 +695,7 @@ defmodule Famichat.Accounts.Legacy do
              user_id: user.id,
              raw: code
            ) do
-        {:ok, %Tokens.Issue{raw: raw_code, record: record}} ->
+        {:ok, %IssuedToken{raw: raw_code, record: record}} ->
           telemetry(:otp, :issue, %{user_id: user.id})
           {:ok, raw_code, record}
 
@@ -725,7 +726,7 @@ defmodule Famichat.Accounts.Legacy do
     with {:ok, admin} <- fetch_user(admin_id),
          true <-
            admin.id == user_id || member_role(admin_id, user_id) == :admin,
-         {:ok, %Tokens.Issue{raw: token, record: record}} <-
+         {:ok, %IssuedToken{raw: token, record: record}} <-
            Tokens.issue(:recovery, %{"user_id" => user_id}, user_id: admin_id) do
       telemetry(:recovery, :issue, %{user_id: user_id, admin_id: admin_id})
       {:ok, token, record}
@@ -915,7 +916,7 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp sign_invite_registration_token(payload) do
-    {:ok, %Tokens.Issue{raw: token}} =
+    {:ok, %IssuedToken{raw: token}} =
       Tokens.issue(:invite_registration, payload)
 
     token

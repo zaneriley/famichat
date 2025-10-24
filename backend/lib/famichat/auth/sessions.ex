@@ -17,6 +17,7 @@ defmodule Famichat.Auth.Sessions do
   alias Famichat.Auth.Infra.Instrumentation
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens
+  alias Famichat.Auth.IssuedToken
   alias Famichat.Auth.Sessions.DeviceStore
   alias Famichat.Auth.Sessions.RefreshRotation
   alias Famichat.Repo
@@ -177,7 +178,7 @@ defmodule Famichat.Auth.Sessions do
     now = DateTime.utc_now()
     trusted_until = device.trusted_until
 
-    {:ok, %Tokens.Issue{raw: refresh_raw, hash: refresh_hash}} =
+    {:ok, %IssuedToken{raw: refresh_raw, hash: refresh_hash}} =
       Tokens.issue(@refresh_kind, %{"device_id" => device.device_id})
 
     {:ok, device} =
@@ -192,7 +193,7 @@ defmodule Famichat.Auth.Sessions do
 
     access_payload = %{"user_id" => user.id, "device_id" => device.device_id}
 
-    {:ok, %Tokens.Issue{raw: access}} =
+    {:ok, %IssuedToken{raw: access}} =
       Tokens.issue(@access_kind, access_payload)
 
     {:ok,

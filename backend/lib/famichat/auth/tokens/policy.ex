@@ -21,7 +21,7 @@ defmodule Famichat.Auth.Tokens.Policy.Definition do
           audience: atom(),
           legacy_context: String.t() | nil,
           signing_salt: String.t() | nil,
-          subject_strategy: :none | {:user_id} | {:device_id} | {:email_sha256}
+          subject_strategy: :none | :user_id | :device_id | :email_sha256
         }
 end
 
@@ -75,7 +75,7 @@ defmodule Famichat.Auth.Tokens.Policy do
                 max_ttl: 30 * 60,
                 audience: :invitee,
                 signing_salt: "invite_registration_v1",
-                subject_strategy: {:user_id}
+                subject_strategy: :user_id
               },
               passkey_reg: %Definition{
                 kind: :passkey_reg,
@@ -84,7 +84,7 @@ defmodule Famichat.Auth.Tokens.Policy do
                 max_ttl: 30 * 60,
                 audience: :user,
                 legacy_context: "passkey_register",
-                subject_strategy: {:user_id}
+                subject_strategy: :user_id
               },
               passkey_assert: %Definition{
                 kind: :passkey_assert,
@@ -93,7 +93,7 @@ defmodule Famichat.Auth.Tokens.Policy do
                 max_ttl: 15 * 60,
                 audience: :user,
                 legacy_context: "passkey_assert_challenge",
-                subject_strategy: {:user_id}
+                subject_strategy: :user_id
               },
               magic_link: %Definition{
                 kind: :magic_link,
@@ -102,7 +102,7 @@ defmodule Famichat.Auth.Tokens.Policy do
                 max_ttl: 60 * 60,
                 audience: :user,
                 legacy_context: "magic_link",
-                subject_strategy: {:user_id}
+                subject_strategy: :user_id
               },
               otp: %Definition{
                 kind: :otp,
@@ -111,7 +111,7 @@ defmodule Famichat.Auth.Tokens.Policy do
                 max_ttl: 30 * 60,
                 audience: :user,
                 legacy_context: nil,
-                subject_strategy: {:email_sha256}
+                subject_strategy: :email_sha256
               },
               recovery: %Definition{
                 kind: :recovery,
@@ -120,7 +120,7 @@ defmodule Famichat.Auth.Tokens.Policy do
                 max_ttl: 7 * 24 * 60 * 60,
                 audience: :admin,
                 legacy_context: "recovery",
-                subject_strategy: {:user_id}
+                subject_strategy: :user_id
               },
               access: %Definition{
                 kind: :access,
@@ -129,7 +129,7 @@ defmodule Famichat.Auth.Tokens.Policy do
                 max_ttl: 60 * 60,
                 audience: :device,
                 signing_salt: "user_access_v1",
-                subject_strategy: {:device_id}
+                subject_strategy: :device_id
               },
               device_refresh: %Definition{
                 kind: :device_refresh,
@@ -137,7 +137,7 @@ defmodule Famichat.Auth.Tokens.Policy do
                 ttl: 30 * 24 * 60 * 60,
                 max_ttl: 90 * 24 * 60 * 60,
                 audience: :device,
-                subject_strategy: {:device_id}
+                subject_strategy: :device_id
               }
             })
 

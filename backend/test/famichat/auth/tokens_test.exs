@@ -3,14 +3,14 @@ defmodule Famichat.Auth.TokensTest do
 
   alias Famichat.Accounts.User
   alias Famichat.Auth.Tokens
-  alias Famichat.Auth.Tokens.Issue
+  alias Famichat.Auth.IssuedToken
   alias Famichat.Repo
 
   describe "issue/3 for ledgered kinds" do
     test "applies default ttl and populates ledger metadata" do
       payload = %{"family_id" => Ecto.UUID.generate(), "role" => "member"}
 
-      assert {:ok, %Issue{} = issued} = Tokens.issue(:invite, payload)
+      assert {:ok, %IssuedToken{} = issued} = Tokens.issue(:invite, payload)
       assert issued.class == :ledgered
       assert issued.record.context == "invite"
       assert issued.record.kind == "invite"
@@ -25,7 +25,8 @@ defmodule Famichat.Auth.TokensTest do
     test "allows overriding ttl" do
       payload = %{"family_id" => Ecto.UUID.generate(), "role" => "member"}
 
-      assert {:ok, %Issue{} = issued} = Tokens.issue(:invite, payload, ttl: 120)
+      assert {:ok, %IssuedToken{} = issued} =
+               Tokens.issue(:invite, payload, ttl: 120)
 
       diff = DateTime.diff(issued.expires_at, issued.issued_at)
       assert_in_delta diff, 120, 2
@@ -36,7 +37,7 @@ defmodule Famichat.Auth.TokensTest do
     test "returns signed Phoenix tokens" do
       payload = %{"invite_token_id" => Ecto.UUID.generate()}
 
-      assert {:ok, %Issue{} = issued} =
+      assert {:ok, %IssuedToken{} = issued} =
                Tokens.issue(:invite_registration, payload)
 
       assert issued.class == :signed
@@ -67,7 +68,7 @@ defmodule Famichat.Auth.TokensTest do
         Tokens.issue(:otp, payload)
       end
 
-      assert {:ok, %Issue{} = issued} =
+      assert {:ok, %IssuedToken{} = issued} =
                Tokens.issue(:otp, payload,
                  context: "otp:" <> fingerprint,
                  ttl: 30
@@ -87,7 +88,7 @@ defmodule Famichat.Auth.TokensTest do
       user = insert_user(%{username: "alice"})
       payload = %{"user_id" => user.id}
 
-      {:ok, %Issue{raw: raw, record: record}} =
+      {:ok, %IssuedToken{raw: raw, record: record}} =
         Tokens.issue(:magic_link, payload, context: "magic_link")
 
       assert {:ok, fetched} = Tokens.fetch(:magic_link, raw)

@@ -2,13 +2,14 @@ defmodule Famichat.Auth.Tokens do
   @moduledoc """
   Public façade for token issuance and verification.
 
-  Callers receive a single `Issue` struct regardless of storage backend,
+  Callers receive a single `IssuedToken` struct regardless of storage backend,
   and all policy decisions (TTL, audience, storage) flow through
   `Famichat.Auth.Tokens.Policy`.  Legacy code should call this module rather
   than reaching into infra helpers directly.
   """
 
   alias Famichat.Accounts.UserToken
+  alias Famichat.Auth.IssuedToken
   alias Famichat.Auth.Tokens.Storage, as: Storage
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens.Policy.Definition
@@ -37,35 +38,6 @@ defmodule Famichat.Auth.Tokens do
   @typedoc "Options accepted when fetching tokens."
   @type fetch_opts :: [context: String.t()]
 
-  defmodule Issue do
-    @moduledoc "Unified return type for token issuance."
-
-    @enforce_keys [:kind, :class, :raw, :issued_at]
-    defstruct [
-      :kind,
-      :class,
-      :raw,
-      :hash,
-      :record,
-      :audience,
-      :subject_id,
-      :issued_at,
-      :expires_at
-    ]
-
-    @type t :: %__MODULE__{
-            kind: Famichat.Auth.Tokens.kind(),
-            class: Famichat.Auth.Tokens.Policy.storage(),
-            raw: String.t(),
-            hash: binary() | nil,
-            record: UserToken.t() | nil,
-            audience: atom() | nil,
-            subject_id: term() | nil,
-            issued_at: DateTime.t(),
-            expires_at: DateTime.t() | nil
-          }
-  end
-
   @doc "Returns the default TTL for the provided kind."
   @spec default_ttl(kind()) :: pos_integer()
   def default_ttl(kind), do: Policy.default_ttl(kind)
@@ -75,11 +47,10 @@ defmodule Famichat.Auth.Tokens do
   def max_ttl(kind), do: Policy.max_ttl(kind)
 
   @doc """
-  Issues a token for the requested kind and returns a unified `Issue`
-  struct. The storage backend is selected automatically from the policy.
+  Issues a token for the requested kind and returns a unified `IssuedToken` struct. The storage backend is selected automatically from the policy.
   """
   @spec issue(kind(), map(), issue_opts()) ::
-          {:ok, Issue.t()} | {:error, term()}
+          {:ok, IssuedToken.t()} | {:error, term()}
   def issue(kind, payload, opts \\ []) when is_map(payload) do
     policy = Policy.policy!(kind)
     opts_with_ttl = Keyword.put_new(opts, :ttl, policy.ttl)
@@ -111,7 +82,7 @@ defmodule Famichat.Auth.Tokens do
          ) do
       {:ok, raw, %UserToken{} = record} ->
         {:ok,
-         %Issue{
+         %IssuedToken{
            kind: kind,
            class: :ledgered,
            raw: raw,
@@ -134,7 +105,7 @@ defmodule Famichat.Auth.Tokens do
     issued_at = DateTime.utc_now()
 
     {:ok,
-     %Issue{
+     %IssuedToken{
        kind: kind,
        class: :signed,
        raw: token,
@@ -155,7 +126,7 @@ defmodule Famichat.Auth.Tokens do
         issued_at = DateTime.utc_now()
 
         {:ok,
-         %Issue{
+         %IssuedToken{
            kind: kind,
            class: :device_secret,
            raw: raw,
@@ -278,7 +249,7 @@ defmodule Famichat.Auth.Tokens do
   end
 
   defp subject_id_from_policy(
-         %Definition{subject_strategy: {:user_id}},
+         %Definition{subject_strategy: :user_id},
          payload,
          opts,
          _context
@@ -287,7 +258,7 @@ defmodule Famichat.Auth.Tokens do
   end
 
   defp subject_id_from_policy(
-         %Definition{subject_strategy: {:device_id}},
+         %Definition{subject_strategy: :device_id},
          payload,
          opts,
          _context
@@ -296,7 +267,7 @@ defmodule Famichat.Auth.Tokens do
   end
 
   defp subject_id_from_policy(
-         %Definition{subject_strategy: {:email_sha256}},
+         %Definition{subject_strategy: :email_sha256},
          payload,
          opts,
          context
@@ -361,7 +332,7 @@ defmodule Famichat.Auth.Tokens do
           "token kind #{inspect(kind)} requires a signing salt but none is configured"
   end
 
-  defp with_telemetry({:ok, %Issue{} = issue} = ok, action, policy) do
+  defp with_telemetry({:ok, %IssuedToken{} = issue} = ok, action, policy) do
     :telemetry.execute(
       [:famichat, :auth, :tokens, action],
       %{count: 1},
