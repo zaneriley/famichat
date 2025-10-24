@@ -3,33 +3,6 @@ defmodule Famichat.Auth.Infra.TokensTest do
 
   alias Famichat.Auth.Infra.Tokens
 
-  describe "classes/0" do
-    test "returns the supported classes" do
-      assert MapSet.new(Tokens.classes()) ==
-               MapSet.new([:device_secret, :ledgered, :signed])
-    end
-  end
-
-  describe "spec!/1" do
-    test "returns configuration for a kind" do
-      spec = Tokens.spec!(:invite)
-
-      assert spec.class == :ledgered
-      assert spec.legacy_context == "invite"
-      assert spec.default_ttl == 7 * 24 * 60 * 60
-    end
-  end
-
-  describe "sign/3 + verify/3" do
-    test "signs and verifies invite registration tokens with default ttl" do
-      payload = %{"invite_token_id" => Ecto.UUID.generate()}
-
-      token = Tokens.sign(:invite_registration, payload)
-
-      assert {:ok, ^payload} = Tokens.verify(:invite_registration, token)
-    end
-  end
-
   describe "issue_device_secret/1" do
     test "returns raw value and matching hash" do
       assert {:ok, raw, hash} = Tokens.issue_device_secret()
@@ -38,24 +11,22 @@ defmodule Famichat.Auth.Infra.TokensTest do
     end
   end
 
-  describe "legacy_context/2" do
-    test "falls back to the default context when available" do
-      assert Tokens.legacy_context(:pair_qr) == "pair"
+  describe "generate_refresh/0" do
+    test "delegates to issue_device_secret/1" do
+      assert {:ok, raw, hash} = Tokens.generate_refresh()
+      assert byte_size(raw) > 0
+      assert hash == Tokens.hash(raw)
     end
+  end
 
-    test "accepts explicit overrides" do
-      context =
-        Tokens.legacy_context(:passkey_reg,
-          context: "passkey_register_challenge"
-        )
+  describe "sign/3 and verify/3" do
+    test "round-trips payloads with the supplied salt" do
+      payload = %{"user_id" => Ecto.UUID.generate()}
+      salt = "test-salt"
 
-      assert context == "passkey_register_challenge"
-    end
+      token = Tokens.sign(payload, salt)
 
-    test "raises when an override is required" do
-      assert_raise ArgumentError, fn -> Tokens.legacy_context(:otp) end
-
-      assert Tokens.legacy_context(:otp, context: "otp:user") == "otp:user"
+      assert {:ok, ^payload} = Tokens.verify(token, salt)
     end
   end
 end
