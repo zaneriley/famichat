@@ -42,7 +42,11 @@ defmodule Famichat.Accounts.RateLimiter do
           _ -> interval_seconds
         end
 
-      {:error, :throttled, max(1, remaining)}
+      remaining_seconds = max(1, remaining)
+
+      emit_throttled_telemetry(cache_key, limit, remaining_seconds)
+
+      {:error, :throttled, remaining_seconds}
     end
   end
 
@@ -73,6 +77,7 @@ defmodule Famichat.Accounts.RateLimiter do
 
   defp handle_cache_error(reason, bucket, key, interval_seconds) do
     log_cache_fault(reason, bucket, key)
+    emit_throttled_telemetry({__MODULE__, bucket, key}, nil, interval_seconds)
     {:error, :throttled, interval_seconds}
   end
 
@@ -80,6 +85,32 @@ defmodule Famichat.Accounts.RateLimiter do
     Logger.warning(fn ->
       "[RateLimiter] cache fault (#{inspect(reason)}) for bucket=#{inspect(bucket)} key=#{inspect(key)}. Allowing request to proceed."
     end)
+  end
+
+  defp emit_throttled_telemetry(
+         {__MODULE__, bucket, key},
+         limit,
+         remaining_seconds
+       ) do
+    :telemetry.execute(
+      [:famichat, :rate_limiter, :throttled],
+      %{count: 1},
+      %{
+        bucket: bucket,
+        key_hash: hash_key(key),
+        limit: limit,
+        remaining_seconds: remaining_seconds
+      }
+    )
+  end
+
+  defp emit_throttled_telemetry(_, _, _), do: :ok
+
+  defp hash_key(key) do
+    key
+    |> :erlang.term_to_binary()
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
   end
 
   defp cache_name(opts) do

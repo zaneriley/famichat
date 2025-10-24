@@ -367,6 +367,7 @@ defmodule Famichat.Chat.MessageService do
   # Executes telemetry for message serialization
   defp execute_serialization_telemetry(start_time, metadata) do
     measurements = %{
+      count: 1,
       start_time: start_time,
       end_time: System.monotonic_time(),
       duration_ms:
@@ -445,6 +446,7 @@ defmodule Famichat.Chat.MessageService do
 
     # Emit telemetry
     measurements = %{
+      count: 1,
       start_time: start_time,
       end_time: System.monotonic_time(),
       duration_ms:
@@ -493,6 +495,7 @@ defmodule Famichat.Chat.MessageService do
 
       # Emit telemetry for the error, avoiding including sensitive information
       measurements = %{
+        count: 1,
         start_time: start_time,
         end_time: System.monotonic_time(),
         duration_ms:
