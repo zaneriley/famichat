@@ -128,8 +128,15 @@ Normalize token issuance/consumption to typed kinds and remove TTL/config drift 
 
 **Observability**
 
-- Metric: tokens issued by kind; token fetch failures by kind.  
-- Migration job logs backfill counts by kind; alert if any update count is zero for expected kinds.
+- Metric: tokens issued by kind (present) + telemetry for subject-id presence/missing.
+- Migration job will log counts if ever needed; current greenfield instances have no legacy rows.
+
+**Progress Notes**
+
+- ✅ Columns `kind`, `audience`, `subject_id` added with indexes and populated on issuance.  
+- ✅ Database now enforces `kind`/`audience` NOT NULL + `CHECK(kind IN …)` and unique index on `(kind, token_hash)`.  
+- ✅ Ledger issuance emits telemetry when subject metadata is missing (captures regressions early).  
+- ☐ (Future) Historical backfill only needed if pre-Phase‑2 tokens exist.
 
 **Rollout**  
 Enable reads → backfill → enable writes → enforce NOT NULL.

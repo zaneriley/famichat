@@ -19,6 +19,9 @@ defmodule Famichat.Accounts.Token do
       when is_binary(context) and is_map(payload) do
     ttl = Keyword.fetch!(opts, :ttl)
     user_id = Keyword.get(opts, :user_id)
+    kind = opts |> Keyword.get(:kind) |> maybe_string()
+    audience = opts |> Keyword.get(:audience) |> maybe_string()
+    subject_id = opts |> Keyword.get(:subject_id) |> maybe_string()
     now = DateTime.utc_now()
     expires_at = DateTime.add(now, ttl, :second)
 
@@ -37,6 +40,9 @@ defmodule Famichat.Accounts.Token do
       UserToken.changeset(%UserToken{}, %{
         user_id: user_id,
         context: context,
+        kind: kind,
+        audience: audience,
+        subject_id: subject_id,
         token_hash: hash,
         payload: payload,
         expires_at: expires_at
@@ -92,6 +98,11 @@ defmodule Famichat.Accounts.Token do
       {:ok, token}
     end
   end
+
+  defp maybe_string(nil), do: nil
+  defp maybe_string(value) when is_atom(value), do: Atom.to_string(value)
+  defp maybe_string(value) when is_binary(value), do: value
+  defp maybe_string(value), do: to_string(value)
 
   @doc """
   Convenience to hash raw token string.

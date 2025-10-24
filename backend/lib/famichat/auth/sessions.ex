@@ -91,7 +91,11 @@ defmodule Famichat.Auth.Sessions do
           handle_rotation_result(device_id, result)
         else
           {:error, reason} = error ->
-            emit_refresh_metric(:invalid, %{device_id: device_id, reason: reason})
+            emit_refresh_metric(:invalid, %{
+              device_id: device_id,
+              reason: reason
+            })
+
             error
         end
     )
@@ -105,7 +109,11 @@ defmodule Famichat.Auth.Sessions do
 
   defp handle_rotation_result(device_id, {:reuse_detected, user_id}) do
     telemetry(:refresh_reuse_detected, %{user_id: user_id, device_id: device_id})
-    emit_refresh_metric(:reuse_detected, %{user_id: user_id, device_id: device_id})
+
+    emit_refresh_metric(:reuse_detected, %{
+      user_id: user_id,
+      device_id: device_id
+    })
 
     {:error, :reuse_detected}
   end

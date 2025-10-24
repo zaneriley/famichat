@@ -11,6 +11,9 @@ defmodule Famichat.Accounts.UserToken do
           id: Ecto.UUID.t() | nil,
           user_id: Ecto.UUID.t() | nil,
           context: String.t(),
+          kind: String.t() | nil,
+          audience: String.t() | nil,
+          subject_id: String.t() | nil,
           token_hash: binary(),
           payload: map(),
           expires_at: DateTime.t(),
@@ -22,6 +25,9 @@ defmodule Famichat.Accounts.UserToken do
   schema "user_tokens" do
     belongs_to :user, User
     field :context, :string
+    field :kind, :string
+    field :audience, :string
+    field :subject_id, :string
     field :token_hash, :binary
     field :payload, :map, default: %{}
     field :expires_at, :utc_datetime_usec
@@ -36,6 +42,9 @@ defmodule Famichat.Accounts.UserToken do
     |> cast(attrs, [
       :user_id,
       :context,
+      :kind,
+      :audience,
+      :subject_id,
       :token_hash,
       :payload,
       :expires_at,
