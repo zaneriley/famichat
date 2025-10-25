@@ -302,7 +302,7 @@ defmodule Famichat.Auth.Tokens do
 
   defp maybe_emit_subject_metric(kind, _strategy, nil) do
     :telemetry.execute(
-      [:auth_tokens, :issue, :missing_subject_id],
+      [:famichat, :auth, :tokens, :missing_subject_id],
       %{count: 1},
       %{kind: kind}
     )
@@ -312,7 +312,7 @@ defmodule Famichat.Auth.Tokens do
 
   defp maybe_emit_subject_metric(kind, _strategy, _subject_id) do
     :telemetry.execute(
-      [:auth_tokens, :issue, :subject_id_present],
+      [:famichat, :auth, :tokens, :subject_id_present],
       %{count: 1},
       %{kind: kind}
     )
