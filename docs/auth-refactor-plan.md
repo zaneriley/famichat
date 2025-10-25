@@ -4,6 +4,14 @@
 
 This document captures the multi-phase refactor approach for the authentication domain. It preserves the intent, sequencing, and guardrails so the work can be executed incrementally without losing context.
 
+## Track A Status Snapshot
+
+- ✅ Invites and pairing issuance/redeem now run through `Auth.Onboarding`, with membership enforcement delegated to `Auth.Households` and controller errors normalized to `missing_household_id`.
+- ✅ `Auth.RateLimit` is the active façade (telemetry + Cachex handling); `Accounts.RateLimiter` remains as a shim until all callers migrate.
+- ✅ Passkey challenge responses ship `public_key_options` under both atom and string keys per the DDD contract.
+- 🚧 Recovery/identity migrations (Phases 5–6) and legacy façade retirement remain open.
+- 🚧 Deprecated auth shims stay in place until downstream callers finish moving to the new contexts.
+
 ## Phase 0 — Scaffolding, Boundaries, and Infrastructure (No Behavior Change)
 
 **Status**  

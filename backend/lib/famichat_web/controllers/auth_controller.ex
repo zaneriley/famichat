@@ -2,7 +2,7 @@ defmodule FamichatWeb.AuthController do
   use FamichatWeb, :controller
 
   alias Famichat.Accounts
-  alias Famichat.Accounts.RateLimiter
+  alias Famichat.Auth.RateLimit
   alias FamichatWeb.Plugs.EnsureTrusted
 
   plug EnsureTrusted
@@ -13,57 +13,56 @@ defmodule FamichatWeb.AuthController do
               :revoke_device
             ]
 
+  def issue_invite(conn, params) do
+    inviter_id = conn.assigns[:current_user_id]
+    role = Map.get(params, "role", "member")
+    email = Map.get(params, "email")
 
-def issue_invite(conn, params) do
-  inviter_id = conn.assigns[:current_user_id]
-  role = Map.get(params, "role", "member")
-  email = Map.get(params, "email")
+    household_id =
+      Map.get(params, "household_id") ||
+        Map.get(params, "family_id")
 
-  household_id =
-    Map.get(params, "household_id") ||
-      Map.get(params, "family_id")
+    if is_nil(household_id) do
+      conn
+      |> put_status(:bad_request)
+      |> json(%{error: %{code: "missing_household_id"}})
+    else
+      case Accounts.issue_invite(inviter_id, email, %{
+             household_id: household_id,
+             role: role
+           }) do
+        {:ok, tokens} ->
+          body = %{
+            invite_token: tokens.invite,
+            qr_token: tokens.qr,
+            admin_code: tokens.admin_code
+          }
 
-  if is_nil(household_id) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: %{code: "missing_household_id"}})
-  else
-    case Accounts.issue_invite(inviter_id, email, %{
-           household_id: household_id,
-           role: role
-         }) do
-      {:ok, tokens} ->
-        body = %{
-          invite_token: tokens.invite,
-          qr_token: tokens.qr,
-          admin_code: tokens.admin_code
-        }
+          conn
+          |> maybe_put_test_token(tokens)
+          |> put_status(:accepted)
+          |> json(body)
 
-        conn
-        |> maybe_put_test_token(tokens)
-        |> put_status(:accepted)
-        |> json(body)
+        {:error, {:rate_limited, retry_in}} ->
+          conn
+          |> put_status(:too_many_requests)
+          |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
 
-      {:error, {:rate_limited, retry_in}} ->
-        conn
-        |> put_status(:too_many_requests)
-        |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
+        {:error, :forbidden} ->
+          conn |> put_status(:forbidden) |> json(%{error: %{code: "forbidden"}})
 
-      {:error, :forbidden} ->
-        conn |> put_status(:forbidden) |> json(%{error: %{code: "forbidden"}})
+        {:error, :missing_household_id} ->
+          conn
+          |> put_status(:bad_request)
+          |> json(%{error: %{code: "missing_household_id"}})
 
-      {:error, :missing_household_id} ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{error: %{code: "missing_household_id"}})
-
-      {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        {:error, reason} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: %{code: inspect(reason)}})
+      end
     end
   end
-end
 
   def reissue_pairing(conn, %{"invite_token" => invite_token}) do
     requester_id = conn.assigns[:current_user_id]
@@ -545,11 +544,14 @@ end
   end
 
   defp throttle!(conn, bucket, key, limit, interval) do
-    case RateLimiter.throttle(bucket, key, limit, interval) do
+    case RateLimit.check(bucket, key,
+           limit: limit,
+           interval: interval
+         ) do
       :ok ->
         :ok
 
-      {:error, :throttled, retry} ->
+      {:error, {:rate_limited, retry}} ->
         conn
         |> put_status(:too_many_requests)
         |> json(%{error: %{code: "rate_limited", retry_in: retry}})

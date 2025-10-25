@@ -8,18 +8,21 @@ defmodule Famichat.Auth.Sessions do
     deps: [
       Famichat,
       Famichat.Auth.Identity,
-      Famichat.Auth.Infra
+      Famichat.Auth.Infra,
+      Famichat.Auth.RateLimit,
+      Famichat.Auth.Tokens
     ]
 
   require Logger
   require Famichat.Auth.Infra.Instrumentation
-  alias Famichat.Accounts.{RateLimiter, User, UserDevice}
+  alias Famichat.Accounts.{User, UserDevice}
   alias Famichat.Auth.Infra.Instrumentation
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens
   alias Famichat.Auth.IssuedToken
   alias Famichat.Auth.Sessions.DeviceStore
   alias Famichat.Auth.Sessions.RefreshRotation
+  alias Famichat.Auth.RateLimit
   alias Famichat.Repo
 
   @access_kind :access
@@ -239,9 +242,14 @@ defmodule Famichat.Auth.Sessions do
   defp ensure_device_matches(_, _), do: {:error, :invalid}
 
   defp rate_limit_refresh(device_id) do
-    case RateLimiter.throttle(:refresh_attempt, device_id, 6, 60 * 60) do
+    case RateLimit.check(
+           :"session.refresh",
+           device_id,
+           limit: 6,
+           interval: 60 * 60
+         ) do
       :ok -> :ok
-      {:error, {:rate_limited, retry}} -> {:error, {:rate_limited, retry}}
+      {:error, {:rate_limited, _}} = error -> error
     end
   end
 

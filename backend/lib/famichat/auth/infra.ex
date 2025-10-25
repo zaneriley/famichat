@@ -5,5 +5,8 @@ defmodule Famichat.Auth.Infra do
 
   use Boundary,
     exports: :all,
-    deps: [Famichat]
+    deps: [
+      Famichat,
+      Famichat.Auth.Tokens
+    ]
 end

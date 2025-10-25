@@ -265,7 +265,8 @@ defmodule Famichat.Accounts.Legacy do
              Tokens.default_ttl(:invite_registration)
            ) do
       Repo.transaction(fn ->
-        with {:ok, family} <- fetch_family(claims["household_id"] || claims["family_id"]),
+        with {:ok, family} <-
+               fetch_family(claims["household_id"] || claims["family_id"]),
              {:ok, user} <- create_user_from_invite(claims, attrs),
              {:ok, _membership} <-
                upsert_membership(user.id, family.id, claims["role"]),

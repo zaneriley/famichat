@@ -8,6 +8,10 @@ defmodule Famichat.Auth.Tokens do
   than reaching into infra helpers directly.
   """
 
+  use Boundary,
+    exports: :all,
+    deps: [Famichat]
+
   alias Famichat.Accounts.UserToken
   alias Famichat.Auth.IssuedToken
   alias Famichat.Auth.Tokens.Storage, as: Storage

@@ -3,11 +3,18 @@ defmodule Famichat.Auth.Passkeys do
   WebAuthn challenge orchestration: issuance, verification, and
   consumption of passkey registration/assertion challenges.
 
-  Responses include WebAuthn `publicKey` options alongside an opaque challenge
+  Responses include WebAuthn `public_key_options` alongside an opaque challenge
   handle that clients must echo during attestation/assertion.
   """
 
-  use Boundary, exports: :all, deps: [Famichat, Famichat.Auth.Infra]
+  use Boundary,
+    exports: :all,
+    deps: [
+      Famichat,
+      Famichat.Auth.Infra,
+      Famichat.Auth.RateLimit,
+      Famichat.Auth.Tokens
+    ]
 
   import Ecto.Query
 
@@ -44,7 +51,8 @@ defmodule Famichat.Auth.Passkeys do
   """
   @spec issue_assertion_challenge(map() | String.t()) ::
           {:ok, map()} | {:error, term()}
-  def issue_assertion_challenge(identifier) when is_map(identifier) do
+  def issue_assertion_challenge(identifier)
+      when is_map(identifier) and not is_struct(identifier) do
     do_issue_assertion_for_identifier(identifier)
   end
 
@@ -55,15 +63,14 @@ defmodule Famichat.Auth.Passkeys do
   defp do_issue_assertion_for_identifier(identifier) do
     key = passkey_identifier_key(identifier)
 
-    case RateLimit.check(:"passkey.assertion", key, limit: 10, interval: 60) do
-      :ok ->
-        with {:ok, user} <- Identity.resolve_user(identifier),
-             {:ok, challenge} <- issue_assertion_challenge(user, []) do
-          {:ok, challenge}
-        end
-
-      {:error, {:rate_limited, retry}} ->
-        {:error, {:rate_limited, retry}}
+    with :ok <-
+           RateLimit.check(:"passkey.assertion", key, limit: 10, interval: 60),
+         {:ok, user} <- Identity.resolve_user(identifier),
+         {:ok, challenge} <- issue_assertion_challenge(user, []) do
+      {:ok, challenge}
+    else
+      {:error, {:rate_limited, retry}} -> {:error, {:rate_limited, retry}}
+      other -> other
     end
   end
 
@@ -299,16 +306,21 @@ defmodule Famichat.Auth.Passkeys do
         @assertion_type -> assertion_options(user, challenge_b64, opts)
       end
 
-    %{
+    legacy_payload = %{
       "challenge" => challenge_b64,
       "challenge_handle" => handle,
       "expires_at" => expires_at,
-      "public_key_options" => public_key_options,
+      "public_key_options" => public_key_options
+    }
+
+    atom_payload = %{
       challenge: challenge_b64,
       challenge_handle: handle,
       expires_at: expires_at,
       public_key_options: public_key_options
     }
+
+    Map.merge(legacy_payload, atom_payload)
   end
 
   defp registration_options(user, challenge_b64, _opts) do
