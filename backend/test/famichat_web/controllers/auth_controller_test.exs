@@ -137,7 +137,7 @@ defmodule FamichatWeb.AuthControllerTest do
     refute Map.has_key?(challenge_payload, "challenge_token")
     assert challenge_handle
 
-    public_key_opts = challenge_payload["publicKey"]
+    public_key_opts = challenge_payload["public_key_options"]
     assert public_key_opts
     assert public_key_opts["challenge"] == challenge
 
@@ -169,7 +169,7 @@ defmodule FamichatWeb.AuthControllerTest do
     refute Map.has_key?(assert_payload, "challenge_token")
     assert assert_handle
 
-    assert_public_key = assert_payload["publicKey"]
+    assert_public_key = assert_payload["public_key_options"]
     assert assert_public_key
     assert assert_public_key["challenge"] == assert_challenge
 

@@ -466,10 +466,13 @@ end
 ```elixir
 %{
   "challenge" => b64_chal, # returned to legacy callers if needed
+  "challenge_handle" => handle,
+  "expires_at" => expires_at,
+  "public_key_options" => public_key_blob,
   challenge: b64_chal,     # snake_case for new callers
   challenge_handle: handle,
   expires_at: expires_at,
-  public_key_options: public_key_blob # original "publicKey" options map
+  public_key_options: public_key_blob
 }
 ```
 

@@ -149,7 +149,7 @@ Reads still support context; disable writes to `kind`.
 ## Phase 3 — Passkeys V2: Single WebAuthn Challenge Builder with Opaque Handle
 
 **Status**  
-✅ Completed – `Famichat.Auth.Passkeys` now issues/consumes WebAuthn challenges and responses carry only `publicKey` options plus an opaque `challenge_handle`.
+✅ Completed – `Famichat.Auth.Passkeys` now issues/consumes WebAuthn challenges and responses carry `public_key_options` plus an opaque `challenge_handle`.
 
 **Goal**  
 Eliminate legacy `{challenge, challenge_token}` shape and duplication; return WebAuthn-shaped options and a signed opaque handle.
@@ -157,7 +157,7 @@ Eliminate legacy `{challenge, challenge_token}` shape and duplication; return We
 **Scope**
 
 - Create `Famichat.Auth.Passkeys` with:
-  - `issue_registration_challenge/2` and `issue_assertion_challenge/2` → `%{publicKey: options, challenge_handle, expires_at}`.  
+  - `issue_registration_challenge/2` and `issue_assertion_challenge/2` → `%{"public_key_options" => options, challenge_handle, expires_at}`.  
   - `fetch_*` helpers plus `consume_challenge/1` backed by `Famichat.Auth.Passkeys.Challenge` and the `webauthn_challenges` table.
 - Update passkey flows in `Accounts.Legacy` to require handles (legacy token fallback removed) and share finalization helpers.
 - Extend controller coverage to assert the new handle + `publicKey` payload.
