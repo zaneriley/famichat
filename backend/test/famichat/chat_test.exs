@@ -5,7 +5,7 @@ defmodule Famichat.ChatTest do
   alias Famichat.Repo
 
   import Famichat.ChatFixtures
-  alias Famichat.Accounts.FamilyMembership
+  alias Famichat.Accounts.HouseholdMembership
 
   describe "users" do
     alias Famichat.Accounts.User
@@ -38,7 +38,10 @@ defmodule Famichat.ChatTest do
       assert user.email == "some_email@example.com"
 
       membership =
-        Repo.get_by!(FamilyMembership, user_id: user.id, family_id: family.id)
+        Repo.get_by!(HouseholdMembership,
+          user_id: user.id,
+          family_id: family.id
+        )
 
       assert membership.role == :member
     end

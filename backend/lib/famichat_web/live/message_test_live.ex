@@ -16,7 +16,7 @@ defmodule FamichatWeb.MessageTestLive do
   alias Famichat.Auth.Sessions
   alias Famichat.Chat.{Conversation, ConversationParticipant, Family}
   alias Famichat.Repo
-  alias Famichat.Accounts.FamilyMembership
+  alias Famichat.Accounts.HouseholdMembership
 
   @test_username "test-user"
 
@@ -160,13 +160,16 @@ defmodule FamichatWeb.MessageTestLive do
   end
 
   defp ensure_membership!(user_id, family_id) do
-    case Repo.get_by(FamilyMembership, user_id: user_id, family_id: family_id) do
-      %FamilyMembership{} ->
+    case Repo.get_by(HouseholdMembership,
+           user_id: user_id,
+           family_id: family_id
+         ) do
+      %HouseholdMembership{} ->
         :ok
 
       nil ->
-        %FamilyMembership{}
-        |> FamilyMembership.changeset(%{
+        %HouseholdMembership{}
+        |> HouseholdMembership.changeset(%{
           user_id: user_id,
           family_id: family_id,
           role: :admin

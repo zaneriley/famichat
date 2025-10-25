@@ -32,7 +32,7 @@ defmodule Famichat.Chat.ConversationService do
   alias Famichat.{
     Repo,
     Accounts.User,
-    Accounts.FamilyMembership,
+    Accounts.HouseholdMembership,
     Chat.Conversation,
     Chat.ConversationParticipant,
     Chat.ConversationQueries,
@@ -309,7 +309,7 @@ defmodule Famichat.Chat.ConversationService do
 
   defp shared_family_id(user1_id, user2_id) do
     query =
-      from m in FamilyMembership,
+      from m in HouseholdMembership,
         where: m.user_id == ^user1_id,
         select: m.family_id
 
@@ -319,7 +319,7 @@ defmodule Famichat.Chat.ConversationService do
 
       families ->
         query2 =
-          from m in FamilyMembership,
+          from m in HouseholdMembership,
             where: m.user_id == ^user2_id and m.family_id in ^families,
             limit: 1,
             select: m.family_id
@@ -333,7 +333,7 @@ defmodule Famichat.Chat.ConversationService do
 
   defp member_of_family?(user_id, family_id) do
     Repo.exists?(
-      from m in FamilyMembership,
+      from m in HouseholdMembership,
         where: m.user_id == ^user_id and m.family_id == ^family_id
     )
   end

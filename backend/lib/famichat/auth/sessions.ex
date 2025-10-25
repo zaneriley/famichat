@@ -30,7 +30,7 @@ defmodule Famichat.Auth.Sessions do
           {:ok, map()} | {:error, term()}
   def start_session(%User{} = user, device_info, opts \\ []) do
     Instrumentation.span(
-      [:famichat, :auth, :session, :start],
+      [:famichat, :auth, :sessions, :start],
       %{user_id: user.id},
       do: do_start_session(user, device_info, opts)
     )
@@ -81,7 +81,7 @@ defmodule Famichat.Auth.Sessions do
           {:ok, map()} | {:error, term()}
   def refresh_session(device_id, raw_refresh) do
     Instrumentation.span(
-      [:famichat, :auth, :session, :refresh],
+      [:famichat, :auth, :sessions, :refresh],
       %{device_id: device_id},
       do:
         with :ok <- rate_limit_refresh(device_id),
@@ -247,7 +247,7 @@ defmodule Famichat.Auth.Sessions do
 
   defp telemetry(action, metadata) do
     :telemetry.execute(
-      [:famichat, :auth, :session, action],
+      [:famichat, :auth, :sessions, action],
       %{count: 1},
       metadata
     )

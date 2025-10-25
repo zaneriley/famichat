@@ -1,6 +1,8 @@
-defmodule Famichat.Accounts.FamilyMembership do
+defmodule Famichat.Accounts.HouseholdMembership do
   @moduledoc """
-  Links a user to a family with a specific role.
+  Links a user to a household with a specific role.
+
+  Write owner: `Famichat.Auth.Households`.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -19,8 +21,9 @@ defmodule Famichat.Accounts.FamilyMembership do
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
-  schema "family_memberships" do
-    belongs_to :family, Family
+  @source "family_memberships"
+  schema @source do
+    belongs_to :family, Family, foreign_key: :family_id
     belongs_to :user, User
     field :role, Ecto.Enum, values: [:admin, :member], default: :member
 
@@ -34,7 +37,16 @@ defmodule Famichat.Accounts.FamilyMembership do
     |> validate_required([:family_id, :user_id, :role])
     |> unique_constraint(:membership_uniqueness,
       name: :family_memberships_family_id_user_id_index,
-      message: "user already belongs to family"
+      message: "user already belongs to household"
     )
   end
+end
+
+defmodule Famichat.Accounts.FamilyMembership do
+  @moduledoc "Deprecated alias for `Famichat.Accounts.HouseholdMembership`."
+  @deprecated "use Famichat.Accounts.HouseholdMembership"
+
+  alias Famichat.Accounts.HouseholdMembership, as: Target
+
+  defdelegate changeset(membership, attrs), to: Target
 end

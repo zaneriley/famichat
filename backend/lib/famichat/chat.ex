@@ -142,8 +142,8 @@ defmodule Famichat.Chat do
   defp ensure_membership(user, family_id, role) do
     normalized_role = normalize_role(role)
 
-    %Famichat.Accounts.FamilyMembership{}
-    |> Famichat.Accounts.FamilyMembership.changeset(%{
+    %Famichat.Accounts.HouseholdMembership{}
+    |> Famichat.Accounts.HouseholdMembership.changeset(%{
       user_id: user.id,
       family_id: family_id,
       role: normalized_role

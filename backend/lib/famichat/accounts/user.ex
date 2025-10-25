@@ -6,7 +6,7 @@ defmodule Famichat.Accounts.User do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Famichat.Accounts.FamilyMembership
+  alias Famichat.Accounts.HouseholdMembership
   alias Famichat.Accounts.Passkey
   alias Famichat.Accounts.Types.EncryptedBinary
   alias Famichat.Accounts.UserDevice
@@ -42,7 +42,7 @@ defmodule Famichat.Accounts.User do
     field :last_login_at, :utc_datetime_usec
     field :enrollment_required_since, :utc_datetime_usec
 
-    has_many :memberships, FamilyMembership
+    has_many :memberships, HouseholdMembership
     has_many :families, through: [:memberships, :family]
     has_many :passkeys, Passkey
     has_many :devices, UserDevice

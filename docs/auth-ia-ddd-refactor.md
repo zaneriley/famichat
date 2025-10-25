@@ -361,7 +361,7 @@ Each phase is a small PR with explicit acceptance checks and rollbacks.
 
 * All emits under `[:famichat, :auth, <context>, <action>]`.
 * Replace buckets with `Auth.RateLimit.Buckets` names.
-* Remove `Auth.Infra.Throttles`.
+* Remove `Auth.RateLimit`.
   **Acceptance**: No occurrences of `[:auth_sessions` in grep; dashboards updated.
   **Rollback**: Provide temporary dual‑emit for one release.
 

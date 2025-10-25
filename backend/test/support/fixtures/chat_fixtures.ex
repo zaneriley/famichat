@@ -17,7 +17,7 @@ defmodule Famichat.ChatFixtures do
       conv = ChatFixtures.conversation_fixture()
   """
 
-  alias Famichat.Accounts.FamilyMembership
+  alias Famichat.Accounts.HouseholdMembership
 
   alias Famichat.Chat.{
     Conversation,
@@ -150,10 +150,13 @@ defmodule Famichat.ChatFixtures do
   defp maybe_insert_membership(user, family_id, role) do
     normalized_role = normalize_role(role)
 
-    case Repo.get_by(FamilyMembership, user_id: user.id, family_id: family_id) do
+    case Repo.get_by(HouseholdMembership,
+           user_id: user.id,
+           family_id: family_id
+         ) do
       nil ->
-        %FamilyMembership{}
-        |> FamilyMembership.changeset(%{
+        %HouseholdMembership{}
+        |> HouseholdMembership.changeset(%{
           user_id: user.id,
           family_id: family_id,
           role: normalized_role
@@ -171,7 +174,7 @@ defmodule Famichat.ChatFixtures do
   def membership_fixture(user, family, role \\ :member) do
     maybe_insert_membership(user, family.id, role)
 
-    Repo.get_by!(FamilyMembership, user_id: user.id, family_id: family.id)
+    Repo.get_by!(HouseholdMembership, user_id: user.id, family_id: family.id)
   end
 
   defp normalize_role(:admin), do: :admin

@@ -325,27 +325,27 @@ defmodule FamichatWeb.Telemetry do
 
       # 2.1 CRITICAL: Refresh Token Reuse Detection (MUST BE ZERO)
       counter("famichat.auth.session.refresh.reuse_detected",
-        event_name: [:famichat, :auth, :session, :refresh_reuse_detected],
+        event_name: [:famichat, :auth, :sessions, :refresh_reuse_detected],
         description: "⚠️ CRITICAL: Token theft indicator - must be zero"
       ),
 
       # 2.2 Session Lifecycle Events
       counter("famichat.auth.session.start.count",
-        event_name: [:famichat, :auth, :session, :start],
+        event_name: [:famichat, :auth, :sessions, :start],
         description: "New sessions started"
       ),
       counter("famichat.auth.session.refresh.count",
-        event_name: [:famichat, :auth, :session, :refresh],
+        event_name: [:famichat, :auth, :sessions, :refresh],
         description: "Session refreshes - ratio to starts shows stickiness"
       ),
       counter("famichat.auth.session.revoke.count",
-        event_name: [:famichat, :auth, :session, :revoke],
+        event_name: [:famichat, :auth, :sessions, :revoke],
         description: "Session revocations - spikes need investigation"
       ),
 
       # 2.3 Token Issuance Distribution
       counter("famichat.auth.token.issued.total",
-        event_name: [:famichat, :auth, :token, :issued],
+        event_name: [:famichat, :auth, :tokens, :issued],
         measurement: :count,
         tags: [:kind, :class, :audience],
         description: "Tokens issued grouped by kind/class/audience"
