@@ -3,7 +3,7 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
   alias Famichat.Chat.{Conversation, ConversationService}
 
-  alias Famichat.Accounts.FamilyMembership
+  alias Famichat.Accounts.HouseholdMembership
   alias Famichat.Repo
   import Famichat.ChatFixtures
   import Ecto.Query
@@ -19,7 +19,7 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
       # Implementation uses direct instead of self
       assert conversation.conversation_type == :direct
-      membership = Repo.get_by!(FamilyMembership, user_id: user.id)
+      membership = Repo.get_by!(HouseholdMembership, user_id: user.id)
       assert conversation.family_id == membership.family_id
       assert Enum.any?(conversation.explicit_users, fn u -> u.id == user.id end)
     end
@@ -227,14 +227,14 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
       primary_membership_user1 =
         Repo.get_by!(
-          FamilyMembership,
+          HouseholdMembership,
           user_id: user1.id,
           family_id: primary_family.id
         )
 
       primary_membership_user2 =
         Repo.get_by!(
-          FamilyMembership,
+          HouseholdMembership,
           user_id: user2.id,
           family_id: primary_family.id
         )

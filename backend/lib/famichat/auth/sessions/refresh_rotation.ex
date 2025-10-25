@@ -80,7 +80,7 @@ defmodule Famichat.Auth.Sessions.RefreshRotation do
   defp telemetry(action, metadata),
     do:
       :telemetry.execute(
-        [:famichat, :auth, :session, action],
+        [:famichat, :auth, :sessions, action],
         %{count: 1},
         metadata
       )

@@ -8,9 +8,8 @@ defmodule Famichat.Accounts.Legacy do
   """
 
   alias Famichat.Accounts.{
-    FamilyMembership,
+    HouseholdMembership,
     Passkey,
-    RateLimiter,
     Token,
     User,
     UserDevice,
@@ -21,6 +20,7 @@ defmodule Famichat.Accounts.Legacy do
   alias Famichat.Auth.Sessions
   alias Famichat.Auth.Tokens
   alias Famichat.Auth.IssuedToken
+  alias Famichat.Auth.RateLimit
   alias Famichat.Auth.Infra.Instrumentation
   alias Famichat.Chat.Family
   alias Famichat.Vault
@@ -48,7 +48,7 @@ defmodule Famichat.Accounts.Legacy do
       [:famichat, :auth, :accounts, :issue_invite],
       %{},
       do:
-        case rate_limit(:invite_issue, inviter_id, 20, 60) do
+        case rate_limit(:"invite.issue", inviter_id, 20, 60) do
           :ok -> do_issue_invite(inviter_id, email, payload, family_id)
           error -> error
         end
@@ -156,7 +156,12 @@ defmodule Famichat.Accounts.Legacy do
              :invalid | :expired | :used | {:rate_limited, pos_integer()}}
   def accept_invite(raw_token) when is_binary(raw_token) do
     with :ok <-
-           rate_limit(:invite_accept, raw_token, 5, Tokens.default_ttl(:invite)),
+           rate_limit(
+             :"invite.accept",
+             raw_token,
+             5,
+             Tokens.default_ttl(:invite)
+           ),
          {:ok, invite} <- Tokens.fetch(:invite, raw_token),
          {:ok, _} <- Tokens.consume(invite) do
       payload = sanitize_invite_payload(invite.payload)
@@ -348,7 +353,7 @@ defmodule Famichat.Accounts.Legacy do
   def issue_passkey_assertion_challenge(identifier) do
     key = passkey_identifier_key(identifier)
 
-    with :ok <- rate_limit(:passkey_assertion_challenge, key, 10, 60),
+    with :ok <- rate_limit(:"passkey.assertion", key, 10, 60),
          {:ok, user} <- resolve_user(identifier),
          {:ok, challenge} <- build_passkey_assertion_challenge(user) do
       {:ok, challenge}
@@ -414,7 +419,7 @@ defmodule Famichat.Accounts.Legacy do
         ok
 
       {:error, _reason} = error ->
-        case rate_limit(:passkey_failure, rate_key, 5, 60) do
+        case rate_limit(:"passkey.assertion", rate_key, 5, 60) do
           :ok -> error
           {:error, {:rate_limited, retry}} -> {:error, {:rate_limited, retry}}
         end
@@ -639,7 +644,7 @@ defmodule Famichat.Accounts.Legacy do
   @spec issue_magic_link(String.t()) ::
           {:ok, token(), UserToken.t()} | {:error, term()}
   def issue_magic_link(email) do
-    case rate_limit(:magic_link, normalize_email(email), 5, 60) do
+    case rate_limit(:"magic_link.issue", normalize_email(email), 5, 60) do
       :ok -> do_issue_magic_link(email)
       error -> error
     end
@@ -677,7 +682,7 @@ defmodule Famichat.Accounts.Legacy do
   @spec issue_otp(String.t()) ::
           {:ok, String.t(), UserToken.t()} | {:error, term()}
   def issue_otp(email) do
-    case rate_limit(:otp_issue, normalize_email(email), 3, 60) do
+    case rate_limit(:"otp.issue", normalize_email(email), 3, 60) do
       :ok -> do_issue_otp(email)
       error -> error
     end
@@ -738,9 +743,9 @@ defmodule Famichat.Accounts.Legacy do
 
   defp member_role(admin_id, target_user_id) do
     query =
-      from m in FamilyMembership,
+      from m in HouseholdMembership,
         where: m.user_id == ^admin_id and m.role == :admin,
-        join: t in FamilyMembership,
+        join: t in HouseholdMembership,
         on: t.family_id == m.family_id and t.user_id == ^target_user_id,
         limit: 1,
         select: t.role
@@ -781,8 +786,11 @@ defmodule Famichat.Accounts.Legacy do
   ## Helpers -----------------------------------------------------------------
 
   defp ensure_membership(user_id, family_id) do
-    case Repo.get_by(FamilyMembership, user_id: user_id, family_id: family_id) do
-      %FamilyMembership{} = membership -> {:ok, membership}
+    case Repo.get_by(HouseholdMembership,
+           user_id: user_id,
+           family_id: family_id
+         ) do
+      %HouseholdMembership{} = membership -> {:ok, membership}
       nil -> {:error, :not_in_family}
     end
   end
@@ -790,15 +798,18 @@ defmodule Famichat.Accounts.Legacy do
   defp upsert_membership(user_id, family_id, role) do
     attrs = %{user_id: user_id, family_id: family_id, role: format_role(role)}
 
-    case Repo.get_by(FamilyMembership, user_id: user_id, family_id: family_id) do
+    case Repo.get_by(HouseholdMembership,
+           user_id: user_id,
+           family_id: family_id
+         ) do
       nil ->
-        %FamilyMembership{}
-        |> FamilyMembership.changeset(attrs)
+        %HouseholdMembership{}
+        |> HouseholdMembership.changeset(attrs)
         |> Repo.insert()
 
-      %FamilyMembership{} = membership ->
+      %HouseholdMembership{} = membership ->
         membership
-        |> FamilyMembership.changeset(attrs)
+        |> HouseholdMembership.changeset(attrs)
         |> Repo.update()
     end
   end
@@ -909,10 +920,7 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp rate_limit(bucket, key, limit, interval) do
-    case RateLimiter.throttle(bucket, key, limit, interval) do
-      :ok -> :ok
-      {:error, :throttled, retry} -> {:error, {:rate_limited, retry}}
-    end
+    RateLimit.check(bucket, key, limit: limit, interval: interval)
   end
 
   defp sign_invite_registration_token(payload) do
@@ -995,9 +1003,16 @@ defmodule Famichat.Accounts.Legacy do
 
   defp telemetry(scope, action, metadata) do
     :telemetry.execute(
-      [:famichat, :auth, scope, action],
+      [:famichat, :auth, telemetry_context(scope), action],
       %{count: 1},
       metadata
     )
   end
+
+  defp telemetry_context(:invite), do: :onboarding
+  defp telemetry_context(:passkey), do: :passkeys
+  defp telemetry_context(:magic), do: :tokens
+  defp telemetry_context(:otp), do: :tokens
+  defp telemetry_context(:recovery), do: :tokens
+  defp telemetry_context(other), do: other
 end

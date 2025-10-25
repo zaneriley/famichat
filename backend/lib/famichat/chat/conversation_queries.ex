@@ -3,7 +3,7 @@ defmodule Famichat.Chat.ConversationQueries do
 
   import Ecto.Query
 
-  alias Famichat.Accounts.{FamilyMembership, User}
+  alias Famichat.Accounts.{HouseholdMembership, User}
   alias Famichat.Chat.{Conversation, ConversationParticipant}
 
   @type membership_query :: Ecto.Query.t()
@@ -12,13 +12,13 @@ defmodule Famichat.Chat.ConversationQueries do
   @doc """
   Returns a composable query for the members of `conversation`.
 
-  * For `:family` conversations, membership is derived from `FamilyMembership`.
+  * For `:family` conversations, membership is derived from `HouseholdMembership`.
   * For all other types, membership comes from `ConversationParticipant`.
   """
   @spec members(Conversation.t()) :: membership_query()
   def members(%Conversation{conversation_type: :family, family_id: family_id}) do
     from u in User,
-      join: m in FamilyMembership,
+      join: m in HouseholdMembership,
       on: m.user_id == u.id,
       where: m.family_id == ^family_id
   end
@@ -43,7 +43,7 @@ defmodule Famichat.Chat.ConversationQueries do
 
     implicit_ids =
       from c in Conversation,
-        join: m in FamilyMembership,
+        join: m in HouseholdMembership,
         on: m.family_id == c.family_id,
         where: c.conversation_type == :family and m.user_id == ^user_id,
         select: c.id

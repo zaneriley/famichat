@@ -15,7 +15,7 @@ Prepare the codebase so future changes are safe and reversible.
 **Scope**
 
 - Create `lib/famichat/auth/{identity,households,onboarding,authenticators,sessions,recovery,infra}/` folders.  
-- Introduce infra modules: `Tokens`, `Throttles`, `Audit`, `Instrumentation`.  
+- Introduce infra modules: `Tokens`, `RateLimit`, `Audit`, `Instrumentation`.  
 - Add `Famichat.Accounts.Errors` with the unified error enum (typed tuples/atoms).  
 - Wire `mix_boundary` to enforce compile-time boundaries; façade is the only friend.  
 - Add façade module skeleton (`Famichat.Accounts`) with no behavior changes; just delegates to existing functions.
@@ -315,7 +315,7 @@ Eliminate literal bucket names and mismatched telemetry; standardize across cont
 
 **Scope**
 
-- `Throttles` exposes enum buckets and specs; replace all ad-hoc calls.  
+- `RateLimit` exposes enum buckets and specs; replace all ad-hoc calls.  
 - Ensure every public command emits a consistent telemetry span with `<context>, <action>` names.
 
 **Migrations**  
@@ -327,7 +327,7 @@ None.
 
 **Tests**
 
-- Contract test that all exported functions call `Throttles.check/2` at least once when appropriate (compile-time AST check or macro hook).
+- Contract test that all exported functions call `RateLimit.check/2` at least once when appropriate (compile-time AST check or macro hook).
 
 **Observability**
 
