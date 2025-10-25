@@ -2,7 +2,7 @@ defmodule FamichatWeb.UserSocket do
   use Phoenix.Socket
   require Logger
 
-  alias Famichat.Accounts
+  alias Famichat.Auth.Sessions
 
   # Update channel pattern to support conversation-type-aware topic formats
   # Format: message:<type>:<id> where type is one of: self, direct, group, family
@@ -21,7 +21,7 @@ defmodule FamichatWeb.UserSocket do
   # performing token verification on connect.
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do
-    case Accounts.verify_access_token(token) do
+    case Sessions.verify_access_token(token) do
       {:ok, %{user_id: user_id, device_id: device_id}} ->
         Logger.debug(
           "User connected with user_id=#{user_id} device_id=#{device_id}"

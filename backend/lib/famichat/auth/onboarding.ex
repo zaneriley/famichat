@@ -7,6 +7,7 @@ defmodule Famichat.Auth.Onboarding do
     exports: :all,
     deps: [
       Famichat,
+      Famichat.Accounts,
       Famichat.Auth.Households,
       Famichat.Auth.Identity,
       Famichat.Auth.Infra,

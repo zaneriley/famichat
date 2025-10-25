@@ -305,12 +305,13 @@ Each phase is a small PR with explicit acceptance checks and rollbacks.
 * Implement `Auth.Tokens.Storage` that writes `Accounts.UserToken` directly (copy hashing/changeset logic from `Accounts.Token`).
 * Replace calls to `Accounts.Token.*` with `Auth.Tokens.Storage.*`.
 * Keep `Accounts.Token` as a deprecated shim delegating to `Auth.Tokens.Storage` for one release.
-  **Acceptance**: Grep shows zero direct references to `Accounts.Token` (except shim).
+  **Status**: ✅ Completed — shim removed Oct 2025 (grep shows zero references).
   **Rollback**: Point shim back.
 
 **A3. Façade routes to Auth**
 
 * `Famichat.Accounts` façade delegates to `Auth` contexts directly for sessions/tokens/passkey challenges.
+  **Status**: ✅ Completed — façade is now a deprecated thin delegate (Oct 2025).
 * Mark any legacy delegates `@deprecated`.
   **Acceptance**: Grep shows zero calls to `Accounts.Legacy` for the migrated parts.
   **Rollback**: Repoint delegates.

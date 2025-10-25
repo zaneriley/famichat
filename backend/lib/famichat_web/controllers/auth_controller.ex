@@ -1,8 +1,8 @@
 defmodule FamichatWeb.AuthController do
   use FamichatWeb, :controller
 
-  alias Famichat.Accounts
   alias Famichat.Auth.RateLimit
+  alias Famichat.Auth.{Identity, Onboarding, Passkeys, Recovery, Sessions}
   alias FamichatWeb.Plugs.EnsureTrusted
 
   plug EnsureTrusted
@@ -27,7 +27,7 @@ defmodule FamichatWeb.AuthController do
       |> put_status(:bad_request)
       |> json(%{error: %{code: "missing_household_id"}})
     else
-      case Accounts.issue_invite(inviter_id, email, %{
+      case Onboarding.issue_invite(inviter_id, email, %{
              household_id: household_id,
              role: role
            }) do
@@ -67,7 +67,7 @@ defmodule FamichatWeb.AuthController do
   def reissue_pairing(conn, %{"invite_token" => invite_token}) do
     requester_id = conn.assigns[:current_user_id]
 
-    case Accounts.reissue_pairing(requester_id, invite_token) do
+    case Onboarding.reissue_pairing(requester_id, invite_token) do
       {:ok, %{qr: qr, admin_code: admin_code}} ->
         conn
         |> maybe_put_test_token(%{qr_token: qr, admin_code: admin_code})
@@ -88,7 +88,7 @@ defmodule FamichatWeb.AuthController do
   def accept_invite(conn, %{"token" => token}) do
     rate_limit_token!(conn, :invite_accept, token)
 
-    case Accounts.accept_invite(token) do
+    case Onboarding.accept_invite(token) do
       {:ok, %{payload: payload, registration_token: registration_token}} ->
         conn
         |> maybe_put_test_token(%{registration_token: registration_token})
@@ -113,7 +113,7 @@ defmodule FamichatWeb.AuthController do
   def redeem_pairing(conn, %{"token" => token}) do
     rate_limit_token!(conn, :pairing, token)
 
-    case Accounts.redeem_pairing_token(token) do
+    case Onboarding.redeem_pairing(token) do
       {:ok, %{invite_token: invite_token, payload: payload}} ->
         json(conn, %{invite_token: invite_token, payload: payload})
 
@@ -148,7 +148,7 @@ defmodule FamichatWeb.AuthController do
 
         attrs = %{username: username, email: Map.get(params, "email")}
 
-        case Accounts.register_user_from_invite(registration_token, attrs) do
+        case Onboarding.complete_registration(registration_token, attrs) do
           {:ok, %{user: user, passkey_register_token: register_token}} ->
             conn
             |> put_status(:created)
@@ -210,7 +210,7 @@ defmodule FamichatWeb.AuthController do
   end
 
   def passkey_register_challenge(conn, %{"register_token" => register_token}) do
-    case Accounts.exchange_passkey_register_token(register_token) do
+    case Passkeys.exchange_registration_token(register_token) do
       {:ok, user} ->
         respond_with_passkey_challenge(conn, user.id)
 
@@ -248,7 +248,7 @@ defmodule FamichatWeb.AuthController do
   end
 
   def passkey_register(conn, params) do
-    case Accounts.register_passkey(params) do
+    case Passkeys.register_passkey(params) do
       {:ok, passkey} ->
         conn
         |> put_status(:created)
@@ -267,7 +267,7 @@ defmodule FamichatWeb.AuthController do
   end
 
   def passkey_assert_challenge(conn, params) do
-    case Accounts.issue_passkey_assertion_challenge(params) do
+    case Passkeys.issue_assertion_challenge(params) do
       {:ok, data} ->
         json(conn, data)
 
@@ -297,9 +297,9 @@ defmodule FamichatWeb.AuthController do
       ip: maybe_ip(conn)
     }
 
-    with {:ok, %{user: user}} <- Accounts.assert_passkey(params),
+    with {:ok, %{user: user}} <- Passkeys.assert_passkey(params),
          {:ok, session} <-
-           Accounts.start_session(user, device_info, remember: remember?) do
+           Sessions.start_session(user, device_info, remember: remember?) do
       conn
       |> put_status(:created)
       |> json(session)
@@ -330,7 +330,7 @@ defmodule FamichatWeb.AuthController do
         "device_id" => device_id,
         "refresh_token" => refresh_token
       }) do
-    case Accounts.refresh_session(device_id, refresh_token) do
+    case Sessions.refresh_session(device_id, refresh_token) do
       {:ok, tokens} ->
         json(conn, tokens)
 
@@ -380,7 +380,7 @@ defmodule FamichatWeb.AuthController do
   def revoke_device(conn, %{"device_id" => device_id}) do
     user_id = conn.assigns[:current_user_id]
 
-    case Accounts.revoke_device(user_id, device_id) do
+    case Sessions.revoke_device(user_id, device_id) do
       {:ok, :revoked} ->
         send_resp(conn, :no_content, "")
 
@@ -390,7 +390,7 @@ defmodule FamichatWeb.AuthController do
   end
 
   def issue_magic_link(conn, %{"email" => email}) do
-    case Accounts.issue_magic_link(email) do
+    case Identity.issue_magic_link(email) do
       {:ok, token, _} ->
         conn
         |> maybe_put_test_token(token)
@@ -417,7 +417,7 @@ defmodule FamichatWeb.AuthController do
   def redeem_magic_link(conn, %{"token" => token}) do
     rate_limit_token!(conn, :magic_link, token)
 
-    case Accounts.redeem_magic_link(token) do
+    case Identity.redeem_magic_link(token) do
       {:ok, user} ->
         rate_limit_user!(conn, :magic_link, user.id)
         json(conn, %{user_id: user.id, username: user.username})
@@ -434,7 +434,7 @@ defmodule FamichatWeb.AuthController do
   end
 
   def issue_otp(conn, %{"email" => email}) do
-    case Accounts.issue_otp(email) do
+    case Identity.issue_otp(email) do
       {:ok, code, _} ->
         conn
         |> maybe_put_test_token(code)
@@ -461,7 +461,7 @@ defmodule FamichatWeb.AuthController do
   def verify_otp(conn, %{"email" => email, "code" => code}) do
     rate_limit_token!(conn, :otp_verify, code)
 
-    case Accounts.verify_otp(email, code) do
+    case Identity.verify_otp(email, code) do
       {:ok, user} ->
         rate_limit_user!(conn, :otp_verify, user.id)
         json(conn, %{user_id: user.id, username: user.username})
@@ -480,7 +480,7 @@ defmodule FamichatWeb.AuthController do
   def issue_recovery(conn, %{"user_id" => user_id}) do
     admin_id = conn.assigns[:current_user_id]
 
-    case Accounts.issue_recovery(admin_id, user_id) do
+    case Recovery.issue_recovery(admin_id, user_id) do
       {:ok, token, _} ->
         conn
         |> maybe_put_test_token(token)
@@ -500,7 +500,7 @@ defmodule FamichatWeb.AuthController do
   def redeem_recovery(conn, %{"token" => token}) do
     rate_limit_token!(conn, :recovery, token)
 
-    case Accounts.redeem_recovery(token) do
+    case Recovery.redeem_recovery(token) do
       {:ok, user} ->
         rate_limit_user!(conn, :recovery, user.id)
         json(conn, %{user_id: user.id, username: user.username})
@@ -522,10 +522,10 @@ defmodule FamichatWeb.AuthController do
   end
 
   defp respond_with_passkey_challenge(conn, user_id) do
-    case Accounts.issue_passkey_registration_challenge(user_id) do
-      {:ok, data} ->
-        json(conn, data)
-
+    with {:ok, user} <- Identity.fetch_user(user_id),
+         {:ok, data} <- Passkeys.issue_registration_challenge(user) do
+      json(conn, data)
+    else
       {:error, :user_not_found} ->
         conn
         |> put_status(:not_found)

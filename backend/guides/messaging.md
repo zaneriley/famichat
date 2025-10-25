@@ -143,10 +143,10 @@ The `FamichatWeb.MessageChannel` exposes conversation-type-aware topics using th
 
 ### Authentication and Subscription
 
-1. Create an access token via the Accounts session API:
+1. Create an access token via the Auth session API:
    ```elixir
    {:ok, session} =
-     Famichat.Accounts.start_session(user, %{
+     Famichat.Auth.Sessions.start_session(user, %{
        id: "browser-session-uuid",
        user_agent: "Famichat Web",
        ip: "127.0.0.1"
@@ -165,7 +165,7 @@ The `FamichatWeb.MessageChannel` exposes conversation-type-aware topics using th
      .receive("error", (err) => console.error("join failed", err));
    ```
 
-Tokens are verified on connect via `Accounts.verify_access_token/1`; if verification fails the
+Tokens are verified on connect via `Famichat.Auth.Sessions.verify_access_token/1`; if verification fails the
 socket connection is rejected.
 
 ### Broadcast Payloads and Telemetry

@@ -11,6 +11,7 @@ defmodule Famichat.Auth.Passkeys do
     exports: :all,
     deps: [
       Famichat,
+      Famichat.Accounts,
       Famichat.Auth.Infra,
       Famichat.Auth.RateLimit,
       Famichat.Auth.Tokens

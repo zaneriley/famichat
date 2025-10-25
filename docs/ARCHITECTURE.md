@@ -105,7 +105,7 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 
 **Phoenix Channels**:
 - Topic format: `message:<type>:<conversation_id>`
-- Access tokens issued by `Famichat.Accounts.start_session/3` (with policy-aware `:remember` option) verified in `UserSocket.connect/3`
+- Access tokens issued by `Famichat.Auth.Sessions.start_session/3` (with policy-aware `:remember` option) verified in `UserSocket.connect/3`
 - Tests green (join/broadcast/ack telemetry enforced)
 - Performance budget: 200ms
 - Telemetry on all operations (join/broadcast/ack spans, encryption metadata scrubbed)

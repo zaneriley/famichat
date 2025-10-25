@@ -10,7 +10,10 @@ defmodule Famichat.Auth.Tokens do
 
   use Boundary,
     exports: :all,
-    deps: [Famichat]
+    deps: [
+      Famichat,
+      Famichat.Accounts
+    ]
 
   alias Famichat.Accounts.UserToken
   alias Famichat.Auth.IssuedToken

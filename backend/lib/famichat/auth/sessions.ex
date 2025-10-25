@@ -7,6 +7,7 @@ defmodule Famichat.Auth.Sessions do
     exports: :all,
     deps: [
       Famichat,
+      Famichat.Accounts,
       Famichat.Auth.Identity,
       Famichat.Auth.Infra,
       Famichat.Auth.RateLimit,

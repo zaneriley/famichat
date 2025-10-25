@@ -123,7 +123,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 **Features**:
 - ✅ Topic format: `message:<type>:<id>` (e.g., `message:direct:uuid`)
-- ✅ Socket auth delegated to `Famichat.Accounts.verify_access_token/1`
+- ✅ Socket auth delegated to `Famichat.Auth.Sessions.verify_access_token/1`
 - ✅ `join/3` callback with authorization checks
 - ✅ `handle_in("new_msg", ...)` for message handling
 - ✅ Encryption-aware payload support (preserves metadata)

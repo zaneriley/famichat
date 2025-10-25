@@ -8,7 +8,7 @@ defmodule FamichatWeb.Plugs.EnsureTrusted do
   import Plug.Conn
   import Phoenix.Controller, only: [json: 2]
 
-  alias Famichat.Accounts
+  alias Famichat.Auth.Sessions
 
   @behaviour Plug
 
@@ -22,8 +22,8 @@ defmodule FamichatWeb.Plugs.EnsureTrusted do
 
     with {:ok, token} <- fetch_bearer(conn),
          {:ok, %{user_id: user_id, device_id: device_id}} <-
-           Accounts.verify_access_token(token),
-         false <- Accounts.require_reauth?(user_id, device_id, action) do
+           Sessions.verify_access_token(token),
+         false <- Sessions.require_reauth?(user_id, device_id, action) do
       conn
       |> assign(:current_user_id, user_id)
       |> assign(:current_device_id, device_id)

@@ -2,9 +2,9 @@ defmodule Famichat.Accounts.FacadeConformanceTest do
   use Famichat.DataCase, async: false
 
   alias Famichat.Accounts
-  alias Famichat.Accounts.Legacy
   alias Famichat.ChatFixtures
   alias Famichat.Repo
+  alias Famichat.Auth.Sessions, as: SessionsContext
 
   import Ecto.Changeset, only: [change: 2]
 
@@ -81,9 +81,9 @@ defmodule Famichat.Accounts.FacadeConformanceTest do
   end
 
   defp compare_flow(flow_fun) do
-    legacy = run_flow(Legacy, flow_fun)
+    baseline = run_flow(SessionsContext, flow_fun)
     facade = run_flow(Accounts, flow_fun)
-    normalize(facade) == normalize(legacy)
+    normalize(facade) == normalize(baseline)
   end
 
   defp run_flow(mod, flow_fun) do

@@ -8,6 +8,7 @@ defmodule Famichat.Auth.Identity do
     exports: :all,
     deps: [
       Famichat,
+      Famichat.Accounts,
       Famichat.Auth.RateLimit,
       Famichat.Auth.Tokens
     ]
@@ -90,6 +91,32 @@ defmodule Famichat.Auth.Identity do
   end
 
   @doc """
+  Ensures a user exists for the provided attributes. Returns the existing user
+  or inserts a new record using the permitted attribute set.
+  """
+  @spec ensure_user(map()) :: {:ok, User.t()} | {:error, term()}
+  def ensure_user(attrs) when is_map(attrs) do
+    permitted = permit_user_attrs(attrs)
+
+    username =
+      permitted
+      |> Map.get(:username)
+      |> normalize_username()
+
+    if is_nil(username) or username == "" do
+      {:error, :username_required}
+    else
+      case fetch_user_by_username(username) do
+        {:ok, user} -> {:ok, user}
+        {:error, :user_not_found} ->
+          permitted
+          |> Map.put(:username, username)
+          |> insert_user()
+      end
+    end
+  end
+
+  @doc """
   Resolves a user based on a flexible identifier map (user_id, username, email)
   or raw username/email string.
   """
@@ -113,6 +140,17 @@ defmodule Famichat.Auth.Identity do
   end
 
   def resolve_user(_), do: {:error, :user_not_found}
+
+  defp insert_user(attrs) do
+    defaults =
+      attrs
+      |> Map.put_new(:status, :active)
+      |> Map.put_new(:confirmed_at, DateTime.utc_now())
+
+    %User{}
+    |> User.changeset(defaults)
+    |> Repo.insert()
+  end
 
   @doc """
   Whitelists user attributes for creation/update flows.
@@ -144,6 +182,32 @@ defmodule Famichat.Auth.Identity do
   end
 
   defp normalize_allowed_key(_), do: :error
+
+  @doc """
+  Returns `{id, username, username_fingerprint}` tuples sorted by insertion.
+  Used for username collision audits.
+  """
+  @spec list_users_for_username_audit() ::
+          list({Ecto.UUID.t(), String.t() | nil, binary() | nil})
+  def list_users_for_username_audit do
+    from(u in User,
+      select: {u.id, u.username, u.username_fingerprint},
+      order_by: [asc: u.inserted_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Applies the canonical username normalization pipeline.
+  """
+  @spec normalize_username(String.t()) :: String.t() | nil
+  def normalize_username(username) when is_binary(username) do
+    username
+    |> String.trim()
+    |> Username.normalize()
+  end
+
+  def normalize_username(_), do: nil
 
   @doc """
   Issues a magic link token for the provided email address.

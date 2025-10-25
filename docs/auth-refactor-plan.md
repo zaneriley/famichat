@@ -6,11 +6,11 @@ This document captures the multi-phase refactor approach for the authentication 
 
 ## Track A Status Snapshot
 
-- ✅ Invites and pairing issuance/redeem now run through `Auth.Onboarding`, with membership enforcement delegated to `Auth.Households` and controller errors normalized to `missing_household_id`.
-- ✅ `Auth.RateLimit` is the active façade (telemetry + Cachex handling); `Accounts.RateLimiter` remains as a shim until all callers migrate.
-- ✅ Passkey challenge responses ship `public_key_options` under both atom and string keys per the DDD contract.
-- 🚧 Recovery/identity migrations (Phases 5–6) and legacy façade retirement remain open.
-- 🚧 Deprecated auth shims stay in place until downstream callers finish moving to the new contexts.
+- ✅ Invites, pairing, sessions, passkeys, magic/OTP, and recovery all route through `Famichat.Auth.*`; controllers/plugs/tokens no longer call `Famichat.Accounts.*` directly.
+- ✅ `Famichat.Accounts` is now a thin deprecated façade delegating to the Auth contexts; `Accounts.Legacy`, `Accounts.Token`, and `Accounts.RateLimiter` have been removed.
+- ✅ `Famichat.Auth.Recovery` owns recovery issuance/redeem, disabling devices/passkeys, and telemetry.
+- 🚧 Identity/recovery roadmaps (Phases 5–6) still require new flows/tests as described in the DDD doc.
+- 🚧 mix_boundary configuration needs a follow-up pass to whitelist the cross-boundary schema usage.
 
 ## Phase 0 — Scaffolding, Boundaries, and Infrastructure (No Behavior Change)
 

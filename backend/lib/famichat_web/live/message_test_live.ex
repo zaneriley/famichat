@@ -13,10 +13,9 @@ defmodule FamichatWeb.MessageTestLive do
   use FamichatWeb, :live_view
   require Logger
 
-  alias Famichat.Auth.Sessions
+  alias Famichat.Auth.{Households, Identity, Sessions}
   alias Famichat.Chat.{Conversation, ConversationParticipant, Family}
   alias Famichat.Repo
-  alias Famichat.Accounts.HouseholdMembership
 
   @test_username "test-user"
 
@@ -94,10 +93,10 @@ defmodule FamichatWeb.MessageTestLive do
   end
 
   defp ensure_test_user! do
-    Repo.get_by(Famichat.Accounts.User, username: @test_username) ||
-      %Famichat.Accounts.User{}
-      |> Famichat.Accounts.User.changeset(%{username: @test_username})
-      |> Repo.insert!()
+    case Identity.ensure_user(%{"username" => @test_username}) do
+      {:ok, user} -> user
+      {:error, reason} -> Repo.rollback(reason)
+    end
   end
 
   defp ensure_self_conversation!(family, user) do
@@ -160,23 +159,9 @@ defmodule FamichatWeb.MessageTestLive do
   end
 
   defp ensure_membership!(user_id, family_id) do
-    case Repo.get_by(HouseholdMembership,
-           user_id: user_id,
-           family_id: family_id
-         ) do
-      %HouseholdMembership{} ->
-        :ok
-
-      nil ->
-        %HouseholdMembership{}
-        |> HouseholdMembership.changeset(%{
-          user_id: user_id,
-          family_id: family_id,
-          role: :admin
-        })
-        |> Repo.insert!()
-
-        :ok
+    case Households.upsert_membership(user_id, family_id, :admin) do
+      {:ok, _membership} -> :ok
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
 

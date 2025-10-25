@@ -6,11 +6,7 @@ defmodule Mix.Tasks.Famichat.VerifyUsernames do
   use Boundary, deps: [Famichat], exports: []
   use Mix.Task
 
-  alias Famichat.Accounts.User
-  alias Famichat.Accounts.Username
-  alias Famichat.Repo
-
-  import Ecto.Query
+  alias Famichat.Auth.Identity
 
   @shortdoc "Lists usernames and highlights fingerprint collisions"
 
@@ -18,17 +14,12 @@ defmodule Mix.Tasks.Famichat.VerifyUsernames do
   def run(_args) do
     Mix.Task.run("app.start")
 
-    users =
-      from(u in User,
-        select: {u.id, u.username, u.username_fingerprint},
-        order_by: [asc: u.inserted_at]
-      )
-      |> Repo.all()
+    users = Identity.list_users_for_username_audit()
 
     grouped =
       users
       |> Enum.group_by(fn {_id, username, _fingerprint} ->
-        Username.normalize(username)
+        Identity.normalize_username(username)
       end)
       |> Enum.reject(fn {normalized, list} ->
         normalized == nil or length(list) <= 1

@@ -1,7 +1,8 @@
 defmodule FamichatWeb.AuthControllerTest do
   use FamichatWeb.ConnCase, async: true
 
-  alias Famichat.{Accounts, Repo}
+  alias Famichat.Repo
+  alias Famichat.Auth.Sessions
   alias Famichat.ChatFixtures
   alias Famichat.Accounts.{User, UserDevice}
 
@@ -20,7 +21,7 @@ defmodule FamichatWeb.AuthControllerTest do
     ChatFixtures.membership_fixture(admin, family, :admin)
 
     {:ok, admin_session} =
-      Accounts.start_session(
+      Sessions.start_session(
         admin,
         %{id: Ecto.UUID.generate(), user_agent: "test-agent", ip: "127.0.0.1"},
         remember: true

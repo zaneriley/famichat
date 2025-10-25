@@ -6,7 +6,8 @@ defmodule Famichat.Auth.Households do
   use Boundary,
     exports: :all,
     deps: [
-      Famichat
+      Famichat,
+      Famichat.Accounts
     ]
 
   alias Ecto.Changeset

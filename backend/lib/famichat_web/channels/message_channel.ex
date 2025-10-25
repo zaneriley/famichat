@@ -6,10 +6,10 @@ defmodule FamichatWeb.MessageChannel do
 
   To connect to the messaging channel, clients must:
 
-  1. Obtain an authentication token via the Accounts session API:
+  1. Obtain an authentication token via the Auth session API:
      ```elixir
      {:ok, session} =
-       Famichat.Accounts.start_session(current_user, %{
+       Famichat.Auth.Sessions.start_session(current_user, %{
          id: "browser-session-uuid",
          user_agent: "Famichat Web Client",
          ip: "127.0.0.1"
@@ -32,7 +32,7 @@ defmodule FamichatWeb.MessageChannel do
        .receive("error", resp => console.log("Join failed", resp));
      ```
 
-  Access tokens are verified server-side via `Famichat.Accounts.verify_access_token/1`.
+  Access tokens are verified server-side via `Famichat.Auth.Sessions.verify_access_token/1`.
   Treat the token as a short-lived bearer credential tied to a specific device session.
 
   ## Message Payload Format
@@ -109,7 +109,7 @@ defmodule FamichatWeb.MessageChannel do
     MessageService
   }
 
-  alias Famichat.Accounts.User
+  alias Famichat.Auth.Identity
 
   alias Famichat.Repo
 
@@ -428,12 +428,7 @@ defmodule FamichatWeb.MessageChannel do
     end
   end
 
-  defp fetch_user(user_id) do
-    case Repo.get(User, user_id) do
-      %User{} = user -> {:ok, user}
-      nil -> {:error, :user_not_found}
-    end
-  end
+  defp fetch_user(user_id), do: Identity.fetch_user(user_id)
 
   defp authorize_conversation(conversation, user, _type) do
     authorized? =
