@@ -255,7 +255,7 @@ defmodule Famichat.Auth.Sessions do
 
   defp emit_refresh_metric(action, metadata) do
     :telemetry.execute(
-      [:auth_sessions, :refresh, action],
+      [:famichat, :auth, :sessions, :refresh, action],
       %{count: 1},
       metadata
     )

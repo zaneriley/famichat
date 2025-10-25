@@ -38,35 +38,46 @@ defmodule Famichat.Accounts.Legacy do
   @spec issue_invite(Ecto.UUID.t(), String.t() | nil, map()) ::
           {:ok, %{invite: token(), qr: token(), admin_code: String.t()}}
           | {:error, term()}
+
   def issue_invite(
         inviter_id,
         email,
-        %{family_id: family_id, role: role} = payload
+        %{role: role} = payload
       )
       when role in ["admin", "member", :admin, :member] do
-    Instrumentation.span(
-      [:famichat, :auth, :accounts, :issue_invite],
-      %{},
-      do:
-        case rate_limit(:"invite.issue", inviter_id, 20, 60) do
-          :ok -> do_issue_invite(inviter_id, email, payload, family_id)
-          error -> error
-        end
-    )
+    household_id = household_id_from_payload(payload)
+
+    if is_nil(household_id) do
+      {:error, :missing_household_id}
+    else
+      Instrumentation.span(
+        [:famichat, :auth, :accounts, :issue_invite],
+        %{},
+        do:
+          case rate_limit(:"invite.issue", inviter_id, 20, 60) do
+            :ok -> do_issue_invite(inviter_id, email, payload, household_id)
+            error -> error
+          end
+      )
+    end
   end
 
-  defp do_issue_invite(inviter_id, email, payload, family_id) do
+  defp do_issue_invite(inviter_id, email, payload, household_id) do
     Repo.transaction(fn ->
       with {:ok, inviter} <- fetch_user(inviter_id),
-           {:ok, membership} <- ensure_membership(inviter.id, family_id),
+           {:ok, membership} <- ensure_membership(inviter.id, household_id),
            true <- membership.role == :admin || {:error, :forbidden},
-           {:ok, _family} <- fetch_family(family_id),
+           {:ok, _family} <- fetch_family(household_id),
            payload_map <- invite_payload(payload, email),
            {:ok, %IssuedToken{raw: invite_raw, record: invite_record}} <-
              Tokens.issue(:invite, payload_map),
            {:ok, pairing_bundle} <-
              issue_pairing_tokens(invite_record, invite_raw) do
-        telemetry(:invite, :issue, %{family_id: family_id, inviter: inviter_id})
+        telemetry(:invite, :issue, %{
+          household_id: household_id,
+          inviter: inviter_id
+        })
+
         Map.put(pairing_bundle, :invite, invite_raw)
       else
         {:error, reason} -> Repo.rollback(reason)
@@ -76,16 +87,27 @@ defmodule Famichat.Accounts.Legacy do
   end
 
   defp invite_payload(payload, email) do
+    household_id = household_id_from_payload(payload)
+
     %{
-      "family_id" => payload.family_id,
+      "household_id" => household_id,
+      "family_id" => household_id,
       "role" => format_role(payload.role)
     }
     |> maybe_put_email_secret(email)
   end
 
+  defp household_id_from_payload(payload) do
+    Map.get(payload, :household_id) ||
+      Map.get(payload, "household_id") ||
+      Map.get(payload, :family_id) ||
+      Map.get(payload, "family_id")
+  end
+
   defp sanitize_invite_payload(payload) do
     payload
-    |> Map.take(["family_id", "role", "email_fingerprint"])
+    |> Map.put_new("household_id", Map.get(payload, "family_id"))
+    |> Map.take(["household_id", "role", "email_fingerprint"])
     |> Map.put("email_present", Map.has_key?(payload, "email_ciphertext"))
   end
 
@@ -169,14 +191,14 @@ defmodule Famichat.Accounts.Legacy do
       registration_token =
         sign_invite_registration_token(%{
           "invite_token_id" => invite.id,
-          "family_id" => payload["family_id"],
+          "family_id" => payload["household_id"] || payload["family_id"],
           "role" => payload["role"],
           "email_ciphertext" => Map.get(invite.payload, "email_ciphertext"),
           "email_fingerprint" => Map.get(invite.payload, "email_fingerprint")
         })
 
       telemetry(:invite, :accept, %{
-        family_id: payload["family_id"],
+        family_id: payload["household_id"] || payload["family_id"],
         invite_id: invite.id
       })
 
@@ -219,7 +241,10 @@ defmodule Famichat.Accounts.Legacy do
   def reissue_pairing(requester_id, invite_raw) when is_binary(invite_raw) do
     with {:ok, invite} <- Tokens.fetch(:invite, invite_raw),
          {:ok, membership} <-
-           ensure_membership(requester_id, invite.payload["family_id"]),
+           ensure_membership(
+             requester_id,
+             invite.payload["household_id"] || invite.payload["family_id"]
+           ),
          true <- membership.role == :admin || {:error, :forbidden} do
       issue_pairing_tokens(invite, invite_raw)
     end
@@ -240,7 +265,7 @@ defmodule Famichat.Accounts.Legacy do
              Tokens.default_ttl(:invite_registration)
            ) do
       Repo.transaction(fn ->
-        with {:ok, family} <- fetch_family(claims["family_id"]),
+        with {:ok, family} <- fetch_family(claims["household_id"] || claims["family_id"]),
              {:ok, user} <- create_user_from_invite(claims, attrs),
              {:ok, _membership} <-
                upsert_membership(user.id, family.id, claims["role"]),
@@ -785,22 +810,26 @@ defmodule Famichat.Accounts.Legacy do
 
   ## Helpers -----------------------------------------------------------------
 
-  defp ensure_membership(user_id, family_id) do
+  defp ensure_membership(user_id, household_id) do
     case Repo.get_by(HouseholdMembership,
            user_id: user_id,
-           family_id: family_id
+           family_id: household_id
          ) do
       %HouseholdMembership{} = membership -> {:ok, membership}
       nil -> {:error, :not_in_family}
     end
   end
 
-  defp upsert_membership(user_id, family_id, role) do
-    attrs = %{user_id: user_id, family_id: family_id, role: format_role(role)}
+  defp upsert_membership(user_id, household_id, role) do
+    attrs = %{
+      user_id: user_id,
+      family_id: household_id,
+      role: format_role(role)
+    }
 
     case Repo.get_by(HouseholdMembership,
            user_id: user_id,
-           family_id: family_id
+           family_id: household_id
          ) do
       nil ->
         %HouseholdMembership{}
@@ -877,8 +906,8 @@ defmodule Famichat.Accounts.Legacy do
     end
   end
 
-  defp fetch_family(family_id) do
-    case Repo.get(Family, family_id) do
+  defp fetch_family(household_id) do
+    case Repo.get(Family, household_id) do
       %Family{} = family -> {:ok, family}
       nil -> {:error, :family_not_found}
     end

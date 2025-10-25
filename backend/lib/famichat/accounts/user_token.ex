@@ -1,6 +1,8 @@
 defmodule Famichat.Accounts.UserToken do
   @moduledoc """
-  Single table for invite, confirmation, magic-link, reset, and pairing tokens.
+  Ledgered authentication tokens (invite, magic link, OTP, etc.).
+
+  Write owner: `Famichat.Auth.Tokens.Storage`.
   """
   use Ecto.Schema
   import Ecto.Changeset

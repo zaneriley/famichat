@@ -1,6 +1,8 @@
 defmodule Famichat.Accounts.UserDevice do
   @moduledoc """
-  Tracks refresh token state and trust window for a specific client device.
+  Persisted device state for session management.
+
+  Write owner: `Famichat.Auth.Sessions.DeviceStore`.
   """
   use Ecto.Schema
   import Ecto.Changeset

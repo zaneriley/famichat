@@ -13,13 +13,23 @@ defmodule FamichatWeb.AuthController do
               :revoke_device
             ]
 
-  def issue_invite(conn, %{"family_id" => family_id} = params) do
-    inviter_id = conn.assigns[:current_user_id]
-    role = Map.get(params, "role", "member")
-    email = Map.get(params, "email")
 
+def issue_invite(conn, params) do
+  inviter_id = conn.assigns[:current_user_id]
+  role = Map.get(params, "role", "member")
+  email = Map.get(params, "email")
+
+  household_id =
+    Map.get(params, "household_id") ||
+      Map.get(params, "family_id")
+
+  if is_nil(household_id) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "missing_household_id"}})
+  else
     case Accounts.issue_invite(inviter_id, email, %{
-           family_id: family_id,
+           household_id: household_id,
            role: role
          }) do
       {:ok, tokens} ->
@@ -42,18 +52,18 @@ defmodule FamichatWeb.AuthController do
       {:error, :forbidden} ->
         conn |> put_status(:forbidden) |> json(%{error: %{code: "forbidden"}})
 
+      {:error, :missing_household_id} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: %{code: "missing_household_id"}})
+
       {:error, reason} ->
         conn
         |> put_status(:unprocessable_entity)
         |> json(%{error: %{code: inspect(reason)}})
     end
   end
-
-  def issue_invite(conn, _params) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: %{code: "invalid_parameters"}})
-  end
+end
 
   def reissue_pairing(conn, %{"invite_token" => invite_token}) do
     requester_id = conn.assigns[:current_user_id]

@@ -4,9 +4,9 @@ defmodule Famichat.Auth.Sessions.TelemetryTest do
   alias Famichat.Auth.Sessions
   alias Famichat.ChatFixtures
 
-  @success_event [:auth_sessions, :refresh, :success]
-  @reuse_event [:auth_sessions, :refresh, :reuse_detected]
-  @invalid_event [:auth_sessions, :refresh, :invalid]
+  @success_event [:famichat, :auth, :sessions, :refresh, :success]
+  @reuse_event [:famichat, :auth, :sessions, :refresh, :reuse_detected]
+  @invalid_event [:famichat, :auth, :sessions, :refresh, :invalid]
 
   test "refresh success emits telemetry" do
     %{user: user, device_id: device_id, refresh_token: refresh_token} =

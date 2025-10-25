@@ -8,7 +8,7 @@ defmodule Famichat.Auth.TokensTest do
 
   describe "issue/3 for ledgered kinds" do
     test "applies default ttl and populates ledger metadata" do
-      payload = %{"family_id" => Ecto.UUID.generate(), "role" => "member"}
+      payload = %{"household_id" => Ecto.UUID.generate(), "role" => "member"}
 
       assert {:ok, %IssuedToken{} = issued} = Tokens.issue(:invite, payload)
       assert issued.class == :ledgered
@@ -23,7 +23,7 @@ defmodule Famichat.Auth.TokensTest do
     end
 
     test "allows overriding ttl" do
-      payload = %{"family_id" => Ecto.UUID.generate(), "role" => "member"}
+      payload = %{"household_id" => Ecto.UUID.generate(), "role" => "member"}
 
       assert {:ok, %IssuedToken{} = issued} =
                Tokens.issue(:invite, payload, ttl: 120)

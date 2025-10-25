@@ -1,6 +1,8 @@
 defmodule Famichat.Accounts.Passkey do
   @moduledoc """
   Stored WebAuthn credentials bound to a user.
+
+  Write owner: `Famichat.Auth.Passkeys`.
   """
   use Ecto.Schema
   import Ecto.Changeset

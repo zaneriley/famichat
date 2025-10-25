@@ -12,7 +12,7 @@ defmodule FamichatWeb.AuthControllerTest do
 
     admin =
       ChatFixtures.user_fixture(%{
-        family_id: family.id,
+        household_id: family.id,
         role: :admin,
         username: "admin_user"
       })
@@ -45,7 +45,7 @@ defmodule FamichatWeb.AuthControllerTest do
     invite_conn =
       conn
       |> post(~p"/api/v1/auth/invites", %{
-        family_id: family.id,
+        household_id: family.id,
         role: "member",
         email: "newuser@example.test"
       })
@@ -72,7 +72,7 @@ defmodule FamichatWeb.AuthControllerTest do
       |> json_response(200)
 
     assert pair_payload["invite_token"] == invite_token
-    assert pair_payload["payload"]["family_id"] == family.id
+    assert pair_payload["payload"]["household_id"] == family.id
 
     # Redeem pairing via admin code
     conn

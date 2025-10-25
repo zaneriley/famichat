@@ -1,8 +1,9 @@
 defmodule Famichat.Accounts.User do
   @moduledoc """
   Primary account record for Famichat users.
-  """
 
+  Write owner: `Famichat.Auth.Identity`.
+  """
   use Ecto.Schema
   import Ecto.Changeset
 
