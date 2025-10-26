@@ -10,7 +10,7 @@ defmodule Famichat.Auth.Onboarding do
       Famichat.Accounts,
       Famichat.Auth.Households,
       Famichat.Auth.Identity,
-      Famichat.Auth.Infra,
+      Famichat.Auth.Runtime,
       Famichat.Auth.RateLimit,
       Famichat.Auth.Tokens
     ]
@@ -18,7 +18,7 @@ defmodule Famichat.Auth.Onboarding do
   alias Famichat.Accounts.User
   alias Famichat.Auth.Households
   alias Famichat.Auth.Identity
-  alias Famichat.Auth.Infra.Instrumentation
+  alias Famichat.Auth.Runtime.Instrumentation
   alias Famichat.Auth.RateLimit
   alias Famichat.Auth.Tokens
   alias Famichat.Auth.Tokens.Storage, as: TokenStorage
@@ -27,7 +27,7 @@ defmodule Famichat.Auth.Onboarding do
   alias Famichat.Repo
   alias Famichat.Vault
 
-  require Famichat.Auth.Infra.Instrumentation
+  require Famichat.Auth.Runtime.Instrumentation
 
   @invite_issue_bucket :"invite.issue"
   @invite_accept_bucket :"invite.accept"
@@ -183,7 +183,7 @@ defmodule Famichat.Auth.Onboarding do
                       claims["role"]
                     ),
                   {:ok, %IssuedToken{raw: register_token}} <-
-                    Tokens.issue(:passkey_reg, %{"user_id" => user.id},
+                    Tokens.issue(:passkey_registration, %{"user_id" => user.id},
                       user_id: user.id
                     ) do
                emit_onboarding_event(:invite_completed, %{

@@ -107,7 +107,9 @@ defmodule Famichat.Auth.Identity do
       {:error, :username_required}
     else
       case fetch_user_by_username(username) do
-        {:ok, user} -> {:ok, user}
+        {:ok, user} ->
+          {:ok, user}
+
         {:error, :user_not_found} ->
           permitted
           |> Map.put(:username, username)
