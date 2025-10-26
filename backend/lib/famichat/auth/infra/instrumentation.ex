@@ -1,14 +1,13 @@
 defmodule Famichat.Auth.Infra.Instrumentation do
-  @moduledoc """
-  Null-op instrumentation scaffold for authentication contexts.
-  """
+  @moduledoc "Deprecated alias; use `Famichat.Auth.Runtime.Instrumentation`."
 
-  @doc """
-  Placeholder span macro. Wraps the provided block without telemetry.
-  """
-  defmacro span(_event, _metadata, do: block) do
+  @deprecated "use Famichat.Auth.Runtime.Instrumentation.span/3"
+  defmacro span(event, metadata, do: block) do
     quote do
-      unquote(block)
+      Famichat.Auth.Runtime.Instrumentation.span unquote(event),
+                                                 unquote(metadata) do
+        unquote(block)
+      end
     end
   end
 end

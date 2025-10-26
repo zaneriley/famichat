@@ -1,22 +1,12 @@
 defmodule Famichat.Auth.Infra.Audit do
-  @moduledoc """
-  Placeholder audit logger for authentication flows.
-  """
+  @moduledoc "Deprecated alias; use `Famichat.Auth.Runtime.Audit`."
 
   @typedoc "Audit event metadata."
-  @type record :: %{
-          event: String.t(),
-          actor_id: Ecto.UUID.t() | nil,
-          subject_id: Ecto.UUID.t() | nil,
-          family_id: Ecto.UUID.t() | nil,
-          context: map()
-        }
+  @type record :: Famichat.Auth.Runtime.Audit.record()
 
-  @doc """
-  Placeholder audit recorder.
-  """
+  @deprecated "use Famichat.Auth.Runtime.Audit.record/2"
   @spec record(String.t(), keyword()) :: :ok
-  def record(_event, _opts \\ []) do
-    :ok
+  def record(event, opts \\ []) do
+    Famichat.Auth.Runtime.Audit.record(event, opts)
   end
 end
