@@ -8,6 +8,7 @@ defmodule Famichat.Auth do
   area expected by external callers.
   """
 
+  alias Famichat.Accounts.User
   alias Famichat.Auth.Passkeys
   alias Famichat.Auth.Sessions
   alias Famichat.Auth.Tokens
@@ -23,7 +24,20 @@ defmodule Famichat.Auth do
   ## Passkeys -----------------------------------------------------------------
 
   defdelegate issue_registration_challenge(user, opts \\ []), to: Passkeys
-  defdelegate issue_assertion_challenge(user, opts \\ []), to: Passkeys
+
+  def issue_assertion_challenge(identifier)
+      when is_map(identifier) and not is_struct(identifier) do
+    Passkeys.issue_assertion_challenge(identifier)
+  end
+
+  def issue_assertion_challenge(identifier) when is_binary(identifier) do
+    Passkeys.issue_assertion_challenge(identifier)
+  end
+
+  def issue_assertion_challenge(%User{} = user, opts \\ []) do
+    Passkeys.issue_assertion_challenge(user, opts)
+  end
+
   defdelegate fetch_registration_challenge(handle), to: Passkeys
   defdelegate fetch_assertion_challenge(handle), to: Passkeys
   defdelegate consume_challenge(challenge), to: Passkeys
