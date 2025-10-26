@@ -3,8 +3,8 @@ defmodule Famichat.Auth.Passkeys.Challenge do
   WebAuthn challenge persistence layer.
 
   Challenges are single-use and expire based on token TTLs:
-  * Registration: #{Famichat.Auth.Tokens.Policy.default_ttl(:passkey_reg)} seconds
-  * Assertion: #{Famichat.Auth.Tokens.Policy.default_ttl(:passkey_assert)} seconds
+  * Registration: #{Famichat.Auth.Tokens.Policy.default_ttl(:passkey_registration)} seconds
+  * Assertion: #{Famichat.Auth.Tokens.Policy.default_ttl(:passkey_assertion)} seconds
 
   Consumed challenges are soft-deleted via `consumed_at`. A periodic cleanup job
   should remove expired or consumed rows to keep the table lean.

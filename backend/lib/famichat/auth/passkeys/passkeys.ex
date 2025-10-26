@@ -12,7 +12,7 @@ defmodule Famichat.Auth.Passkeys do
     deps: [
       Famichat,
       Famichat.Accounts,
-      Famichat.Auth.Infra,
+      Famichat.Auth.Runtime,
       Famichat.Auth.RateLimit,
       Famichat.Auth.Tokens
     ]
@@ -22,14 +22,14 @@ defmodule Famichat.Auth.Passkeys do
   alias Famichat.Accounts.{Passkey, User, Username}
   alias Famichat.Auth.Identity
   alias Famichat.Auth.Passkeys.Challenge
-  alias Famichat.Auth.Infra.Instrumentation
+  alias Famichat.Auth.Runtime.Instrumentation
   alias Famichat.Auth.RateLimit
   alias Famichat.Auth.Tokens
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens.Storage, as: TokenStorage
   alias Famichat.Repo
 
-  require Famichat.Auth.Infra.Instrumentation
+  require Famichat.Auth.Runtime.Instrumentation
   require Logger
 
   @challenge_size 32
@@ -138,7 +138,7 @@ defmodule Famichat.Auth.Passkeys do
   @spec exchange_registration_token(String.t()) ::
           {:ok, User.t()} | {:error, term()}
   def exchange_registration_token(raw_token) when is_binary(raw_token) do
-    with {:ok, token} <- Tokens.fetch(:passkey_reg, raw_token),
+    with {:ok, token} <- Tokens.fetch(:passkey_registration, raw_token),
          {:ok, user} <- Identity.fetch_user(token.payload["user_id"]),
          {:ok, _} <- Tokens.consume(token) do
       {:ok, user}
@@ -250,8 +250,11 @@ defmodule Famichat.Auth.Passkeys do
     )
   end
 
-  defp ttl_for(@registration_type), do: Policy.default_ttl(:passkey_reg)
-  defp ttl_for(@assertion_type), do: Policy.default_ttl(:passkey_assert)
+  defp ttl_for(@registration_type),
+    do: Policy.default_ttl(:passkey_registration)
+
+  defp ttl_for(@assertion_type),
+    do: Policy.default_ttl(:passkey_assertion)
 
   defp persist_challenge(user, type, ttl, opts) do
     challenge_bytes = :crypto.strong_rand_bytes(@challenge_size)
@@ -391,7 +394,7 @@ defmodule Famichat.Auth.Passkeys do
 
       :error ->
         Logger.warning(
-          "[Authenticators] Invalid user UUID for handle: #{inspect(uuid)}"
+          "[Passkeys] Invalid user UUID for handle: #{inspect(uuid)}"
         )
 
         raise ArgumentError, "user.id must be a valid UUID"

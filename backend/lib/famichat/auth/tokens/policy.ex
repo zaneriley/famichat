@@ -77,8 +77,8 @@ defmodule Famichat.Auth.Tokens.Policy do
                 signing_salt: "invite_registration_v1",
                 subject_strategy: :user_id
               },
-              passkey_reg: %Definition{
-                kind: :passkey_reg,
+              passkey_registration: %Definition{
+                kind: :passkey_registration,
                 storage: :ledgered,
                 ttl: 10 * 60,
                 max_ttl: 30 * 60,
@@ -86,8 +86,8 @@ defmodule Famichat.Auth.Tokens.Policy do
                 legacy_context: "passkey_register",
                 subject_strategy: :user_id
               },
-              passkey_assert: %Definition{
-                kind: :passkey_assert,
+              passkey_assertion: %Definition{
+                kind: :passkey_assertion,
                 storage: :ledgered,
                 ttl: 5 * 60,
                 max_ttl: 15 * 60,
@@ -131,8 +131,8 @@ defmodule Famichat.Auth.Tokens.Policy do
                 signing_salt: "user_access_v1",
                 subject_strategy: :device_id
               },
-              device_refresh: %Definition{
-                kind: :device_refresh,
+              session_refresh: %Definition{
+                kind: :session_refresh,
                 storage: :device_secret,
                 ttl: 30 * 24 * 60 * 60,
                 max_ttl: 90 * 24 * 60 * 60,
@@ -141,11 +141,25 @@ defmodule Famichat.Auth.Tokens.Policy do
               }
             })
 
+  @legacy_kind_map %{
+    invite: "invite",
+    pair_qr: "pair_qr",
+    pair_admin_code: "pair_admin_code",
+    invite_registration: "invite_registration",
+    passkey_registration: "passkey_reg",
+    passkey_assertion: "passkey_assert",
+    magic_link: "magic_link",
+    otp: "otp",
+    recovery: "recovery",
+    access: nil,
+    session_refresh: "device_refresh"
+  }
+
   @doc "Returns the canonical policy for the provided token kind."
   @spec policy!(Famichat.Auth.Tokens.kind()) :: Definition.t()
   def policy!(kind) do
     policy_map()
-    |> Map.fetch!(kind)
+    |> Map.fetch!(canonicalize_kind(kind))
     |> enforce_bounds()
   end
 
@@ -165,11 +179,25 @@ defmodule Famichat.Auth.Tokens.Policy do
   @spec legacy_context(Famichat.Auth.Tokens.kind()) :: String.t() | nil
   def legacy_context(kind), do: policy!(kind).legacy_context
 
+  @doc """
+  Legacy string stored in the database for the provided token kind.
+  """
+  @spec legacy_kind_string(Famichat.Auth.Tokens.kind()) :: String.t() | nil
+  def legacy_kind_string(kind) do
+    canonical_kind = canonicalize_kind(kind)
+    Map.fetch!(@legacy_kind_map, canonical_kind)
+  end
+
   @doc "Raw policy map (kind => policy)."
   @spec policy_map() :: %{
           optional(Famichat.Auth.Tokens.kind()) => Definition.t()
         }
   def policy_map, do: unquote(@policies)
+
+  defp canonicalize_kind(:passkey_reg), do: :passkey_registration
+  defp canonicalize_kind(:passkey_assert), do: :passkey_assertion
+  defp canonicalize_kind(:device_refresh), do: :session_refresh
+  defp canonicalize_kind(kind), do: kind
 
   defp enforce_bounds(%Definition{} = policy) do
     ttl = min(policy.ttl, policy.max_ttl)

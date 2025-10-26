@@ -9,15 +9,15 @@ defmodule Famichat.Auth.Sessions do
       Famichat,
       Famichat.Accounts,
       Famichat.Auth.Identity,
-      Famichat.Auth.Infra,
+      Famichat.Auth.Runtime,
       Famichat.Auth.RateLimit,
       Famichat.Auth.Tokens
     ]
 
   require Logger
-  require Famichat.Auth.Infra.Instrumentation
+  require Famichat.Auth.Runtime.Instrumentation
   alias Famichat.Accounts.{User, UserDevice}
-  alias Famichat.Auth.Infra.Instrumentation
+  alias Famichat.Auth.Runtime.Instrumentation
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens
   alias Famichat.Auth.IssuedToken
@@ -27,7 +27,7 @@ defmodule Famichat.Auth.Sessions do
   alias Famichat.Repo
 
   @access_kind :access
-  @refresh_kind :device_refresh
+  @refresh_kind :session_refresh
   @refresh_ttl Policy.default_ttl(@refresh_kind)
 
   @spec start_session(User.t(), map(), keyword()) ::
@@ -42,7 +42,9 @@ defmodule Famichat.Auth.Sessions do
 
   defp do_start_session(%User{} = user, device_info, opts)
        when is_map(device_info) do
-    want_remember? = Keyword.get(opts, :remember, false)
+    want_remember? =
+      Keyword.get(opts, :remember_device?, Keyword.get(opts, :remember, false))
+
     can_remember? = policy_allows_remembering?(user)
     should_remember? = want_remember? and can_remember?
 
@@ -264,9 +266,9 @@ defmodule Famichat.Auth.Sessions do
 
   defp emit_refresh_metric(action, metadata) do
     :telemetry.execute(
-      [:famichat, :auth, :sessions, :refresh, action],
+      [:famichat, :auth, :sessions, :refresh],
       %{count: 1},
-      metadata
+      Map.put(metadata, :result, action)
     )
   end
 end

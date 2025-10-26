@@ -21,19 +21,25 @@ defmodule Famichat.Auth.Tokens do
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens.Policy.Definition
 
-  @typedoc "Token kinds supported by the auth refactor."
-  @type kind ::
+  @typedoc "Canonical token kinds supported by the auth boundary."
+  @type canonical_kind ::
           :invite
           | :pair_qr
           | :pair_admin_code
           | :invite_registration
-          | :passkey_reg
-          | :passkey_assert
+          | :passkey_registration
+          | :passkey_assertion
           | :magic_link
           | :otp
           | :recovery
           | :access
-          | :device_refresh
+          | :session_refresh
+
+  @typedoc "Legacy aliases accepted temporarily for compatibility."
+  @type legacy_kind_alias :: :passkey_reg | :passkey_assert | :device_refresh
+
+  @typedoc "Token kinds accepted by the auth boundary."
+  @type kind :: canonical_kind() | legacy_kind_alias()
 
   @typedoc "Options accepted when issuing tokens."
   @type issue_opts :: [
@@ -60,9 +66,10 @@ defmodule Famichat.Auth.Tokens do
           {:ok, IssuedToken.t()} | {:error, term()}
   def issue(kind, payload, opts \\ []) when is_map(payload) do
     policy = Policy.policy!(kind)
+    canonical_kind = policy.kind
     opts_with_ttl = Keyword.put_new(opts, :ttl, policy.ttl)
 
-    kind
+    canonical_kind
     |> do_issue(policy, payload, opts_with_ttl)
     |> with_telemetry(:issued, policy)
   end
@@ -75,10 +82,15 @@ defmodule Famichat.Auth.Tokens do
 
     maybe_emit_subject_metric(kind, policy.subject_strategy, subject_id)
 
+    kind_string =
+      Policy.legacy_kind_string(kind) ||
+        raise ArgumentError,
+              "ledgered token #{inspect(kind)} is missing a legacy kind string"
+
     token_opts =
       opts
       |> Keyword.delete(:context)
-      |> Keyword.put(:kind, Atom.to_string(kind))
+      |> Keyword.put(:kind, kind_string)
       |> maybe_put(:audience, audience)
       |> maybe_put(:subject_id, subject_id)
 
@@ -184,7 +196,7 @@ defmodule Famichat.Auth.Tokens do
 
     case policy.storage do
       :signed ->
-        salt = policy.signing_salt || raise_missing_salt(kind)
+        salt = policy.signing_salt || raise_missing_salt(policy.kind)
         Storage.sign(payload, salt, opts)
 
       storage ->
@@ -203,7 +215,7 @@ defmodule Famichat.Auth.Tokens do
 
     case policy.storage do
       :signed ->
-        salt = policy.signing_salt || raise_missing_salt(kind)
+        salt = policy.signing_salt || raise_missing_salt(policy.kind)
         max_age = Keyword.get(opts, :max_age, policy.ttl)
         Storage.verify(token, salt, Keyword.put(opts, :max_age, max_age))
 
