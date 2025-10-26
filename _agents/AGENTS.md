@@ -27,7 +27,7 @@ Distinguish between what a caller *wants* and what the system *decides*.
 ### 3.2. Function Signatures & Composition
 *   **"Mystery Meat" Arguments:** Avoid functions taking multiple bare boolean arguments. Use keyword lists or options maps.
     *   *Bad:* `start_session(user, device_id, ua, ip, true, false)`
-    *   *Good:* `start_session(user, device_info, remember: true, force: false)`
+    *   *Good:* `start_session(user, device_info, remember_device?: true, force: false)`
 *   **Pipeline Clarity:** Use pipelines (`|>`) for data transformations. Use `with` blocks for sequences of operations that might fail. Do not mix them arbitrarily.
 
 ## 4. Error Handling & Data Flow
