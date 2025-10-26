@@ -24,14 +24,14 @@ defmodule Famichat.Accounts.FacadeConformanceTest do
   describe "session façade parity" do
     test "start_session", %{user: user, device_info: device_info} do
       assert compare_flow(fn mod ->
-               mod.start_session(user, device_info, remember: true)
+               mod.start_session(user, device_info, remember_device?: true)
              end)
     end
 
     test "refresh_session", %{user: user, device_info: device_info} do
       assert compare_flow(fn mod ->
                {:ok, session} =
-                 mod.start_session(user, device_info, remember: true)
+                 mod.start_session(user, device_info, remember_device?: true)
 
                mod.refresh_session(session.device_id, session.refresh_token)
              end)
@@ -40,7 +40,7 @@ defmodule Famichat.Accounts.FacadeConformanceTest do
     test "revoke_device", %{user: user, device_info: device_info} do
       assert compare_flow(fn mod ->
                {:ok, session} =
-                 mod.start_session(user, device_info, remember: false)
+                 mod.start_session(user, device_info, remember_device?: false)
 
                mod.revoke_device(user.id, session.device_id)
              end)
@@ -49,7 +49,7 @@ defmodule Famichat.Accounts.FacadeConformanceTest do
     test "verify_access_token", %{user: user, device_info: device_info} do
       assert compare_flow(fn mod ->
                {:ok, session} =
-                 mod.start_session(user, device_info, remember: true)
+                 mod.start_session(user, device_info, remember_device?: true)
 
                mod.verify_access_token(session.access_token)
              end)
@@ -58,14 +58,14 @@ defmodule Famichat.Accounts.FacadeConformanceTest do
     test "require_reauth?", %{user: user, device_info: device_info} do
       assert compare_flow(fn mod ->
                {:ok, session} =
-                 mod.start_session(user, device_info, remember: true)
+                 mod.start_session(user, device_info, remember_device?: true)
 
                mod.require_reauth?(user.id, session.device_id, :test)
              end)
 
       assert compare_flow(fn mod ->
                {:ok, session} =
-                 mod.start_session(user, device_info, remember: true)
+                 mod.start_session(user, device_info, remember_device?: true)
 
                Repo.get_by!(Famichat.Accounts.UserDevice,
                  device_id: session.device_id

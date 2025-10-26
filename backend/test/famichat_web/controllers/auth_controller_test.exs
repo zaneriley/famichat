@@ -24,7 +24,7 @@ defmodule FamichatWeb.AuthControllerTest do
       Sessions.start_session(
         admin,
         %{id: Ecto.UUID.generate(), user_agent: "test-agent", ip: "127.0.0.1"},
-        remember: true
+        remember_device?: true
       )
 
     %{family: family, admin: admin, admin_session: admin_session}

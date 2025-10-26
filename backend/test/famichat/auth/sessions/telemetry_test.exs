@@ -4,27 +4,26 @@ defmodule Famichat.Auth.Sessions.TelemetryTest do
   alias Famichat.Auth.Sessions
   alias Famichat.ChatFixtures
 
-  @success_event [:famichat, :auth, :sessions, :refresh, :success]
-  @reuse_event [:famichat, :auth, :sessions, :refresh, :reuse_detected]
-  @invalid_event [:famichat, :auth, :sessions, :refresh, :invalid]
+  @refresh_event [:famichat, :auth, :sessions, :refresh]
 
   test "refresh success emits telemetry" do
     %{user: user, device_id: device_id, refresh_token: refresh_token} =
       start_session()
 
     events =
-      capture(@success_event, fn ->
+      capture(@refresh_event, fn ->
         assert {:ok, %{refresh_token: new_refresh}} =
                  Sessions.refresh_session(device_id, refresh_token)
 
         new_refresh
       end)
 
-    assert [event] = events
-    assert event.event == @success_event
+    assert [event] = filter_metric_events(events)
+    assert event.event == @refresh_event
     assert event.measurements == %{count: 1}
     assert event.metadata[:device_id] == device_id
     assert event.metadata[:user_id] == user.id
+    assert event.metadata[:result] == :success
   end
 
   test "refresh reuse emits telemetry" do
@@ -35,34 +34,36 @@ defmodule Famichat.Auth.Sessions.TelemetryTest do
       Sessions.refresh_session(device_id, refresh_token)
 
     events =
-      capture(@reuse_event, fn ->
+      capture(@refresh_event, fn ->
         assert {:error, :reuse_detected} =
                  Sessions.refresh_session(device_id, refresh_token)
 
         new_refresh
       end)
 
-    assert [event] = events
-    assert event.event == @reuse_event
+    assert [event] = filter_metric_events(events)
+    assert event.event == @refresh_event
     assert event.measurements == %{count: 1}
     assert event.metadata[:device_id] == device_id
     assert event.metadata[:user_id] == user.id
+    assert event.metadata[:result] == :reuse_detected
   end
 
   test "invalid refresh emits telemetry" do
     %{device_id: device_id} = start_session()
 
     events =
-      capture(@invalid_event, fn ->
+      capture(@refresh_event, fn ->
         assert {:error, _reason} =
                  Sessions.refresh_session(device_id, "bogus-token")
       end)
 
-    assert [event] = events
-    assert event.event == @invalid_event
+    assert [event] = filter_metric_events(events)
+    assert event.event == @refresh_event
     assert event.measurements == %{count: 1}
     assert event.metadata[:device_id] == device_id
     assert event.metadata[:reason]
+    assert event.metadata[:result] == :invalid
   end
 
   defp start_session do
@@ -75,7 +76,8 @@ defmodule Famichat.Auth.Sessions.TelemetryTest do
       ip: "127.0.0.1"
     }
 
-    {:ok, session} = Sessions.start_session(user, device_info, remember: true)
+    {:ok, session} =
+      Sessions.start_session(user, device_info, remember_device?: true)
 
     %{
       user: user,
@@ -110,5 +112,11 @@ defmodule Famichat.Auth.Sessions.TelemetryTest do
     after
       100 -> Enum.reverse(acc)
     end
+  end
+
+  defp filter_metric_events(events) do
+    Enum.filter(events, fn %{metadata: metadata} ->
+      Map.has_key?(metadata, :result)
+    end)
   end
 end

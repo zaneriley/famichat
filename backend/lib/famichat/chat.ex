@@ -7,6 +7,8 @@ defmodule Famichat.Chat do
   alias Famichat.Repo
   alias Famichat.Chat.Family
   alias Famichat.Accounts.User
+  alias Famichat.Auth.Households
+  alias Famichat.Auth.Identity
 
   @doc """
   Returns the list of families.
@@ -111,47 +113,42 @@ defmodule Famichat.Chat do
   def create_user(attrs) when is_map(attrs) do
     family_id = Map.get(attrs, :family_id) || Map.get(attrs, "family_id")
     role = Map.get(attrs, :role) || Map.get(attrs, "role")
-    user_attrs = Map.drop(attrs, [:family_id, :role, "family_id", "role"])
+
+    user_attrs =
+      attrs
+      |> Map.drop([:family_id, :role, "family_id", "role"])
+      |> Identity.permit_user_attrs()
+
+    normalized_role = normalize_role(role)
 
     Repo.transaction(fn ->
-      with {:ok, user} <- insert_user(user_attrs),
-           {:ok, _} <- ensure_membership(user, family_id, role) do
+      with {:ok, user} <- Identity.ensure_user(user_attrs),
+           {:ok, _} <- ensure_membership(user.id, family_id, normalized_role) do
         user
       else
-        {:error, reason} -> Repo.rollback(reason)
+        {:error, %Ecto.Changeset{} = changeset} ->
+          Repo.rollback(changeset)
+
+        {:error, :username_required} ->
+          Repo.rollback(User.changeset(%User{}, user_attrs))
+
+        {:error, reason} ->
+          Repo.rollback(reason)
       end
     end)
     |> case do
       {:ok, user} -> {:ok, user}
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
   end
 
   def create_user(_), do: {:error, :invalid_input}
 
-  defp insert_user(attrs) do
-    %User{}
-    |> User.changeset(attrs)
-    |> Repo.insert()
-  rescue
-    _ -> {:error, :invalid_input}
-  end
+  defp ensure_membership(_user_id, nil, _role), do: {:ok, :skipped}
 
-  defp ensure_membership(_user, nil, _role), do: {:ok, :skipped}
-
-  defp ensure_membership(user, family_id, role) do
-    normalized_role = normalize_role(role)
-
-    %Famichat.Accounts.HouseholdMembership{}
-    |> Famichat.Accounts.HouseholdMembership.changeset(%{
-      user_id: user.id,
-      family_id: family_id,
-      role: normalized_role
-    })
-    |> Repo.insert(
-      on_conflict: {:replace, [:role]},
-      conflict_target: [:family_id, :user_id]
-    )
+  defp ensure_membership(user_id, family_id, role) do
+    Households.upsert_membership(user_id, family_id, role)
   end
 
   @doc """

@@ -149,7 +149,11 @@ defmodule FamichatWeb.MessageTestLive do
       ip: "127.0.0.1"
     }
 
-    case Sessions.start_session(user, device_info, remember: false) do
+    case Sessions.start_session(
+           user,
+           device_info,
+           remember_device?: false
+         ) do
       {:ok, %{access_token: access_token}} ->
         %{access_token: access_token, user: user}
 

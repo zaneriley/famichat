@@ -18,7 +18,8 @@ defmodule Famichat.Auth.Sessions.RotationPolicyPropertyTest do
         ip: "127.0.0.1"
       }
 
-      {:ok, session} = Sessions.start_session(user, device_info, remember: true)
+      {:ok, session} =
+        Sessions.start_session(user, device_info, remember_device?: true)
 
       tokens =
         Enum.reduce(1..rotation_count, [session.refresh_token], fn _, acc ->

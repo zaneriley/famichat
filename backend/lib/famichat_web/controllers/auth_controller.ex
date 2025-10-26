@@ -299,7 +299,11 @@ defmodule FamichatWeb.AuthController do
 
     with {:ok, %{user: user}} <- Passkeys.assert_passkey(params),
          {:ok, session} <-
-           Sessions.start_session(user, device_info, remember: remember?) do
+           Sessions.start_session(
+             user,
+             device_info,
+             remember_device?: remember?
+           ) do
       conn
       |> put_status(:created)
       |> json(session)
