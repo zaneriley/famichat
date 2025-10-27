@@ -368,6 +368,16 @@ Each phase is a small PR with explicit acceptance checks and rollbacks.
   **Acceptance**: External callers import `Famichat.Auth`; no new references to `Famichat.Accounts` façade.
   **Rollback**: Keep aliases longer.
 
+**B7. Recovery scopes and audit log**
+
+* Extend `Auth.Recovery.issue_recovery/3` to accept scoped requests (`:target_user`, `:household`, `:global`), defaulting to `:target_user` when the `:recovery_scopes_v1` flag is disabled.
+* Embed `scope` and optional `household_id` in recovery token payloads; legacy tokens without those keys continue to redeem as `:target_user`.
+* Implement scoped containment in `redeem_recovery/1`, calling new helpers (`Sessions.revoke_all_for_user/1`, `Sessions.revoke_all_for_household/2`, passkey disable loops) and marking every affected user as enrollment-required.
+* Introduce `auth_audit_logs` table + `Auth.Runtime.Audit.record/2` that stores `{event, actor_id, subject_id, household_id, scope, metadata}` with indexes for review; write a row for both issue and redeem.
+* Telemetry under `[:famichat, :auth, :recovery, action]` must include `scope`/`household_id` without leaking secrets; alert if `:global` scope fires while `:recovery_global_allowed` is off.
+  **Acceptance**: Flags gate the behaviour (disabled -> legacy flow, enabled -> scoped). Authorization tests pass, audit rows exist per affected user, telemetry metadata passes the “no raw token/code/email” grep.
+  **Rollback**: Disable `:recovery_scopes_v1` to return to the original behaviour; audit table and helpers remain for future use.
+
 ---
 
 ## 15) Verification matrix (CI gates)

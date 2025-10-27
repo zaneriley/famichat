@@ -240,16 +240,24 @@ Stop “nuke all” by default, add scoped blast radius, and make actions audita
 
 **Scope**
 
-- Recovery context:
-  - `issue_recovery(admin_id, user_id, scope \\ :target_user)`.  
-  - `redeem_recovery(token)` orchestrates via contracts only:
-    - `Sessions.revoke_device/2` | `revoke_all_for_user/1` | `revoke_all_for_household/3`.  
-    - `Passkeys.disable_all_for_user/1`.  
-  - `Identity.mark_enrollment_required/1` after containment.
-- `Audit.record/…` called for both issue and redeem with scope and `family_id`.
+- Recovery API:
+  - `issue_recovery(admin_id, user_id, opts \\ [])` accepts `scope` (`:target_user` default).  
+    - When `:recovery_scopes_v1` is disabled, always falls back to `:target_user`.  
+    - When enabled, validates scope and resolves a single shared `household_id` for `:household`; `:global` requires `:recovery_global_allowed`.  
+    - Tokens encode `scope` + optional `household_id` in their payload (snake_case keys).  
+    - Emits telemetry `%{scope: scope, household_id: household_id}` and records an audit row for each affected household/user.
+  - `redeem_recovery(raw_token)` reads scope from the token (defaults to `:target_user` for legacy rows) and executes scoped containment:
+    - `:target_user`: revoke all sessions/passkeys for the target.  
+    - `:household`: revoke sessions/passkeys for every household member via new helpers.  
+    - `:global`: only honoured when `:recovery_global_allowed` is on.  
+    - Marks each impacted user with `Identity.enter_enrollment_required_state/1`, consumes the token, emits telemetry, and writes audit rows.
+- New helpers:
+  - `Famichat.Auth.Sessions.revoke_all_for_user/1` and `revoke_all_for_household/2` (admin_id, household_id) with telemetry.  
+  - Household-aware passkey disable helper (or iteration) that reuses existing APIs without leaking PII.
+- Observability: telemetry stays under `[:famichat, :auth, :recovery, action]` with `scope`/`household_id` metadata; audit job checks for unauthorized `:global` events.
 
 **Migrations**  
-`auth_audit_logs` table (`event`, `actor_id`, `subject_id`, `family_id`, `context`, `inserted_at`).
+`auth_audit_logs` table (`event`, `actor_id`, `subject_id`, `household_id`, `scope`, `metadata`, `inserted_at`) plus appropriate indexes (`event+inserted_at`, `household_id+inserted_at`).
 
 **Feature Flags**
 
@@ -258,13 +266,26 @@ Stop “nuke all” by default, add scoped blast radius, and make actions audita
 
 **Tests**
 
-- Authorization: `:household_user` requires shared family admin; failing cases return `{:forbidden, :not_in_household}`.  
-- Audit: one row per affected family; `family_id: nil` requires `:recovery_global_allowed`.
+- Issue:
+  - Returns `{:ok, token, record}` for default scope, and payload contains `"scope" => "target_user"` with no `household_id`.
+  - With `scope: :household`, succeeds only when exactly one shared household exists; ambiguous or missing membership errors (`{:error, :ambiguous_household}` / `{:error, :forbidden}`).
+  - `scope: :global` is rejected until explicitly enabled.
+- Redeem:
+  - `:target_user` token revokes only that user’s sessions/passkeys, marks enrollment-required, emits telemetry/audit (no PII in metadata), and consumes the token.
+  - `:household` token revokes every member in the household, marks each enrollment-required, writes per-member audit rows, and emits telemetry.
+  - Tokens missing `"scope"` default to `:target_user` and redeem successfully.
+  - `:global` tokens are rejected (mirrors issue behavior).
+- Helpers:
+  - `Sessions.revoke_all_for_user/1` and `revoke_all_for_household/2` revoke devices and emit session telemetry.
+  - Household passkey disable flow covers every affected user.
+- Audit:
+  - Issuing/redeeming create rows with correct `event`, `actor_id`, `subject_id`, `household_id`, `scope`, `metadata`.
+  - Failure paths (e.g., unauthorized admin) do not create audit rows.
 
 **Observability**
 
-- Telemetry under `[:famichat, :auth, :recovery, ...]` includes scope metadata; alert if `:global` events occur without the flag.  
-- Weekly audit review: job that asserts no “global without flag”.
+- Telemetry already under the canonical root—ensure PII-free metadata (`scope`, `household_id`, `admin_id`, `subject_id`).  
+- Weekly audit review job validates no `:global` events appear while the allow flag is disabled.
 
 **Rollout**
 
