@@ -40,6 +40,35 @@ defmodule Famichat.Auth.Passkeys do
   @challenge_salt "webauthn_challenge_v1"
 
   @doc """
+  Disables all active passkeys for the given user. Emits a telemetry event
+  when any passkeys are disabled.
+  """
+  @spec disable_all_for_user(Ecto.UUID.t()) :: :ok
+  def disable_all_for_user(user_id) do
+    query =
+      from p in Passkey,
+        where: p.user_id == ^user_id and is_nil(p.disabled_at)
+
+    {count, _} =
+      Repo.update_all(query, set: [disabled_at: DateTime.utc_now()])
+
+    if count > 0 do
+      emit_passkey_event(:disabled_all, %{user_id: user_id, count: count})
+    end
+
+    :ok
+  end
+
+  @doc """
+  Disables passkeys for each user in the provided list.
+  """
+  @spec disable_all_for_users([Ecto.UUID.t()]) :: :ok
+  def disable_all_for_users(user_ids) when is_list(user_ids) do
+    Enum.each(user_ids, &disable_all_for_user/1)
+    :ok
+  end
+
+  @doc """
   Issues a registration challenge for the provided user.
   """
   @spec issue_registration_challenge(User.t(), keyword()) ::

@@ -9,16 +9,19 @@ defmodule Famichat.Auth.Sessions do
     deps: [
       Famichat,
       Famichat.Accounts,
+      Famichat.Auth.Households,
       Famichat.Auth.Identity,
       Famichat.Auth.RateLimit,
       Famichat.Auth.Runtime,
       Famichat.Auth.Tokens
     ]
 
+  import Ecto.Query
   require Logger
   require Famichat.Auth.Runtime.Instrumentation
-  alias Famichat.Accounts.{User, UserDevice}
+  alias Famichat.Accounts.{HouseholdMembership, User, UserDevice}
   alias Famichat.Auth.Runtime.Instrumentation
+  alias Famichat.Auth.Households
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens
   alias Famichat.Auth.IssuedToken
@@ -271,5 +274,41 @@ defmodule Famichat.Auth.Sessions do
       %{count: 1},
       Map.put(metadata, :result, action)
     )
+  end
+
+  @spec revoke_all_for_user(Ecto.UUID.t()) :: :ok
+  def revoke_all_for_user(user_id) do
+    from(d in UserDevice,
+      where: d.user_id == ^user_id and is_nil(d.revoked_at)
+    )
+    |> Repo.all()
+    |> Enum.each(fn device ->
+      case DeviceStore.revoke(device) do
+        {:ok, _} ->
+          telemetry(:revoke, %{user_id: user_id, device_id: device.device_id})
+
+        {:error, _changeset} ->
+          :ok
+      end
+    end)
+
+    :ok
+  end
+
+  @spec revoke_all_for_household(Ecto.UUID.t(), Ecto.UUID.t()) ::
+          :ok | {:error, :forbidden | :not_in_household}
+  def revoke_all_for_household(admin_id, household_id) do
+    with {:ok, _membership} <-
+           Households.ensure_admin_membership(admin_id, household_id) do
+      member_ids =
+        from(m in HouseholdMembership,
+          where: m.family_id == ^household_id,
+          select: m.user_id
+        )
+        |> Repo.all()
+
+      Enum.each(member_ids, &revoke_all_for_user/1)
+      :ok
+    end
   end
 end
