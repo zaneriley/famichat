@@ -44,6 +44,10 @@ defmodule FamichatWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :api_authenticated do
+    plug FamichatWeb.Plugs.BearerAuth
+  end
+
   scope "/api/v1", FamichatWeb do
     pipe_through :api
 
@@ -73,6 +77,13 @@ defmodule FamichatWeb.Router do
     post "/auth/otp/verify", AuthController, :verify_otp
     post "/auth/recovery", AuthController, :issue_recovery
     post "/auth/recovery/redeem", AuthController, :redeem_recovery
+  end
+
+  scope "/api/v1", FamichatWeb.API do
+    pipe_through [:api, :api_authenticated]
+
+    get "/me/conversations", ChatReadController, :index_me_conversations
+    get "/conversations/:id/messages", ChatReadController, :index_messages
   end
 
   # Enables LiveDashboard only for development.

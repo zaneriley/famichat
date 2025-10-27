@@ -275,13 +275,7 @@ Errors live under `Famichat.Auth.Errors` (not in `Accounts`).
 
 * `Famichat.Accounts` façade remains for one release, marked `@deprecated`, delegating to `Famichat.Auth`.
 * `Accounts.FamilyMembership` becomes an alias to `Accounts.HouseholdMembership`.
-* Old modules preserved as wrappers for one release with `@deprecated`:
-
-  * `Auth.Authenticators` → delegates to `Auth.Passkeys`
-  * `Auth.Infra.Tokens` → delegates to `Auth.Tokens.Storage`
-  * `Auth.TokenPolicy` → delegates to `Auth.Tokens.Policy`
-  * `Auth.Sessions.Device` → delegates to `Auth.Sessions.DeviceStore`
-  * `Auth.Sessions.RotationPolicy` → delegates to `Auth.Sessions.RefreshRotation`
+* Deprecated compatibility shims have now been removed (`Auth.Infra.*`, `Auth.TokenPolicy`, `Auth.Sessions.Device`, `Auth.Sessions.RotationPolicy`). Only `Auth.Authenticators` remains temporarily as a pass-through to `Auth.Passkeys` while external callers finish migrating.
 
 ---
 

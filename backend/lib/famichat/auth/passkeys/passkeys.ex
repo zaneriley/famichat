@@ -8,12 +8,14 @@ defmodule Famichat.Auth.Passkeys do
   """
 
   use Boundary,
+    top_level?: true,
     exports: :all,
     deps: [
       Famichat,
       Famichat.Accounts,
-      Famichat.Auth.Runtime,
+      Famichat.Auth.Identity,
       Famichat.Auth.RateLimit,
+      Famichat.Auth.Runtime,
       Famichat.Auth.Tokens
     ]
 

@@ -4,6 +4,7 @@ defmodule Famichat.Auth.Runtime do
   """
 
   use Boundary,
+    top_level?: true,
     exports: :all,
     deps: [
       Famichat,

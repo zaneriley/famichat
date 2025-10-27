@@ -3,6 +3,16 @@ defmodule Famichat.Chat do
   The Chat context.
   """
 
+  use Boundary,
+    top_level?: true,
+    exports: :all,
+    deps: [
+      Famichat,
+      Famichat.Accounts,
+      Famichat.Auth.Households,
+      Famichat.Auth.Identity
+    ]
+
   import Ecto.Query, warn: false
   alias Famichat.Repo
   alias Famichat.Chat.Family

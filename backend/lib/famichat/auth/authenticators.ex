@@ -4,6 +4,13 @@ defmodule Famichat.Auth.Authenticators do
   """
   @deprecated "use Famichat.Auth.Passkeys"
 
+  use Boundary,
+    top_level?: true,
+    exports: :all,
+    deps: [
+      Famichat.Auth.Passkeys
+    ]
+
   defdelegate issue_registration_challenge(user, opts \\ []),
     to: Famichat.Auth.Passkeys
 

@@ -18,7 +18,18 @@ defmodule FamichatWeb do
   """
 
   use Boundary,
-    deps: [Famichat],
+    deps: [
+      Famichat,
+      Famichat.Accounts,
+      Famichat.Auth.Households,
+      Famichat.Auth.Identity,
+      Famichat.Auth.Onboarding,
+      Famichat.Auth.Passkeys,
+      Famichat.Auth.RateLimit,
+      Famichat.Auth.Recovery,
+      Famichat.Auth.Sessions,
+      Famichat.Chat
+    ],
     exports: [Endpoint]
 
   def static_paths,

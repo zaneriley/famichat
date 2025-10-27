@@ -154,7 +154,6 @@ use these atoms in code; map to legacy `user_tokens.kind` strings centrally.
 **module names**
 
 * `Auth.Authenticators` → `Auth.Passkeys`
-* `Auth.Infra.Tokens` → `Auth.Tokens.Storage`
 * `Auth.TokenPolicy` → `Auth.Tokens.Policy`
 * `Auth.Sessions.Device` → `Auth.Sessions.DeviceStore`
 

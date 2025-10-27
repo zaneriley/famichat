@@ -6,6 +6,7 @@ defmodule Famichat.Accounts do
   """
 
   use Boundary,
+    top_level?: true,
     exports: :all,
     deps: [
       Famichat

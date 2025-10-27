@@ -9,6 +9,7 @@ defmodule Famichat.Auth.Tokens do
   """
 
   use Boundary,
+    top_level?: true,
     exports: :all,
     deps: [
       Famichat,

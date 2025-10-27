@@ -6,6 +6,7 @@ defmodule Famichat.Auth.RateLimit do
   """
 
   use Boundary,
+    top_level?: true,
     exports: :all,
     deps: [Famichat]
 

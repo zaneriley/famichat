@@ -8,6 +8,16 @@ defmodule Famichat.Auth do
   area expected by external callers.
   """
 
+  use Boundary,
+    top_level?: true,
+    exports: :all,
+    deps: [
+      Famichat.Accounts,
+      Famichat.Auth.Passkeys,
+      Famichat.Auth.Sessions,
+      Famichat.Auth.Tokens
+    ]
+
   alias Famichat.Accounts.User
   alias Famichat.Auth.Passkeys
   alias Famichat.Auth.Sessions

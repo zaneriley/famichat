@@ -5,10 +5,12 @@ defmodule Famichat.Auth.Recovery do
   """
 
   use Boundary,
+    top_level?: true,
     exports: :all,
     deps: [
       Famichat,
       Famichat.Accounts,
+      Famichat.Auth.Households,
       Famichat.Auth.Identity,
       Famichat.Auth.Tokens
     ]
