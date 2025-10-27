@@ -88,10 +88,7 @@ None (uses existing `user_devices` columns). If `previous_token_hash` is missing
 
 **Observability**
 
-- ✅ Counters emitted via telemetry:  
-  - `[:auth_sessions, :refresh, :success]`  
-  - `[:auth_sessions, :refresh, :reuse_detected]`  
-  - `[:auth_sessions, :refresh, :invalid]`  
+- ✅ Counters emitted via telemetry under the canonical root `[:famichat, :auth, :sessions, ...]` for refresh success, reuse detection, and invalid attempts.  
 - Follow-up: wire dashboards/alerts once metrics backend is configured.
 
 **Rollout**  
@@ -113,7 +110,7 @@ Normalize token issuance/consumption to typed kinds and remove TTL/config drift 
   - `:ledgered` (DB-backed hashed tokens).  
   - `:signed` (`Phoenix.Token`).  
   - `:device_secret` (refresh on `user_devices`).
-- Introduce token kinds: `:invite`, `:pair_qr`, `:pair_admin_code`, `:invite_registration`, `:passkey_reg`, `:passkey_assert`, `:magic_link`, `:otp`, `:recovery`.
+- Introduce token kinds: `:invite`, `:pair_qr`, `:pair_admin_code`, `:invite_registration`, `:passkey_registration`, `:passkey_assertion`, `:magic_link`, `:otp`, `:recovery`.
 - Update issuing code to use `Tokens.issue/3` (dual-write context string + kind during cutover).
 
 **Migrations (Two-Phase)**
@@ -136,7 +133,7 @@ Normalize token issuance/consumption to typed kinds and remove TTL/config drift 
 
 **Observability**
 
-- Metric: tokens issued by kind (present) + telemetry for subject-id presence/missing.
+- Metric: tokens issued by kind (present) + telemetry under `[:famichat, :auth, :tokens, ...]` for subject-id presence/missing.
 - Migration job will log counts if ever needed; current greenfield instances have no legacy rows.
 
 **Progress Notes**
@@ -185,7 +182,7 @@ Create `webauthn_challenges` table (`id`, `type`, `user_id`, `challenge`, `expir
 
 **Observability**
 
-- Metrics: `auth_passkeys.challenge.issued.{registration|assertion}`, `.consumed`, `.invalid`.  
+- Telemetry emitted under `[:famichat, :auth, :passkeys, :challenge_issued | :challenge_consumed | :challenge_invalid]`.  
 - Alert on high invalid rate (possible replay or client desync).
 
 **Rollout**
@@ -223,7 +220,7 @@ None (reuses `auth_tokens` and existing family/membership tables).
 
 **Observability**
 
-- Metrics per step: `invite.issue|accept|complete`, `pairing.issue|redeem`.  
+- Telemetry under `[:famichat, :auth, :onboarding, ...]` for invite issue/accept/complete and pairing issue/redeem events.  
 - Distributed trace across onboarding steps (transactional `Ecto.Multi` spans).
 
 **Rollout**
@@ -266,7 +263,7 @@ Stop “nuke all” by default, add scoped blast radius, and make actions audita
 
 **Observability**
 
-- Metrics: counts per scope; alert if `:global` events occur without the flag.  
+- Telemetry under `[:famichat, :auth, :recovery, ...]` includes scope metadata; alert if `:global` events occur without the flag.  
 - Weekly audit review: job that asserts no “global without flag”.
 
 **Rollout**
@@ -305,7 +302,7 @@ Add new columns if needed (locale, badge) with safe defaults.
 
 **Observability**
 
-- Metric: `auth_identity.attrs.rejected_unknown_key`.  
+- Telemetry under `[:famichat, :auth, :identity, :attrs_rejected_unknown_key]`.  
 - Log the offending keys for the first _N_ occurrences to assist client teams.
 
 **Rollout**  

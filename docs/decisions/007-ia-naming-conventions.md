@@ -54,8 +54,8 @@ use these atoms in code; map to legacy `user_tokens.kind` strings centrally.
 | ----------------------- | ----------------------- | --------------- | ------------- |
 | `:invite`               | `"invite"`              | `:invitee`      | ledgered      |
 | `:invite_registration`  | `"invite_registration"` | `:invitee`      | signed        |
-| `:pairing_qr`           | `"pair_qr"`             | `:device`       | ledgered      |
-| `:pairing_admin_code`   | `"pair_admin_code"`     | `:device`       | ledgered      |
+| `:pair_qr`              | `"pair_qr"`             | `:device`       | ledgered      |
+| `:pair_admin_code`      | `"pair_admin_code"`     | `:device`       | ledgered      |
 | `:passkey_registration` | `"passkey_reg"`         | `:user`         | ledgered      |
 | `:passkey_assertion`    | `"passkey_assert"`      | `:user`         | ledgered      |
 | `:magic_link`           | `"magic_link"`          | `:user`         | ledgered      |

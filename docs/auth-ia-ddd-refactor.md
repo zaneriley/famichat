@@ -52,7 +52,7 @@ We avoid risky migrations. We do not rename database tables or columns. We deliv
 | webauthn challenge          | **challenge** (namespaced) | —                             | Single‑use registration/assertion challenge            | `Auth.Passkeys`       | `Auth.Passkeys.Challenge`                                       | `challenge.id`   | Context‑local schema (not shared).                    |
 | token                       | **token**                  | user_token helpers (publicly) | Auth tokens across kinds/storage                       | `Auth.Tokens`         | `Accounts.UserToken`                                            | `user_tokens.id` | Only `Auth.Tokens.Storage` writes.                    |
 | invite                      | **invite**                 | —                             | Onboarding invitation to a household                   | `Auth.Onboarding`     | `Accounts.UserToken` kind=`invite`                              | token id         | Kinds below.                                          |
-| pairing                     | **pairing**                | pair                          | Device pairing tied to invites                         | `Auth.Onboarding`     | `Accounts.UserToken`                                            | token id         | `pairing_qr` and `pairing_admin_code`.                |
+| pairing                     | **pairing**                | pair                          | Device pairing tied to invites                         | `Auth.Onboarding`     | `Accounts.UserToken`                                            | token id         | `pair_qr` and `pair_admin_code`.                     |
 | session                     | **session**                | login                         | Access + refresh lifecycle per device                  | `Auth.Sessions`       | `Accounts.UserDevice` + tokens                                  | —                | Access is signed, refresh is device‑secret.           |
 
 ---
@@ -167,8 +167,8 @@ Map canonicals in **one place** (policy) without DB changes:
 | ----------------------- | ----------------------- | --------------- | ------------- |
 | `:invite`               | `"invite"`              | `:invitee`      | ledgered      |
 | `:invite_registration`  | `"invite_registration"` | `:invitee`      | signed        |
-| `:pairing_qr`           | `"pair_qr"`             | `:device`       | ledgered      |
-| `:pairing_admin_code`   | `"pair_admin_code"`     | `:device`       | ledgered      |
+| `:pair_qr`              | `"pair_qr"`             | `:device`       | ledgered      |
+| `:pair_admin_code`      | `"pair_admin_code"`     | `:device`       | ledgered      |
 | `:passkey_registration` | `"passkey_reg"`         | `:user`         | ledgered      |
 | `:passkey_assertion`    | `"passkey_assert"`      | `:user`         | ledgered      |
 | `:magic_link`           | `"magic_link"`          | `:user`         | ledgered      |
@@ -446,8 +446,8 @@ defmodule Famichat.Auth.Tokens.Policy do
   @canonical_to_legacy %{
     invite:                "invite",
     invite_registration:   "invite_registration",
-    pairing_qr:            "pair_qr",
-    pairing_admin_code:    "pair_admin_code",
+    pair_qr:               "pair_qr",
+    pair_admin_code:       "pair_admin_code",
     passkey_registration:  "passkey_reg",
     passkey_assertion:     "passkey_assert",
     magic_link:            "magic_link",
