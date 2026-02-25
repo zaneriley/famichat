@@ -347,6 +347,55 @@ defmodule FamichatWeb.MessageTestControllerTest do
 
       assert_single_broadcast(topic, "new_msg", response["payload"])
     end
+
+    test "returns 422 when conversation_type does not match stored conversation and does not broadcast",
+         %{
+           authed_conn: authed_conn,
+           conversation: conversation
+         } do
+      direct_topic = topic(:direct, conversation.id)
+      spoofed_topic = topic(:group, conversation.id)
+      @endpoint.subscribe(direct_topic)
+      @endpoint.subscribe(spoofed_topic)
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "conversation_type" => "group",
+          "conversation_id" => conversation.id,
+          "body" => "mismatch should fail"
+        })
+
+      response = json_response(conn, 422)
+      assert response["status"] == "error"
+      assert response["error"] == "invalid_request"
+      assert response["details"]["conversation_type"] == "does not match conversation"
+
+      assert_no_broadcast_on_topic(direct_topic)
+      assert_no_broadcast_on_topic(spoofed_topic)
+    end
+
+    test "returns 422 for unknown but well-formed conversation UUID and does not broadcast",
+         %{
+           authed_conn: authed_conn
+         } do
+      random_id = Ecto.UUID.generate()
+      topic = topic(:direct, random_id)
+      @endpoint.subscribe(topic)
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "conversation_type" => "direct",
+          "conversation_id" => random_id,
+          "body" => "missing conversation should fail"
+        })
+
+      response = json_response(conn, 422)
+      assert response["status"] == "error"
+      assert response["error"] == "invalid_request"
+      assert response["details"]["conversation_id"] == "conversation not found"
+
+      assert_no_broadcast_on_topic(topic)
+    end
   end
 
   defp authed_conn(conn, user) do

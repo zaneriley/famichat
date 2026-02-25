@@ -31,9 +31,9 @@
 
 ## 🚨 Current Blockers
 
-1. **Canonical end-to-end operator runbook is still fragmented** (HIGH PRIORITY)
-   - Core path pieces exist (auth, subscribe, canonical broadcast contract), but one authoritative `auth -> subscribe -> send -> receive` drill remains split across docs/tests.
-   - **Action**: Publish one deterministic runbook and lock it with integration assertions.
+1. ✅ **Canonical end-to-end operator runbook is now published**
+   - Deterministic runbook: `docs/runbooks/canonical-messaging-flow.md`
+   - Locked with integration assertions: `backend/test/famichat_web/integration/canonical_messaging_flow_test.exs`
 
 2. **Role/authorization edge-case follow-through** (MEDIUM PRIORITY)
    - Existing group privilege functionality is implemented, but edge-case characterization remains incomplete in Sprint 7 tracking.

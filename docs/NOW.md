@@ -32,6 +32,6 @@ Famichat has a solid backend messaging foundation and now has a secure, test-val
 
 ## Top 3 next tasks (highest ROI)
 
-1. Ship one canonical end-to-end runbook (auth -> subscribe -> send -> receive) and lock it with integration tests.
-2. Close auth/role edge-case test gaps (channel authorization + group privilege boundary conditions).
-3. Start E2EE implementation track (MLS/OpenMLS path) to remove plaintext-risk as the top product blocker.
+1. Close auth/role edge-case test gaps (channel authorization + group privilege boundary conditions).
+2. Start E2EE implementation track (MLS/OpenMLS path) to remove plaintext-risk as the top product blocker.
+3. Triage repo-wide lint/static baseline debt and capture a current coverage snapshot.

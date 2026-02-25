@@ -348,8 +348,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - **Dependency**: Canonical path depends on the completed 7.1.3 and 7.4.2 foundations
 
 #### Story 7.3: Client/Operator Documentation Consolidation 🔄
-- **Status**: Draft docs exist; one canonical runbook is still missing
-- **Scope**: Consolidate token acquisition + subscribe + canonical broadcast + receive verification into one deterministic workflow
+- **Status**: Canonical runbook published and locked with integration assertions
+- **Runbook**: `docs/runbooks/canonical-messaging-flow.md`
+- **Integration Test**: `backend/test/famichat_web/integration/canonical_messaging_flow_test.exs`
 
 ### Cross-cutting Follow-through
 
@@ -576,8 +577,8 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ## 🎯 Next Steps
 
 ### Immediate (This Week)
-1. 🚨 Publish one canonical operator runbook for `auth -> subscribe -> send -> receive` (single deterministic path).
-2. 🚨 Lock that runbook with integration tests, including non-happy-path assertions (`401/403/422` and explicit no-broadcast guarantees on non-200 paths).
+1. ✅ Canonical runbook + integration lock landed for `auth -> subscribe -> send -> receive`.
+2. ⚠️ Add routine timing capture around the canonical flow command for drift tracking.
 3. ⚠️ Triage repo-wide `elixir:lint` / `elixir:static-analysis` baseline debt separately so completed story behavior stays trackable.
 4. ⚠️ Measure test coverage snapshot (`cd backend && ./run mix coveralls`).
 

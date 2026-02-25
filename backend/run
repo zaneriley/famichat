@@ -132,9 +132,19 @@ function elixir:test {
   _dc -e "MIX_ENV=test" web mix test "${@}"
 }
 
+function elixir:test:canonical-flow {
+  # Run canonical auth -> subscribe -> send -> receive integration flow
+  elixir:test test/famichat_web/integration/canonical_messaging_flow_test.exs "${@}"
+}
+
 function elixir:test:file {
   # Run test suite and log to file
   _dc -e "MIX_ENV=test" web mix test "${@}" > test_output.log 2>&1
+}
+
+function runbook:seed {
+  # Emit deterministic runbook seed data (users, tokens, conversation/topic)
+  cmd mix famichat.runbook_seed "${@}"
 }
 
 function elixir:test:coverage {
