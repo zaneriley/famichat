@@ -1,11 +1,15 @@
 defmodule FamichatWeb.CanonicalMessagingFlowTest do
   use FamichatWeb.ChannelCase, async: true
 
-  import Phoenix.ConnTest, only: [build_conn: 0, json_response: 2, post: 3]
+  import Phoenix.ConnTest,
+    only: [build_conn: 0, get: 2, json_response: 2, post: 3]
+
   import Plug.Conn, only: [put_req_header: 3]
 
   alias Famichat.Auth.Sessions
+  alias Famichat.Chat.{Message, MessageRateLimiter}
   alias Famichat.ChatFixtures
+  alias Famichat.Repo
   alias FamichatWeb.{MessageChannel, UserSocket}
 
   @endpoint FamichatWeb.Endpoint
@@ -49,6 +53,8 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
 
     {:ok,
      %{
+       sender: sender,
+       sender_session: sender_session,
        sender_conn: authed_conn(sender_session.access_token),
        outsider_conn: authed_conn(outsider_session.access_token),
        conversation: conversation,
@@ -77,6 +83,16 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
 
     expected_payload = response["payload"]
     assert_push "new_msg", ^expected_payload
+
+    history_conn =
+      sender_conn
+      |> get("/api/v1/conversations/#{conversation.id}/messages")
+
+    history = json_response(history_conn, 200)
+
+    assert Enum.any?(history["data"], fn message ->
+             message["content"] == "runbook canonical message"
+           end)
   end
 
   test "missing bearer token returns 401 and emits no message", %{
@@ -94,7 +110,7 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
     refute_receive %Phoenix.Socket.Message{event: "new_msg"}, 100
   end
 
-  test "authenticated outsider returns 403 and emits no message", %{
+  test "authenticated outsider returns 404 and emits no message", %{
     outsider_conn: outsider_conn,
     conversation: conversation
   } do
@@ -105,9 +121,9 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
         "body" => "should not emit"
       })
 
-    assert json_response(conn, 403) == %{
+    assert json_response(conn, 404) == %{
              "status" => "error",
-             "error" => "forbidden"
+             "error" => "not_found"
            }
 
     refute_receive %Phoenix.Socket.Message{event: "new_msg"}, 100
@@ -131,6 +147,47 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
     assert Map.has_key?(response["details"], "body")
 
     refute_receive %Phoenix.Socket.Message{event: "new_msg"}, 100
+  end
+
+  test "HTTP and WS sends share a single message limiter", %{
+    sender: sender,
+    sender_session: sender_session,
+    sender_conn: sender_conn,
+    conversation: conversation
+  } do
+    {:ok, sender_socket} =
+      connect(UserSocket, %{"token" => sender_session.access_token})
+
+    topic = "message:direct:#{conversation.id}"
+
+    {:ok, _reply, sender_channel} =
+      subscribe_and_join(sender_socket, MessageChannel, topic)
+
+    burst_limit = MessageRateLimiter.window_limit(:msg_device_burst) || 20
+
+    Enum.each(1..burst_limit, fn index ->
+      conn =
+        post(sender_conn, "/api/test/broadcast", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id,
+          "body" => "mixed-http-#{index}"
+        })
+
+      assert json_response(conn, 200)["status"] == "success"
+    end)
+
+    blocked_body = "mixed-ws-over-limit"
+    ref = push(sender_channel, "new_msg", %{"body" => blocked_body})
+
+    assert_reply ref, :error, %{reason: "rate_limited", retry_in: retry_in}
+    assert is_integer(retry_in)
+    assert retry_in > 0
+
+    refute Repo.get_by(Message,
+             conversation_id: conversation.id,
+             sender_id: sender.id,
+             content: blocked_body
+           )
   end
 
   defp authed_conn(access_token) do

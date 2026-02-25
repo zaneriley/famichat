@@ -10,7 +10,8 @@ defmodule FamichatWeb.MessageTestController do
   """
   use FamichatWeb, :controller
 
-  alias Famichat.Chat.{Conversation, ConversationAccess, Self}
+  alias Famichat.Chat.{Conversation, ConversationAccess, Message, Self}
+  alias FamichatWeb.MessagingDispatch
   alias Famichat.Repo
 
   @type_map %{
@@ -44,11 +45,20 @@ defmodule FamichatWeb.MessageTestController do
     |> handle_broadcast(params)
   end
 
-  defp handle_broadcast(%{assigns: %{current_user_id: user_id}} = conn, params) do
+  defp handle_broadcast(
+         %{assigns: %{current_user_id: user_id, current_device_id: device_id}} =
+           conn,
+         params
+       ) do
     with {:ok, request} <- normalize_request(params),
          {:ok, conversation} <- fetch_conversation(request, user_id),
-         :ok <- authorize_membership(conversation.id, user_id),
-         {:ok, payload} <- build_payload(request, user_id) do
+         {:ok, payload} <-
+           send_message(
+             request,
+             user_id,
+             device_id,
+             conversation.id
+           ) do
       topic = topic_for(request, user_id)
       FamichatWeb.Endpoint.broadcast!(topic, "new_msg", payload)
 
@@ -74,6 +84,33 @@ defmodule FamichatWeb.MessageTestController do
         |> json(%{
           status: "error",
           error: "forbidden"
+        })
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{
+          status: "error",
+          error: "not_found"
+        })
+
+      {:error, :message_too_large} ->
+        conn
+        |> put_status(413)
+        |> json(%{
+          status: "error",
+          error: "message_too_large",
+          max_bytes: Message.max_content_bytes()
+        })
+
+      {:error, :rate_limited, retry_in} ->
+        conn
+        |> put_resp_header("retry-after", Integer.to_string(retry_in))
+        |> put_status(:too_many_requests)
+        |> json(%{
+          status: "error",
+          error: "rate_limited",
+          retry_in: retry_in
         })
     end
   end
@@ -310,18 +347,29 @@ defmodule FamichatWeb.MessageTestController do
            conversation_id: conversation_id,
            conversation_type: conversation_type
          },
-         _user_id
+         user_id
        ) do
     case Repo.get(Conversation, conversation_id) do
-      %Conversation{conversation_type: ^conversation_type} = conversation ->
-        {:ok, conversation}
+      %Conversation{} = conversation ->
+        case ConversationAccess.authorize(
+               conversation.id,
+               user_id,
+               :send_message
+             ) do
+          :ok ->
+            if conversation.conversation_type == conversation_type do
+              {:ok, conversation}
+            else
+              {:error, :validation,
+               %{"conversation_type" => "does not match conversation"}}
+            end
 
-      %Conversation{} ->
-        {:error, :validation,
-         %{"conversation_type" => "does not match conversation"}}
+          {:error, _reason} ->
+            {:error, :not_found}
+        end
 
       nil ->
-        {:error, :validation, %{"conversation_id" => "conversation not found"}}
+        {:error, :not_found}
     end
   end
 
@@ -350,35 +398,56 @@ defmodule FamichatWeb.MessageTestController do
     "message:#{conversation_type}:#{conversation_id}"
   end
 
-  defp authorize_membership(conversation_id, user_id) do
-    case ConversationAccess.authorize(conversation_id, user_id, :send_message) do
-      :ok -> :ok
-      _ -> {:error, :forbidden}
+  defp send_message(request, user_id, device_id, conversation_id) do
+    request
+    |> build_message_params(user_id, conversation_id)
+    |> MessagingDispatch.send_message(device_id)
+    |> map_send_error()
+  end
+
+  defp build_message_params(request, user_id, conversation_id) do
+    params = %{
+      sender_id: user_id,
+      conversation_id: conversation_id,
+      content: request.body
+    }
+
+    if request.encryption_flag do
+      Map.put(params, :encryption_metadata, %{
+        "encryption_flag" => true,
+        "key_id" => request.key_id,
+        "version_tag" => request.version_tag
+      })
+    else
+      params
     end
   end
 
-  defp build_payload(%{encryption_flag: false, body: body}, user_id) do
-    {:ok, %{"body" => body, "user_id" => user_id}}
+  defp map_send_error({:ok, payload}), do: {:ok, payload}
+  defp map_send_error({:error, :not_participant}), do: {:error, :not_found}
+  defp map_send_error({:error, :wrong_family}), do: {:error, :not_found}
+
+  defp map_send_error({:error, :conversation_not_found}),
+    do: {:error, :not_found}
+
+  defp map_send_error({:error, %Ecto.Changeset{} = changeset}) do
+    if message_too_large_changeset?(changeset) do
+      {:error, :message_too_large}
+    else
+      {:error, :validation, %{"body" => "must be a non-empty string"}}
+    end
   end
 
-  defp build_payload(
-         %{
-           encryption_flag: true,
-           body: body,
-           key_id: key_id,
-           version_tag: version_tag
-         },
-         user_id
-       ) do
-    {:ok,
-     %{
-       "body" => body,
-       "user_id" => user_id,
-       "encryption_flag" => true,
-       "key_id" => key_id,
-       "version_tag" => version_tag
-     }}
+  defp map_send_error({:error, {:rate_limited, retry_in}})
+       when is_integer(retry_in) and retry_in > 0 do
+    {:error, :rate_limited, retry_in}
   end
+
+  defp map_send_error({:error, {:missing_fields, _missing}}),
+    do: {:error, :validation, %{"body" => "must be a non-empty string"}}
+
+  defp map_send_error({:error, _reason}),
+    do: {:error, :validation, %{"request" => "unable to send message"}}
 
   defp build_request(params) do
     %{
@@ -405,4 +474,15 @@ defmodule FamichatWeb.MessageTestController do
 
   defp default_if_nil(nil, default), do: default
   defp default_if_nil(value, _default), do: value
+
+  defp message_too_large_changeset?(changeset) do
+    Enum.any?(changeset.errors, fn
+      {:content, {_message, opts}} ->
+        Keyword.get(opts, :validation) == :length and
+          Keyword.get(opts, :kind) == :max
+
+      _ ->
+        false
+    end)
+  end
 end

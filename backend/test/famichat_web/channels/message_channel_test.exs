@@ -5,7 +5,14 @@ defmodule FamichatWeb.MessageChannelTest do
 
   alias Famichat.Accounts.{HouseholdMembership, User, UserDevice}
   alias Famichat.Auth.Sessions
-  alias Famichat.Chat.{Conversation, ConversationParticipant, Message}
+
+  alias Famichat.Chat.{
+    Conversation,
+    ConversationParticipant,
+    Message,
+    MessageRateLimiter
+  }
+
   alias Famichat.ChatFixtures
   alias Famichat.Repo
   alias FamichatWeb.MessageChannel
@@ -342,7 +349,7 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.conversation_id == membership_only_conversation.id
     end
 
-    test "rejects join when user is not participant in direct conversation", %{
+    test "conceals join when user is not participant in direct conversation", %{
       socket: socket,
       family: family
     } do
@@ -357,7 +364,7 @@ defmodule FamichatWeb.MessageChannelTest do
 
       topic = "message:direct:#{conversation.id}"
 
-      assert {:error, %{reason: "unauthorized"}} =
+      assert {:error, %{reason: "not_found"}} =
                subscribe_and_join(socket, MessageChannel, topic)
 
       assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
@@ -366,6 +373,40 @@ defmodule FamichatWeb.MessageChannelTest do
 
       assert metadata.status == :error
       assert metadata.error_reason == :unauthorized
+    end
+
+    test "returns indistinguishable not_found for inaccessible existing, missing, and wrong-type topics",
+         %{family: family} do
+      outsider = insert_user_with_id(Ecto.UUID.generate(), family.id)
+      token = token_for_user(outsider)
+      {:ok, outsider_socket} = connect(UserSocket, %{"token" => token})
+
+      existing_response =
+        outsider_socket
+        |> subscribe_and_join(
+          MessageChannel,
+          "message:direct:#{@direct_conversation_id}"
+        )
+
+      unknown_response =
+        outsider_socket
+        |> subscribe_and_join(
+          MessageChannel,
+          "message:direct:#{Ecto.UUID.generate()}"
+        )
+
+      wrong_type_response =
+        outsider_socket
+        |> subscribe_and_join(
+          MessageChannel,
+          "message:group:#{@direct_conversation_id}"
+        )
+
+      assert existing_response == {:error, %{reason: "not_found"}}
+      assert unknown_response == {:error, %{reason: "not_found"}}
+      assert wrong_type_response == {:error, %{reason: "not_found"}}
+      assert existing_response == unknown_response
+      assert existing_response == wrong_type_response
     end
 
     test "rejects join with invalid topic format", %{socket: socket} do
@@ -733,6 +774,35 @@ defmodule FamichatWeb.MessageChannelTest do
       refute_broadcast "new_msg", _
     end
 
+    test "rejects oversized messages", %{socket: socket} do
+      oversized_body = String.duplicate("a", Message.max_content_bytes() + 1)
+      ref = push(socket, "new_msg", %{"body" => oversized_body})
+
+      assert_reply ref, :error, %{reason: "message_too_large"}
+      refute_broadcast "new_msg", _
+    end
+
+    test "rate limits burst message sends", %{socket: socket} do
+      burst_limit = MessageRateLimiter.window_limit(:msg_device_burst) || 20
+
+      Enum.each(1..burst_limit, fn index ->
+        body = "burst-message-#{index}"
+        push(socket, "new_msg", %{"body" => body})
+
+        assert_broadcast "new_msg", %{
+          "body" => ^body,
+          "user_id" => @valid_user_id
+        }
+      end)
+
+      ref = push(socket, "new_msg", %{"body" => "burst-over-limit"})
+
+      assert_reply ref, :error, %{reason: "rate_limited", retry_in: retry_in}
+      assert is_integer(retry_in)
+      assert retry_in > 0
+      refute_broadcast "new_msg", _
+    end
+
     @doc """
     Tests handling of messages with missing body field.
 
@@ -968,11 +1038,12 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.error_reason == :unauthorized
     end
 
-    test "client is rejected when joining unauthorized direct channel", %{
-      family: family,
-      second_user: second_user,
-      user_session: user_session
-    } do
+    test "client receives not_found when joining unauthorized direct channel",
+         %{
+           family: family,
+           second_user: second_user,
+           user_session: user_session
+         } do
       # Create a client
       token = user_session.access_token
 
@@ -988,7 +1059,7 @@ defmodule FamichatWeb.MessageChannelTest do
       topic = "message:direct:#{other_direct_conversation.id}"
 
       # This should be rejected
-      assert {:error, %{reason: "unauthorized"}} =
+      assert {:error, %{reason: "not_found"}} =
                subscribe_and_join(socket, MessageChannel, topic)
 
       assert_receive {:telemetry_event, [:famichat, :message_channel, :join],

@@ -2,7 +2,9 @@ defmodule FamichatWeb.MessageTestControllerTest do
   use FamichatWeb.ConnCase, async: true
 
   alias Famichat.Auth.Sessions
+  alias Famichat.Chat.{Message, MessageRateLimiter}
   alias Famichat.ChatFixtures
+  alias Famichat.Repo
 
   @endpoint FamichatWeb.Endpoint
 
@@ -100,8 +102,18 @@ defmodule FamichatWeb.MessageTestControllerTest do
       payload = response["payload"]
       assert payload["body"] == "hello from canonical endpoint"
       assert payload["user_id"] == user.id
+      assert Map.has_key?(payload, "device_id")
 
       assert_single_broadcast(topic, "new_msg", payload)
+
+      persisted =
+        Repo.get_by(Message,
+          conversation_id: conversation.id,
+          sender_id: user.id,
+          content: "hello from canonical endpoint"
+        )
+
+      assert persisted
     end
 
     test "returns 401 when bearer token is missing and does not broadcast", %{
@@ -142,7 +154,7 @@ defmodule FamichatWeb.MessageTestControllerTest do
       assert_no_broadcast_on_topic(topic)
     end
 
-    test "returns 403 for authenticated non-member and does not broadcast", %{
+    test "returns 404 for authenticated non-member and does not broadcast", %{
       outsider_conn: outsider_conn,
       conversation: conversation
     } do
@@ -156,12 +168,50 @@ defmodule FamichatWeb.MessageTestControllerTest do
           "body" => "unauthorized send"
         })
 
-      assert json_response(conn, 403) == %{
+      assert json_response(conn, 404) == %{
                "status" => "error",
-               "error" => "forbidden"
+               "error" => "not_found"
              }
 
       assert_no_broadcast_on_topic(topic)
+    end
+
+    test "returns indistinguishable not_found for inaccessible vs unknown conversation ids",
+         %{
+           outsider_conn: outsider_conn,
+           conversation: conversation
+         } do
+      existing_topic = topic(:direct, conversation.id)
+      random_id = Ecto.UUID.generate()
+      unknown_topic = topic(:direct, random_id)
+
+      @endpoint.subscribe(existing_topic)
+      @endpoint.subscribe(unknown_topic)
+
+      existing_response =
+        outsider_conn
+        |> post(~p"/api/test/broadcast", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id,
+          "body" => "enumeration probe existing id"
+        })
+        |> json_response(404)
+
+      unknown_response =
+        outsider_conn
+        |> post(~p"/api/test/broadcast", %{
+          "conversation_type" => "direct",
+          "conversation_id" => random_id,
+          "body" => "enumeration probe unknown id"
+        })
+        |> json_response(404)
+
+      assert existing_response == %{"status" => "error", "error" => "not_found"}
+      assert unknown_response == %{"status" => "error", "error" => "not_found"}
+      assert existing_response == unknown_response
+
+      assert_no_broadcast_on_topic(existing_topic)
+      assert_no_broadcast_on_topic(unknown_topic)
     end
 
     test "returns 422 for invalid payload and does not broadcast", %{
@@ -368,13 +418,15 @@ defmodule FamichatWeb.MessageTestControllerTest do
       response = json_response(conn, 422)
       assert response["status"] == "error"
       assert response["error"] == "invalid_request"
-      assert response["details"]["conversation_type"] == "does not match conversation"
+
+      assert response["details"]["conversation_type"] ==
+               "does not match conversation"
 
       assert_no_broadcast_on_topic(direct_topic)
       assert_no_broadcast_on_topic(spoofed_topic)
     end
 
-    test "returns 422 for unknown but well-formed conversation UUID and does not broadcast",
+    test "returns 404 for unknown but well-formed conversation UUID and does not broadcast",
          %{
            authed_conn: authed_conn
          } do
@@ -389,12 +441,89 @@ defmodule FamichatWeb.MessageTestControllerTest do
           "body" => "missing conversation should fail"
         })
 
-      response = json_response(conn, 422)
+      response = json_response(conn, 404)
       assert response["status"] == "error"
-      assert response["error"] == "invalid_request"
-      assert response["details"]["conversation_id"] == "conversation not found"
+      assert response["error"] == "not_found"
 
       assert_no_broadcast_on_topic(topic)
+    end
+
+    test "returns 413 for oversized body and does not broadcast or persist", %{
+      authed_conn: authed_conn,
+      conversation: conversation,
+      user: user
+    } do
+      topic = topic(:direct, conversation.id)
+      @endpoint.subscribe(topic)
+
+      oversized_body = String.duplicate("a", Message.max_content_bytes() + 1)
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id,
+          "body" => oversized_body
+        })
+
+      response = json_response(conn, 413)
+
+      assert response == %{
+               "status" => "error",
+               "error" => "message_too_large",
+               "max_bytes" => Message.max_content_bytes()
+             }
+
+      assert_no_broadcast_on_topic(topic)
+
+      refute Repo.get_by(Message,
+               conversation_id: conversation.id,
+               sender_id: user.id,
+               content: oversized_body
+             )
+    end
+
+    test "returns 429 with retry hint when send burst exceeds rate limits", %{
+      authed_conn: authed_conn,
+      conversation: conversation,
+      user: user
+    } do
+      burst_limit = MessageRateLimiter.window_limit(:msg_device_burst) || 20
+
+      Enum.each(1..burst_limit, fn index ->
+        conn =
+          post(authed_conn, ~p"/api/test/broadcast", %{
+            "conversation_type" => "direct",
+            "conversation_id" => conversation.id,
+            "body" => "http-burst-#{index}"
+          })
+
+        assert json_response(conn, 200)["status"] == "success"
+      end)
+
+      blocked_body = "http-burst-over-limit"
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id,
+          "body" => blocked_body
+        })
+
+      response = json_response(conn, 429)
+      assert response["status"] == "error"
+      assert response["error"] == "rate_limited"
+      assert is_integer(response["retry_in"])
+      assert response["retry_in"] > 0
+
+      assert get_resp_header(conn, "retry-after") == [
+               Integer.to_string(response["retry_in"])
+             ]
+
+      refute Repo.get_by(Message,
+               conversation_id: conversation.id,
+               sender_id: user.id,
+               content: blocked_body
+             )
     end
   end
 

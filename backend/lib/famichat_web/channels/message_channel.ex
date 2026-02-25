@@ -105,13 +105,13 @@ defmodule FamichatWeb.MessageChannel do
 
   alias Famichat.Chat.{
     Conversation,
-    Message,
     ConversationQueries,
     MessageService,
     Self
   }
 
   alias Famichat.Auth.{Identity, Sessions}
+  alias FamichatWeb.MessagingDispatch
 
   alias Famichat.Repo
 
@@ -240,9 +240,10 @@ defmodule FamichatWeb.MessageChannel do
       end
 
     with {:ok, _uuid} <- validate_conversation_id(id),
-         {:ok, conversation} <- fetch_conversation(id, type_atom),
          {:ok, user} <- fetch_user(user_id),
-         :ok <- authorize_conversation(conversation, user, type_atom) do
+         {:ok, conversation} <- fetch_conversation(id),
+         :ok <- authorize_conversation(conversation, user, type_atom),
+         :ok <- ensure_conversation_type(conversation, type_atom) do
       Logger.debug(
         "User authorized for #{type} conversation, joining channel with user_id: #{user_id}"
       )
@@ -270,7 +271,7 @@ defmodule FamichatWeb.MessageChannel do
           error_reason: reason
         })
 
-        {:error, %{reason: reason_to_string(reason)}}
+        {:error, %{reason: reason_to_string(public_join_reason(reason))}}
     end
   end
 
@@ -303,8 +304,11 @@ defmodule FamichatWeb.MessageChannel do
                 id
               )
 
-            case MessageService.send_message(message_params) do
-              {:ok, message} ->
+            case MessagingDispatch.send_message(
+                   message_params,
+                   socket.assigns.device_id
+                 ) do
+              {:ok, broadcast_payload} ->
                 measurements = compute_measurements(start_time)
 
                 # Calculate message size for metrics
@@ -327,9 +331,6 @@ defmodule FamichatWeb.MessageChannel do
                     )
                 }
 
-                broadcast_payload =
-                  build_broadcast_payload(message, socket.assigns.device_id)
-
                 # Broadcast the message
                 broadcast!(socket, "new_msg", broadcast_payload)
 
@@ -339,8 +340,7 @@ defmodule FamichatWeb.MessageChannel do
                 {:noreply, socket}
 
               {:error, reason} ->
-                {:reply, {:error, %{reason: message_send_error(reason)}},
-                 socket}
+                {:reply, {:error, message_send_error_payload(reason)}, socket}
             end
 
           {:error, reason} ->
@@ -417,25 +417,42 @@ defmodule FamichatWeb.MessageChannel do
     end
   end
 
-  defp message_send_error(%Ecto.Changeset{}), do: "invalid_message"
+  defp message_send_error(%Ecto.Changeset{} = changeset) do
+    if message_too_large_changeset?(changeset) do
+      "message_too_large"
+    else
+      "invalid_message"
+    end
+  end
+
+  defp message_send_error({:rate_limited, _retry_in}), do: "rate_limited"
   defp message_send_error({:missing_fields, _missing}), do: "invalid_message"
   defp message_send_error(:not_participant), do: "unauthorized"
   defp message_send_error(:wrong_family), do: "unauthorized"
-  defp message_send_error(reason), do: reason_to_string(reason)
 
-  defp build_broadcast_payload(%Message{} = message, device_id) do
-    encryption_metadata =
-      message
-      |> Map.get(:metadata, %{})
-      |> Map.get("encryption", %{})
-      |> Map.take(@encryption_metadata_fields)
+  defp message_send_error(reason) when is_atom(reason),
+    do: reason_to_string(reason)
 
-    %{
-      "body" => message.content,
-      "user_id" => message.sender_id,
-      "device_id" => device_id
-    }
-    |> Map.merge(encryption_metadata)
+  defp message_send_error(_reason), do: "invalid_message"
+
+  defp message_send_error_payload({:rate_limited, retry_in})
+       when is_integer(retry_in) and retry_in > 0 do
+    %{reason: "rate_limited", retry_in: retry_in}
+  end
+
+  defp message_send_error_payload(reason) do
+    %{reason: message_send_error(reason)}
+  end
+
+  defp message_too_large_changeset?(changeset) do
+    Enum.any?(changeset.errors, fn
+      {:content, {_message, opts}} ->
+        Keyword.get(opts, :validation) == :length and
+          Keyword.get(opts, :kind) == :max
+
+      _ ->
+        false
+    end)
   end
 
   # Private helper function that processes message acknowledgments.
@@ -537,13 +554,10 @@ defmodule FamichatWeb.MessageChannel do
     end
   end
 
-  defp fetch_conversation(id, expected_type) do
+  defp fetch_conversation(id) do
     case Repo.get(Conversation, id) do
-      %Conversation{conversation_type: ^expected_type} = conversation ->
+      %Conversation{} = conversation ->
         {:ok, conversation}
-
-      %Conversation{} ->
-        {:error, :invalid_conversation_type}
 
       nil ->
         {:error, :conversation_not_found}
@@ -574,6 +588,16 @@ defmodule FamichatWeb.MessageChannel do
     if authorized?, do: :ok, else: {:error, :unauthorized}
   end
 
+  defp ensure_conversation_type(
+         %Conversation{conversation_type: conversation_type},
+         expected_type
+       )
+       when conversation_type == expected_type,
+       do: :ok
+
+  defp ensure_conversation_type(_conversation, _expected_type),
+    do: {:error, :invalid_conversation_type}
+
   defp encryption_status(%Conversation{conversation_type: type}) do
     if MessageService.requires_encryption?(type) do
       "enabled"
@@ -584,6 +608,7 @@ defmodule FamichatWeb.MessageChannel do
 
   defp reason_to_string(:invalid_conversation_id), do: "invalid_conversation_id"
   defp reason_to_string(:conversation_not_found), do: "conversation_not_found"
+  defp reason_to_string(:not_found), do: "not_found"
 
   defp reason_to_string(:invalid_conversation_type),
     do: "invalid_conversation_type"
@@ -598,6 +623,16 @@ defmodule FamichatWeb.MessageChannel do
   defp reason_to_string(:unauthorized), do: "unauthorized"
   defp reason_to_string(:invalid_topic_format), do: "invalid_topic_format"
   defp reason_to_string(other), do: to_string(other)
+
+  defp public_join_reason(:invalid_conversation_id),
+    do: :invalid_conversation_id
+
+  defp public_join_reason(:conversation_not_found), do: :not_found
+  defp public_join_reason(:invalid_conversation_type), do: :not_found
+  defp public_join_reason(:unauthorized), do: :not_found
+  defp public_join_reason(:user_not_found), do: :not_found
+  defp public_join_reason(:wrong_family), do: :not_found
+  defp public_join_reason(reason), do: reason
 
   defp topic_context(%{
          topic: "message:self:" <> topic_user_id,
