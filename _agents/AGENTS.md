@@ -56,3 +56,27 @@ Distinguish between what a caller *wants* and what the system *decides*.
 *   **Domain Intent:** `@doc` should explain *what* a function does in business terms first, then technical details.
     *   *Good:* "Starts a new session. Checks organizational policy before honoring the `:remember` option."
 *   **Doctests for Pure Logic:** Use doctests for complex, pure functions (parsers, policy checkers) as live documentation.
+
+## 8. LLM Operability and Path Discipline
+We treat LLM-driven validation as a first-class engineering workflow. Agent-accessible paths must be clear, deterministic, fast, and aligned with production behavior.
+
+### 8.1. Single Path Principle (Non-Negotiable)
+*   **No LLM-Only Runtime Paths:** Do not introduce separate LLM execution paths, alternate logic branches, or agent-only code flows.
+*   **Shared Product Surface:** Frontend, API, CLI, and agent workflows must exercise the same domain services and authorization boundaries.
+*   **No Divergent Contracts:** Do not maintain parallel payload schemas or behavior for "test mode" vs. normal product mode unless explicitly required by environment safety.
+
+### 8.2. Explicit Anti-Patterns (Prohibited)
+*   **No LLM-Specific Mocks/Fixtures/Fallbacks:** Do not add agent-targeted mocks, fixtures, or silent fallback behavior that bypasses real system rules.
+*   **No Error Swallowing:** Do not hide failures behind broad rescue/default paths. Fail loud with actionable errors.
+*   **No Complexity Inflation:** Reject feature flags, branches, and helper layers whose primary effect is increasing error vectors or cyclomatic complexity without clear product value.
+
+### 8.3. Testability Requirements
+*   **Deterministic Playbooks:** Provide documented, repeatable runbooks for key flows (auth, subscribe, send, receive, authorization failures).
+*   **Toolable Interfaces:** Prefer stable CLI/API entry points that agents can execute directly for combinatorial state exploration.
+*   **Outcome-Focused Assertions:** Tests must validate externally observable outcomes and side effects, not implementation trivia.
+
+### 8.4. Review Standard
+Before merging, ask:
+1. Does this change preserve one shared production path?
+2. Can an agent execute and verify this through documented playbooks?
+3. Did we reduce or increase hidden branches, silent behavior, and vector count?
