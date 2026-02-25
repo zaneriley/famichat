@@ -1,6 +1,6 @@
 # Famichat Roadmap
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 
 ## Progress Overview
 
@@ -120,7 +120,7 @@
 📍 **See [CURRENT-SPRINT.md](CURRENT-SPRINT.md) for detailed tasks**
 
 **Duration**: Oct 1 - Oct 15, 2025
-**Status**: 🟡 On track with blockers
+**Status**: 🟡 Implementation landing is on track; repo-wide lint/static debt follow-through remains
 
 **Goal**: Integrate real-time messaging via Phoenix Channels with encryption-aware infrastructure
 
@@ -129,28 +129,28 @@
 - ✅ Type-immutable conversation schema
 - ✅ Conversation hiding/unhiding functionality
 - ✅ Comprehensive channel tests (42KB test file!)
+- ✅ Encryption telemetry validation (Story 7.1.4)
 - ✅ Accounts context refactor (Story 7.9) — passkey-first onboarding, device trust, single token model
 - ✅ Username fingerprint migration + single-use invite acceptance (registration JWT handshake)
 
 **In Progress**:
 - 🔄 Channel routing & authorization (80%)
-- 🔄 Encryption telemetry validation
 - 🔄 Group role management edge case tests
+- 🔄 Story 7.4.2 secure CLI broadcast endpoint follow-through (implementation landed; repo-wide gate debt cleanup pending)
+- 🔄 Story 7.2/7.3 final verification and documentation consolidation
 
 **Not Started**:
-- ❌ Broadcast testing (Story 7.2)
-- ❌ Client integration documentation (Story 7.3)
+- ❌ Story 7.4.1 dummy UI route / LiveView test harness
 
 **Key Deliverables**:
 - Phoenix Channels configured ✓
 - Channel authorization ⚠️ (needs testing)
-- Encryption-aware serialization ⚠️ (needs tests)
-- **Accounts context** ❌ (MUST START!)
+- Encryption telemetry assertions ✓ (Story 7.1.4 complete)
+- **Accounts context** ✅ shipped (Story 7.9)
 
 **Blockers**:
-1. Encryption telemetry validation still pending (Story 7.1.4)
-2. Auth client integration docs outstanding (Story 7.3)
-3. Test coverage not measured
+1. Auth client integration docs outstanding (Story 7.3)
+2. Test coverage not measured
 
 **Key Files**:
 - [MessageChannel](backend/lib/famichat_web/channels/message_channel.ex)
@@ -447,6 +447,6 @@
 
 ---
 
-**Last Updated**: 2025-10-05
-**Next Review**: 2025-10-08
+**Last Updated**: 2026-02-25
+**Next Review**: 2026-03-04
 **Sprint Cadence**: 2 weeks per sprint

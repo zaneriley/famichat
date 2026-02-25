@@ -1,80 +1,345 @@
 defmodule FamichatWeb.MessageTestController do
   @moduledoc """
-  Test controller for verifying message broadcasting functionality.
-  This controller is intended for development and testing purposes only.
+  Secure CLI broadcast verification endpoint used in development and test.
+
+  Canonical endpoint:
+  - `POST /api/test/broadcast`
+
+  Compatibility alias endpoint:
+  - `POST /api/test/test_events` (adds deprecation headers)
   """
   use FamichatWeb, :controller
-  require Logger
+
+  alias Famichat.Chat.{Conversation, ConversationAccess}
+  alias Famichat.Repo
+
+  @type_map %{
+    "self" => :self,
+    "direct" => :direct,
+    "group" => :group,
+    "family" => :family
+  }
+  @conversation_types Map.keys(@type_map)
+
+  @default_key_id "KEY_TEST_v1"
+  @default_version_tag "v1.0.0"
+  @alias_sunset "Tue, 31 Mar 2026 00:00:00 GMT"
 
   @doc """
-  Broadcasts a test message to a specified conversation.
-
-  ## Parameters
-    * `type` - The conversation type (e.g., "self", "direct", "group", "family")
-    * `id` - The conversation ID
-    * `body` - The message content
-    * `encryption` - (Optional) Boolean indicating if the message should include encryption metadata
-
-  ## Response
-    * 200 - Message broadcast successfully
-    * 400 - Missing required parameters
+  Canonical secure test broadcast endpoint.
   """
-  def broadcast(conn, params) do
-    with {:ok, type} <- Map.fetch(params, "type"),
-         {:ok, id} <- Map.fetch(params, "id"),
-         {:ok, body} <- Map.fetch(params, "body"),
-         true <- type in ["self", "direct", "group", "family", "legacy"] do
-      broadcast_payload = %{
-        "body" => body,
-        "user_id" => "TEST_USER"
-      }
+  def broadcast(conn, params), do: handle_broadcast(conn, params)
 
-      # Add encryption metadata if requested
-      broadcast_payload =
-        if Map.get(params, "encryption", false) do
-          Map.merge(broadcast_payload, %{
-            "version_tag" => "v1.0.0",
-            "encryption_flag" => true,
-            "key_id" => "KEY_TEST_v1"
-          })
-        else
-          broadcast_payload
-        end
+  @doc """
+  Temporary compatibility alias for one sprint.
+  """
+  def broadcast_alias(conn, params) do
+    conn
+    |> put_resp_header("deprecation", "true")
+    |> put_resp_header("sunset", @alias_sunset)
+    |> put_resp_header(
+      "link",
+      ~s(</api/test/broadcast>; rel="successor-version")
+    )
+    |> handle_broadcast(params)
+  end
 
-      # Determine the topic based on the type
-      topic =
-        if type == "legacy" do
-          "message:#{id}"
-        else
-          "message:#{type}:#{id}"
-        end
-
-      Logger.info("Broadcasting test message to topic: #{topic}")
-      Logger.debug("Broadcast payload: #{inspect(broadcast_payload)}")
-
-      FamichatWeb.Endpoint.broadcast!(topic, "new_msg", broadcast_payload)
+  defp handle_broadcast(%{assigns: %{current_user_id: user_id}} = conn, params) do
+    with {:ok, request} <- normalize_request(params),
+         {:ok, conversation} <- fetch_conversation(request),
+         :ok <- authorize_membership(conversation.id, user_id),
+         {:ok, payload} <- build_payload(request, user_id) do
+      topic = topic_for(request)
+      FamichatWeb.Endpoint.broadcast!(topic, "new_msg", payload)
 
       json(conn, %{
-        status: "ok",
-        message: "Broadcast sent to #{topic}"
+        status: "success",
+        topic: topic,
+        event_name: "new_msg",
+        payload: payload
       })
     else
-      :error ->
+      {:error, :validation, details} ->
         conn
-        |> put_status(400)
+        |> put_status(:unprocessable_entity)
         |> json(%{
           status: "error",
-          message:
-            "Required parameters: type, id, body. Optional: encryption (boolean)"
+          error: "invalid_request",
+          details: details
         })
 
-      false ->
+      {:error, :forbidden} ->
         conn
-        |> put_status(400)
+        |> put_status(:forbidden)
         |> json(%{
           status: "error",
-          message: "Type must be one of: self, direct, group, family, legacy"
+          error: "forbidden"
         })
     end
   end
+
+  defp handle_broadcast(conn, _params) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: "unauthorized"})
+  end
+
+  defp normalize_request(params) do
+    params
+    |> canonicalize_params()
+    |> validate_params()
+  end
+
+  defp canonicalize_params(params) do
+    cond do
+      has_key?(params, "conversation_type") and
+          has_key?(params, "conversation_id") ->
+        %{
+          "conversation_type" => params["conversation_type"],
+          "conversation_id" => params["conversation_id"],
+          "body" => params["body"],
+          "encryption_flag" => Map.get(params, "encryption_flag"),
+          "key_id" => Map.get(params, "key_id"),
+          "version_tag" => Map.get(params, "version_tag")
+        }
+
+      has_key?(params, "type") and has_key?(params, "id") ->
+        %{
+          "conversation_type" => params["type"],
+          "conversation_id" => params["id"],
+          "body" => params["body"],
+          "encryption_flag" =>
+            first_non_nil(params["encryption_flag"], params["encryption"]),
+          "key_id" => Map.get(params, "key_id"),
+          "version_tag" => Map.get(params, "version_tag")
+        }
+
+      has_key?(params, "topic") ->
+        case parse_topic(params["topic"]) do
+          {:ok, conversation_type, conversation_id} ->
+            %{
+              "conversation_type" => conversation_type,
+              "conversation_id" => conversation_id,
+              "body" => first_non_nil(params["body"], params["content"]),
+              "encryption_flag" =>
+                first_non_nil(params["encryption_flag"], params["encryption"]),
+              "key_id" => Map.get(params, "key_id"),
+              "version_tag" => Map.get(params, "version_tag")
+            }
+
+          {:error, :invalid_topic} ->
+            %{
+              "conversation_type" => nil,
+              "conversation_id" => nil,
+              "body" => first_non_nil(params["body"], params["content"]),
+              "encryption_flag" =>
+                first_non_nil(params["encryption_flag"], params["encryption"]),
+              "key_id" => Map.get(params, "key_id"),
+              "version_tag" => Map.get(params, "version_tag"),
+              "__topic_error__" => "invalid topic format"
+            }
+        end
+
+      true ->
+        %{
+          "conversation_type" => nil,
+          "conversation_id" => nil,
+          "body" => params["body"],
+          "encryption_flag" => Map.get(params, "encryption_flag"),
+          "key_id" => Map.get(params, "key_id"),
+          "version_tag" => Map.get(params, "version_tag")
+        }
+    end
+  end
+
+  defp parse_topic("message:" <> rest) do
+    case String.split(rest, ":", parts: 2) do
+      [conversation_type, conversation_id]
+      when conversation_type in ["self", "direct", "group", "family"] ->
+        {:ok, conversation_type, conversation_id}
+
+      _ ->
+        {:error, :invalid_topic}
+    end
+  end
+
+  defp parse_topic(_), do: {:error, :invalid_topic}
+
+  defp validate_params(%{"__topic_error__" => topic_error}) do
+    {:error, :validation, %{"topic" => topic_error}}
+  end
+
+  defp validate_params(params) do
+    details =
+      %{}
+      |> validate_conversation_type(params)
+      |> validate_conversation_id(params)
+      |> validate_body(params)
+      |> validate_encryption_flag(params)
+      |> maybe_validate_encryption_metadata(params)
+
+    if details == %{} do
+      {:ok, build_request(params)}
+    else
+      {:error, :validation, details}
+    end
+  end
+
+  defp validate_conversation_type(details, params) do
+    case Map.get(params, "conversation_type") do
+      type when type in @conversation_types ->
+        details
+
+      _ ->
+        Map.put(
+          details,
+          "conversation_type",
+          "must be one of: self, direct, group, family"
+        )
+    end
+  end
+
+  defp validate_conversation_id(details, params) do
+    case Ecto.UUID.cast(Map.get(params, "conversation_id")) do
+      {:ok, _uuid} -> details
+      :error -> Map.put(details, "conversation_id", "must be a valid UUID")
+    end
+  end
+
+  defp validate_body(details, params) do
+    case Map.get(params, "body") do
+      body when is_binary(body) ->
+        if byte_size(String.trim(body)) > 0 do
+          details
+        else
+          Map.put(details, "body", "must be a non-empty string")
+        end
+
+      _ ->
+        Map.put(details, "body", "must be a non-empty string")
+    end
+  end
+
+  defp validate_encryption_flag(details, params) do
+    if is_boolean(encryption_flag(params)) do
+      details
+    else
+      Map.put(details, "encryption_flag", "must be a boolean")
+    end
+  end
+
+  defp maybe_validate_encryption_metadata(details, params) do
+    if encryption_flag(params) == true do
+      validate_encryption_metadata(details, params)
+    else
+      details
+    end
+  end
+
+  defp validate_encryption_metadata(details, params) do
+    key_id = default_if_nil(Map.get(params, "key_id"), @default_key_id)
+
+    version_tag =
+      default_if_nil(Map.get(params, "version_tag"), @default_version_tag)
+
+    key_id_valid =
+      is_binary(key_id) and Regex.match?(~r/^KEY_[A-Z]+_v[0-9]+$/, key_id)
+
+    version_tag_valid =
+      is_binary(version_tag) and
+        Regex.match?(~r/^v[0-9]+\.[0-9]+\.[0-9]+$/, version_tag)
+
+    details =
+      if key_id_valid do
+        details
+      else
+        Map.put(details, "key_id", "must match KEY_[A-Z]+_v[0-9]+")
+      end
+
+    if version_tag_valid do
+      details
+    else
+      Map.put(details, "version_tag", "must match v[0-9]+.[0-9]+.[0-9]+")
+    end
+  end
+
+  defp fetch_conversation(%{
+         conversation_id: conversation_id,
+         conversation_type: conversation_type
+       }) do
+    case Repo.get(Conversation, conversation_id) do
+      %Conversation{conversation_type: ^conversation_type} = conversation ->
+        {:ok, conversation}
+
+      %Conversation{} ->
+        {:error, :validation,
+         %{"conversation_type" => "does not match conversation"}}
+
+      nil ->
+        {:error, :validation, %{"conversation_id" => "conversation not found"}}
+    end
+  end
+
+  defp authorize_membership(conversation_id, user_id) do
+    case ConversationAccess.authorize(conversation_id, user_id, :send_message) do
+      :ok -> :ok
+      _ -> {:error, :forbidden}
+    end
+  end
+
+  defp build_payload(%{encryption_flag: false, body: body}, user_id) do
+    {:ok, %{"body" => body, "user_id" => user_id}}
+  end
+
+  defp build_payload(
+         %{
+           encryption_flag: true,
+           body: body,
+           key_id: key_id,
+           version_tag: version_tag
+         },
+         user_id
+       ) do
+    {:ok,
+     %{
+       "body" => body,
+       "user_id" => user_id,
+       "encryption_flag" => true,
+       "key_id" => key_id,
+       "version_tag" => version_tag
+     }}
+  end
+
+  defp topic_for(%{
+         conversation_type_string: conversation_type,
+         conversation_id: conversation_id
+       }) do
+    "message:#{conversation_type}:#{conversation_id}"
+  end
+
+  defp build_request(params) do
+    %{
+      conversation_type:
+        Map.fetch!(@type_map, Map.get(params, "conversation_type")),
+      conversation_type_string: Map.get(params, "conversation_type"),
+      conversation_id: Map.get(params, "conversation_id"),
+      body: String.trim(Map.get(params, "body")),
+      encryption_flag: encryption_flag(params),
+      key_id: default_if_nil(Map.get(params, "key_id"), @default_key_id),
+      version_tag:
+        default_if_nil(Map.get(params, "version_tag"), @default_version_tag)
+    }
+  end
+
+  defp encryption_flag(params) do
+    default_if_nil(Map.get(params, "encryption_flag"), false)
+  end
+
+  defp has_key?(params, key) when is_map(params), do: Map.has_key?(params, key)
+
+  defp first_non_nil(nil, second), do: second
+  defp first_non_nil(first, _second), do: first
+
+  defp default_if_nil(nil, default), do: default
+  defp default_if_nil(value, _default), do: value
 end

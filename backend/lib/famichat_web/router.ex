@@ -93,6 +93,13 @@ defmodule FamichatWeb.Router do
   # Conditional block for development-only routes
   # We're defining these first as to not trigger the :locale redirection pipeline.
   if Application.compile_env(:famichat, :environment) in [:dev, :test] do
+    scope "/api/test", FamichatWeb do
+      pipe_through [:api, :api_authenticated]
+
+      post "/broadcast", MessageTestController, :broadcast
+      post "/test_events", MessageTestController, :broadcast_alias
+    end
+
     scope "/admin", FamichatWeb do
       pipe_through [:admin]
 
@@ -126,17 +133,6 @@ defmodule FamichatWeb.Router do
 
     live_session :default, on_mount: FamichatWeb.LiveHelpers do
       live "/", HomeLive, :index
-    end
-  end
-
-  # Other scopes may use custom stacks.
-  scope "/api", FamichatWeb do
-    pipe_through :api
-
-    scope "/test" do
-      post "/broadcast", MessageTestController, :broadcast
-      # Add new CLI test endpoint for testing channel events
-      post "/test_events", TestBroadcastController, :trigger
     end
   end
 

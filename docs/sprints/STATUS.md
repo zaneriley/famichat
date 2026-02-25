@@ -1,6 +1,6 @@
 # Famichat - Comprehensive Status Report
 
-**Last Updated**: 2025-10-14
+**Last Updated**: 2026-02-25
 **Sprint**: 7 (Real-Time Messaging Integration)
 **Overall Progress**: 40% to MVP
 
@@ -20,7 +20,7 @@
    - ✅ Telemetry tracks encryption status
    - ❌ No libsignal-client integration (Sprint 9, 3 weeks)
    - ⚠️ **Messages currently stored in plaintext**
-2. ⚠️ **Telemetry Coverage** - Step-up enforcement shipped, but encryption spans still lack assertions (Story 7.1.4)
+2. ⚠️ **Client Integration Documentation** - Channel/LiveView integration guidance is still incomplete (Story 7.3)
 
 ---
 
@@ -278,8 +278,8 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 **REST Endpoints**:
 - ✅ `GET /api/v1/hello` ([hello_controller.ex:4](backend/lib/famichat_web/controllers/hello_controller.ex#L4)) - Health check
-- ✅ `POST /api/test/broadcast` - Testing endpoint (dev only)
-- ✅ `POST /api/test/test_events` - CLI testing (dev only)
+- ✅ `POST /api/test/broadcast` - Canonical secure CLI broadcast verification endpoint (auth required, membership enforced, canonical payload contract)
+- ✅ `POST /api/test/test_events` - Compatibility alias to canonical endpoint with deprecation/sunset headers
 - ✅ `GET /up` - Health check endpoint
 - ✅ `GET /up/databases` - Database health check
 
@@ -322,13 +322,15 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ## 🚧 In Progress (Sprint 7 - 30% Complete)
 
-### Completed Stories (4/9)
+### Completed Stories (6/9)
 - ✅ **7.1.1-7.1.2**: Phoenix Channel module with comprehensive tests
+- ✅ **7.1.4**: Encryption telemetry validation (join/broadcast assertions with sensitive metadata filtering)
 - ✅ **7.10.1**: Type-immutable conversation schema (separate changesets)
 - ✅ **7.10.8**: Conversation `hidden_by_users` field added
 - ✅ **7.10.9**: Conversation hiding/unhiding functionality
+- ✅ **7.9**: Accounts context refactor (single-table token model, passkey-first onboarding, device trust, recovery)
 
-### Active Stories (3/9)
+### Active Stories
 
 #### Story 7.1.3: Channel Routing & Authorization 🔄
 - **Status**: Configuration done (80%), authorization testing pending (20%)
@@ -339,12 +341,6 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - **Next Step**: Complete authorization tests, document decision in ADR
 - **ETA**: 2 days
 
-#### Story 7.1.4: Encryption Telemetry Validation 🔄
-- **Status**: Hooks in place, test validation needed
-- **Dependencies**: 7.1.3 must complete first
-- **Files**: [message_channel.ex](backend/lib/famichat_web/channels/message_channel.ex)
-- **Next Step**: Write tests to verify no sensitive metadata leaks
-
 #### Story 7.10.5-6: Group Role Management Tests 🔄
 - **Status**: Schema complete, need edge case coverage
 - **Files**:
@@ -352,22 +348,33 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
   - Tests: [group_conversation_privileges_test.exs](backend/test/famichat/chat/group_conversation_privileges_test.exs)
 - **Next Step**: Test concurrent permission changes, last admin protection
 
-### Not Started Stories (2/9)
+#### Story 7.4.2: Secure CLI Broadcast Endpoint 🔄
+- **Status**: Implementation landed; awaiting cleanup of unrelated repo-wide lint/static gate debt
+- **Contract Target**:
+  - Canonical endpoint: `POST /api/test/broadcast`
+  - Alias endpoint: `POST /api/test/test_events` (temporary compatibility window with deprecation signaling)
+  - Required semantics: `200/401/403/422`, server-side topic derivation, membership authorization, no broadcast on non-200
+- **Execution Tracks**:
+  - Agent A: Router + pipeline hardening ✅
+  - Agent B: Controller contract + authorization behavior ✅
+  - Agent C: Contract tests + verification gates ✅ (with pre-existing repo gate failures noted)
+- **Verification Snapshot**:
+  - ✅ Targeted controller contract tests green (canonical + alias)
+  - ✅ Security check (`sobelow`) green
+  - ⚠️ Lint/static-analysis still fail due existing repo-wide issues outside 7.4.2 scope
+- **Tracking Doc**: [7.4.2-cli-broadcast-plan.md](7.4.2-cli-broadcast-plan.md)
 
-#### Story 7.2: Broadcast Testing ❌
-- **Status**: Not started
+### Follow-through Stories
+
+#### Story 7.2: Broadcast Testing 🔄
+- **Status**: Partial implementation; final verification and coverage measurement pending
 - **Scope**: Unit & integration tests for message broadcasting
 - **Dependencies**: 7.1.3 should be complete
 
-#### Story 7.3: Client Integration Documentation ❌
-- **Status**: Not started (lower priority with LiveView focus)
+#### Story 7.3: Client Integration Documentation 🔄
+- **Status**: Draft-level docs exist; canonical auth + CLI broadcast workflow needs consolidation
 - **Scope**: Write guide for LiveView Hooks to connect to channels
-- **Note**: Some examples exist in test LiveViews, needs formal documentation
-
-#### Story 7.9: Accounts Context ✅ COMPLETE
-- **Delivered**: Single-table token model, passkey-first invitations, QR/admin pairing, refresh rotation, recovery flows
-- **New**: `EnsureTrusted` plug gating privileged endpoints, authorization header enforcement, x-test-token header (test env only)
-- **Follow-up**: UI wiring + coverage sweep (Sprint 8), telemetry assertions tracked under Story 7.1.4
+- **Note**: Some examples exist in test LiveViews; add one operator-facing token + curl + subscriber recipe
 
 ---
 
@@ -637,6 +644,5 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ❌ Not started
 - 🚨 Critical blocker
 
-**Last Updated**: 2025-10-05
-**Next Review**: 2025-10-08 (weekly status update)
-- ✅ Auth endpoints now share `Accounts` helpers (invites, passkeys, sessions, recovery); follow-up migration will remove legacy columns once deployed
+**Last Updated**: 2026-02-25
+**Next Review**: 2026-03-04 (weekly status update)
