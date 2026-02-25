@@ -105,8 +105,8 @@ defmodule FamichatWeb.MessageChannel do
 
   alias Famichat.Chat.{
     Conversation,
+    ConversationSecurityPolicy,
     ConversationQueries,
-    MessageService,
     Self
   }
 
@@ -599,11 +599,7 @@ defmodule FamichatWeb.MessageChannel do
     do: {:error, :invalid_conversation_type}
 
   defp encryption_status(%Conversation{conversation_type: type}) do
-    if MessageService.requires_encryption?(type) do
-      "enabled"
-    else
-      "disabled"
-    end
+    ConversationSecurityPolicy.status(type)
   end
 
   defp reason_to_string(:invalid_conversation_id), do: "invalid_conversation_id"

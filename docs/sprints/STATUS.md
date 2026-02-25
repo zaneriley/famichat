@@ -5,6 +5,7 @@
 **Overall Progress**: 40% to MVP
 
 Terminology authority: [../ia-lexicon.md](../ia-lexicon.md)
+Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md)
 
 ---
 
@@ -28,9 +29,11 @@ Terminology authority: [../ia-lexicon.md](../ia-lexicon.md)
    - ✅ Dedicated conversation security state persistence is active in `conversation_security_states` via `Famichat.Chat.ConversationSecurityStateStore`
    - ✅ Legacy metadata envelopes are read for compatibility and migrated into the dedicated store on access
    - ✅ Replay-idempotency cache export is now bounded (max 256 entries)
-   - ✅ Adversarial contract tests now cover malformed ciphertext, cross-group misuse, and replay rejection
+   - ✅ Adversarial contract tests now cover malformed ciphertext, cross-group misuse, replay rejection, out-of-order lifecycle sequencing, tampered pending metadata, and concurrent stage race outcomes
    - ✅ Optimistic lock-version conflict handling is active (`:stale_state` mapped fail-closed to `:storage_inconsistent`)
-   - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage remains incomplete
+   - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`: stage/merge/clear pending commit with optimistic locking)
+   - ✅ Send path now fails closed while pending commits are unresolved (`:pending_proposals`)
+   - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage remains incomplete (deeper payload/epoch semantics)
    - ❌ Key lifecycle hardening (rotation/rejoin persistence/revocation strategy) is not complete
 2. ⚠️ **Operational Confidence Gaps** - quality visibility is incomplete
    - Test coverage snapshot is not yet captured
@@ -68,8 +71,10 @@ Terminology authority: [../ia-lexicon.md](../ia-lexicon.md)
   - `ensure_mls_runtime_ready/0` ([line 733](../../backend/lib/famichat/chat/message_service.ex#L733)) - Fail-closed runtime health gate
   - MLS conversation security state persists in dedicated `conversation_security_states` storage with optimistic locking
   - Legacy metadata envelope is compatibility-read only and migrates to dedicated storage on access
+  - Pending commit lifecycle orchestration is implemented in `ConversationSecurityLifecycle` and enforced on send-path app messages
+  - Merge path now rejects tampered pending metadata (invalid operation or stale/invalid staged epoch) with explicit fail-closed errors
   - Replay-idempotency cache is capped to reduce state growth pressure
-  - `requires_encryption?/1` ([line 266](../../backend/lib/famichat/chat/message_service.ex#L266)) - Policy enforcement per conversation type
+  - `requires_encryption?/1` ([line 266](../../backend/lib/famichat/chat/message_service.ex#L266)) - Compatibility API for conversation security policy decisions
   - **Tests**:
     - [message_service_mls_contract_test.exs](../../backend/test/famichat/chat/message_service_mls_contract_test.exs)
     - [nif_adapter_test.exs](../../backend/test/famichat/crypto/mls/nif_adapter_test.exs)
@@ -612,10 +617,10 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 5. ⚠️ Measure test coverage snapshot (`cd backend && ./run mix coveralls`).
 
 ### Short-term (Current P0 Track - Sprint 9)
-1. Harden commit/update/add/remove lifecycle handling with explicit epoch/pending-commit invariants on top of `conversation_security_states`.
+1. Expand adversarial lifecycle matrix (out-of-order merge/clear, staged payload tampering, and epoch-race stress) on top of `ConversationSecurityLifecycle`.
 2. Lock telemetry/metrics gates for app-message and group lifecycle operations.
-3. Expand adversarial/characterization tests for protocol invariants and storage/recovery semantics.
-4. Complete key lifecycle hardening (rotation/rejoin durability/revocation strategy).
+3. Complete key lifecycle hardening (rotation/rejoin durability/revocation strategy).
+4. Define multi-node/state-distribution strategy for deterministic restart and cross-node recovery.
 
 ### Medium-term (Sprint 8 + Sprint 10-11)
 1. **Sprint 8 (P1)**: LiveView messaging UI + auth UX on top of the same backend/channel contracts.

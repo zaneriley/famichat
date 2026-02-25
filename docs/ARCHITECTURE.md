@@ -94,6 +94,8 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 - Chat-owned schema/store boundary modules:
   - `Famichat.Chat.ConversationSecurityState`
   - `Famichat.Chat.ConversationSecurityStateStore`
+- Chat-owned policy boundary module:
+  - `Famichat.Chat.ConversationSecurityPolicy` (domain policy; protocol remains implementation data)
 - Protocol remains a data attribute (current default: MLS), not a storage/module naming prefix
 
 **Compatibility Read Path**:
@@ -101,6 +103,7 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 
 **See**:
 - [ia-lexicon.md](ia-lexicon.md)
+- [ia-boundary-guardrails.md](ia-boundary-guardrails.md)
 - [sprints/STATUS.md](sprints/STATUS.md)
 
 ---

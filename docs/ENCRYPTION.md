@@ -5,6 +5,7 @@
 ---
 
 Use [ia-lexicon.md](ia-lexicon.md) as the terminology authority for `conversation security state` and related ownership language.
+Boundary drift guardrails: [ia-boundary-guardrails.md](ia-boundary-guardrails.md) (`cd backend && ./run docs:boundary-check`).
 
 ---
 
@@ -37,9 +38,11 @@ Historical Signal-era analysis is retained only in deprecated ADRs and is not an
 1. Product default term: `conversation security state`.
 2. Engineering default term: `conversation security state record`.
 3. Protocol-qualified implementation term: `MLS protocol state` (when needed).
-4. Durable state write ownership belongs to `Famichat.Chat`.
-5. `Famichat.Crypto.MLS` and Rust NIF (`backend/infra/mls_nif`) are adapter-only and do not own DB persistence tables.
-6. `Famichat.Chat.MessageService` remains the orchestrator that loads/persists through Chat-owned state boundaries.
+4. Chat-domain policy term: `conversation security policy`.
+5. Canonical policy module boundary: `Famichat.Chat.ConversationSecurityPolicy` (`requires_encryption?/1` wording can remain as compatibility API surface).
+6. Durable state write ownership belongs to `Famichat.Chat`.
+7. `Famichat.Crypto.MLS` and Rust NIF (`backend/infra/mls_nif`) are adapter-only and do not own DB persistence tables.
+8. `Famichat.Chat.MessageService` remains the orchestrator that loads/persists through Chat-owned state boundaries.
 
 ---
 
@@ -52,13 +55,14 @@ Historical Signal-era analysis is retained only in deprecated ADRs and is not an
 3. Canonical message path stores ciphertext at rest and decrypts on read via the shared backend path.
 4. Durable conversation security state persistence is active in `conversation_security_states` through `Famichat.Chat.ConversationSecurityStateStore` (encrypted state blobs + optimistic locking).
 5. Replay-idempotency cache is bounded (`max 256`) to cap snapshot growth under high replay-cardinality reads.
-6. Adversarial coverage includes malformed ciphertext, cross-group misuse rejection, replay/idempotency behavior, and tampered-snapshot fail-closed behavior.
+6. Adversarial coverage includes malformed ciphertext, cross-group misuse rejection, replay/idempotency behavior, tampered-snapshot fail-closed behavior, and lifecycle misuse checks (out-of-order merge/clear, tampered pending metadata, concurrent stage races).
 7. Transactional send path now fails closed on stale state conflicts (message insert is rolled back if state write cannot commit).
+8. Pending-commit lifecycle orchestration exists at the Chat boundary, and send-path app messages fail closed while pending commits are unresolved.
 
 ### Not Implemented Yet
 
 1. Full key package and credential lifecycle hardening (rotation, rejoin durability, revocation strategy).
-2. Commit/update/add/remove lifecycle hardening on the dedicated store (pending-commit semantics and rollback guarantees).
+2. Commit/update/add/remove lifecycle hardening on the dedicated store (deeper OpenMLS payload/epoch semantics beyond current stage/merge/clear orchestration).
 3. Multi-node/state-distribution strategy for deterministic MLS state recovery across instances.
 
 **Current risk**: encryption is active, but production trust still depends on finishing state lifecycle hardening and key lifecycle controls.

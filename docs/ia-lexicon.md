@@ -26,6 +26,17 @@
 
 ---
 
+## Policy Terms (New)
+
+1. `conversation security policy`
+   - Chat-domain policy that decides whether a conversation requires encrypted message handling and fail-closed behavior.
+2. `conversation security requirement`
+   - The policy decision outcome for a conversation context (`required` or `not_required`).
+3. Canonical module naming for this boundary: `Famichat.Chat.ConversationSecurityPolicy`.
+4. Compatibility note: legacy API wording like `requires_encryption?/1` can remain for compatibility, but docs should describe this as conversation security policy behavior.
+
+---
+
 ## Ownership Terms
 
 1. `Famichat.Chat` is the write owner for durable conversation security state.
@@ -38,6 +49,16 @@
 
 1. `session snapshot` is a compatibility-only term and must not be used as the primary canonical label in new docs.
 2. Existing metadata-envelope wording should be marked transitional until dedicated state-store migration is complete.
+
+---
+
+## Anti-Drift Naming Guardrails
+
+1. Avoid `ConversationEncryptionPolicy` as the primary boundary name (too crypto-implementation-centric for Chat-domain policy).
+2. Avoid `ConversationTypePolicy` for security-only decisions (too broad and likely to absorb unrelated type rules).
+3. Avoid `message security state` when referring to durable group/session state; use `conversation security state`.
+4. Avoid protocol-coupled store naming such as `MLSStateStore`; use `ConversationSecurityStateStore` and keep protocol as data.
+5. Enforcement command: `cd backend && ./run docs:boundary-check` (see `docs/ia-boundary-guardrails.md`).
 
 ---
 

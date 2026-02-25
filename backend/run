@@ -84,6 +84,64 @@ function docs {
   echo "View EPUB docs at 'doc/Famichat.epub'"
 }
 
+function docs:boundary-check {
+  # Check IA/DDD naming boundary drift in active docs.
+  if ! command -v rg >/dev/null 2>&1; then
+    echo "ripgrep (rg) is required for docs:boundary-check" >&2
+    return 1
+  fi
+
+  local project_root
+  project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+  local -a docs_files=(
+    "${project_root}/docs/ENCRYPTION.md"
+    "${project_root}/docs/ARCHITECTURE.md"
+    "${project_root}/docs/NOW.md"
+    "${project_root}/docs/sprints/CURRENT-SPRINT.md"
+    "${project_root}/docs/sprints/ROADMAP.md"
+    "${project_root}/docs/sprints/STATUS.md"
+  )
+
+  local -a patterns=(
+    "\\bConversationEncryptionPolicy\\b"
+    "\\bConversationTypePolicy\\b"
+    "\\bmessage security state\\b"
+    "\\bMLSStateStore\\b"
+    "\\bencryption policy\\b"
+  )
+
+  local -a suggestions=(
+    "Use Famichat.Chat.ConversationSecurityPolicy."
+    "Use ConversationTypePolicy only for broader conversation-type concerns, not security-only policy."
+    "Use conversation security state for durable conversation-scoped security state."
+    "Use Famichat.Chat.ConversationSecurityStateStore and keep protocol as data."
+    "Use conversation security policy for chat-domain policy wording."
+  )
+
+  local violations=0
+  local i
+  for i in "${!patterns[@]}"; do
+    local matches
+    matches="$(rg -n -H -i --pcre2 "${patterns[$i]}" "${docs_files[@]}" || true)"
+
+    if [[ -n "${matches}" ]]; then
+      violations=$((violations + 1))
+      echo "Boundary drift rule hit: ${patterns[$i]}" >&2
+      echo "${matches}" >&2
+      echo "Suggestion: ${suggestions[$i]}" >&2
+      echo "" >&2
+    fi
+  done
+
+  if [[ "${violations}" -gt 0 ]]; then
+    echo "Docs IA/DDD boundary check failed (${violations} rule group(s))." >&2
+    return 1
+  fi
+
+  echo "Docs IA/DDD boundary check passed ✅"
+}
+
 function lint:dockerfile {
   # Lint Dockerfile
   docker container run --rm -i \
@@ -551,6 +609,7 @@ function ci:setup-env {
 function ci:lint {
     shell:lint
     lint:dockerfile "${@}"
+    docs:boundary-check
     elixir:lint
     rust:lint
     elixir:format
@@ -590,6 +649,7 @@ function ci:run-all {
 # -----------------------------------------------------------------------------
 
 function lint:all {
+    docs:boundary-check
     elixir:lint
     rust:lint
     js:lint

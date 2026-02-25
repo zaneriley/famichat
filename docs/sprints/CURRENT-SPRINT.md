@@ -4,6 +4,9 @@
 **Progress**: ✅ Core channel/auth milestones, 7.4.2 secure CLI broadcast hardening, and group-role edge-case coverage are complete; remaining Sprint 7 work is runbook/doc consolidation follow-through
 **Status**: 🟡 Sprint 7 closeout in progress; full repo lint/static gates still have pre-existing baseline debt outside the completed stories
 
+> Scope note (2026-02-25): This file tracks Sprint 7 closeout items only. Active P0 implementation work is Sprint 9 MLS hardening (see `STATUS.md` and `9.2-mls-implementation-redteam-loop.md`).
+> Terminology note: use `conversation security policy` for domain policy wording (see `../ia-lexicon.md` and `../ia-boundary-guardrails.md`).
+
 ---
 
 ## 📊 Quick Status
@@ -268,7 +271,7 @@ This provides clearer intent, more predictable validation, and a better develope
 ### Story 7.6: Encryption-Aware Message Serialization/Deserialization
 - [ ] **7.6.1:** Implement a placeholder for adding encryption metadata (e.g., key IDs, encryption flags) to the message serialization function.
   - [ ] **Subtask:** Define conversation-type-specific encryption requirements
-  - [ ] **Subtask:** Implement configuration-based encryption policy enforcement
+  - [ ] **Subtask:** Implement configuration-based conversation security policy enforcement
   - [ ] **Subtask:** Write failing tests for message serialization that verify required encryption metadata
 - [ ] **7.6.2:** Write tests that verify messages with the new encryption-aware serialization and deserialization hooks preserve the extra metadata.
 - [ ] **7.6.2:** Write failing tests for encryption error handling:

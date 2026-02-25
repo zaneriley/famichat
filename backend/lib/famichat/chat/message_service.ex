@@ -9,6 +9,7 @@ defmodule Famichat.Chat.MessageService do
   alias Famichat.Chat.{
     Conversation,
     ConversationAccess,
+    ConversationSecurityPolicy,
     ConversationSecurityStateStore,
     Message
   }
@@ -19,14 +20,6 @@ defmodule Famichat.Chat.MessageService do
   require Logger
 
   @default_preloads [:sender, :conversation]
-
-  # Define conversation-type encryption requirements
-  @encryption_requirements %{
-    direct: true,
-    family: true,
-    group: true,
-    self: true
-  }
 
   # Telemetry prefixes
   @telemetry_prefix [:famichat, :message]
@@ -158,7 +151,8 @@ defmodule Famichat.Chat.MessageService do
       message: nil,
       mls_session_snapshot: nil,
       mls_state_lock_version: nil,
-      mls_state_epoch: 0
+      mls_state_epoch: 0,
+      mls_pending_commit: nil
     }
 
     initial_state
@@ -236,11 +230,12 @@ defmodule Famichat.Chat.MessageService do
        ) do
     if mls_enforcement_enabled?() and requires_encryption?(conversation_type) do
       case load_mls_snapshot_with_lock(state.conversation) do
-        {:ok, snapshot, lock_version, epoch} ->
+        {:ok, loaded_state} ->
           state
-          |> Map.put(:mls_session_snapshot, snapshot)
-          |> Map.put(:mls_state_lock_version, lock_version)
-          |> Map.put(:mls_state_epoch, epoch)
+          |> Map.put(:mls_session_snapshot, loaded_state.snapshot)
+          |> Map.put(:mls_state_lock_version, loaded_state.lock_version)
+          |> Map.put(:mls_state_epoch, loaded_state.epoch)
+          |> Map.put(:mls_pending_commit, loaded_state.pending_commit)
 
         {:error, code, details} ->
           emit_mls_failure(:load_state, code, details, state)
@@ -350,7 +345,7 @@ defmodule Famichat.Chat.MessageService do
   """
   @spec requires_encryption?(atom()) :: boolean()
   def requires_encryption?(conversation_type) when is_atom(conversation_type) do
-    Map.get(@encryption_requirements, conversation_type, false)
+    ConversationSecurityPolicy.requires_encryption?(conversation_type)
   end
 
   @doc """
@@ -660,6 +655,7 @@ defmodule Famichat.Chat.MessageService do
                   Map.get(state.params, "content")
             }
             |> maybe_put_mls_snapshot(state.mls_session_snapshot)
+            |> maybe_put_pending_proposals(state.mls_pending_commit)
 
           case MLS.create_application_message(request) do
             {:ok, payload} ->
@@ -731,7 +727,11 @@ defmodule Famichat.Chat.MessageService do
        ) do
     if requires_encryption?(conversation_type) do
       case load_mls_snapshot_with_lock(conversation) do
-        {:ok, initial_snapshot, initial_lock_version, initial_epoch} ->
+        {:ok, loaded_state} ->
+          initial_snapshot = loaded_state.snapshot
+          initial_lock_version = loaded_state.lock_version
+          initial_epoch = loaded_state.epoch
+
           case ensure_mls_runtime_ready() do
             :ok ->
               case Enum.reduce_while(
@@ -879,10 +879,23 @@ defmodule Famichat.Chat.MessageService do
 
   defp maybe_put_mls_snapshot(request, _snapshot), do: request
 
+  defp maybe_put_pending_proposals(request, pending_commit)
+       when is_map(pending_commit) do
+    Map.put(request, :pending_proposals, true)
+  end
+
+  defp maybe_put_pending_proposals(request, _pending_commit), do: request
+
   defp load_mls_snapshot_with_lock(%Conversation{} = conversation) do
     case ConversationSecurityStateStore.load(conversation.id) do
       {:ok, persisted} ->
-        {:ok, persisted.state, persisted.lock_version, persisted.epoch}
+        {:ok,
+         %{
+           snapshot: persisted.state,
+           lock_version: persisted.lock_version,
+           epoch: persisted.epoch,
+           pending_commit: persisted.pending_commit
+         }}
 
       {:error, :not_found, _details} ->
         case legacy_mls_snapshot_from_conversation_metadata(conversation) do
@@ -890,7 +903,13 @@ defmodule Famichat.Chat.MessageService do
             migrate_legacy_snapshot_if_present(conversation, legacy_snapshot)
 
           _ ->
-            {:ok, nil, nil, 0}
+            {:ok,
+             %{
+               snapshot: nil,
+               lock_version: nil,
+               epoch: 0,
+               pending_commit: nil
+             }}
         end
 
       {:error, code, details} ->
@@ -907,12 +926,24 @@ defmodule Famichat.Chat.MessageService do
 
     case ConversationSecurityStateStore.upsert(conversation.id, attrs, nil) do
       {:ok, persisted} ->
-        {:ok, persisted.state, persisted.lock_version, persisted.epoch}
+        {:ok,
+         %{
+           snapshot: persisted.state,
+           lock_version: persisted.lock_version,
+           epoch: persisted.epoch,
+           pending_commit: persisted.pending_commit
+         }}
 
       {:error, :stale_state, _details} ->
         case ConversationSecurityStateStore.load(conversation.id) do
           {:ok, persisted} ->
-            {:ok, persisted.state, persisted.lock_version, persisted.epoch}
+            {:ok,
+             %{
+               snapshot: persisted.state,
+               lock_version: persisted.lock_version,
+               epoch: persisted.epoch,
+               pending_commit: persisted.pending_commit
+             }}
 
           {:error, code, details} ->
             {:error, map_state_store_error_code(code), details}
