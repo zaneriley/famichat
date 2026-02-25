@@ -20,9 +20,9 @@ Famichat has a solid backend messaging foundation and now has a secure, test-val
 ## What is still not done
 
 1. No true E2EE yet: messages are still effectively plaintext from a product-trust perspective.
-2. Client integration documentation and end-to-end operator workflow are still fragmented.
+2. Client integration documentation is still fragmented (the canonical operator workflow is now published).
 3. Repo-wide lint/static-analysis gates still have baseline debt outside 7.4.2 scope.
-4. Sprint follow-through remains on role/auth edge-case testing and end-to-end notification verification.
+4. Sprint follow-through remains on end-to-end notification verification and client integration guidance.
 
 ## What this means for the product
 
@@ -32,6 +32,6 @@ Famichat has a solid backend messaging foundation and now has a secure, test-val
 
 ## Top 3 next tasks (highest ROI)
 
-1. Close auth/role edge-case test gaps (channel authorization + group privilege boundary conditions).
-2. Start E2EE implementation track (MLS/OpenMLS path) to remove plaintext-risk as the top product blocker.
-3. Triage repo-wide lint/static baseline debt and capture a current coverage snapshot.
+1. Start E2EE implementation track (MLS/OpenMLS path) to remove plaintext-risk as the top product blocker.
+2. Triage repo-wide lint/static baseline debt and capture a current coverage snapshot.
+3. Finish client integration documentation around token acquisition, channel subscribe, and canonical broadcast verification.

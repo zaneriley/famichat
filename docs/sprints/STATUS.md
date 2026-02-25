@@ -335,12 +335,16 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ### Active Stories
 
-#### Story 7.10.5-6: Group Role Management Tests 🔄
-- **Status**: Schema and core behavior are implemented; adversarial edge-case coverage is still incomplete
+#### Story 7.10.5-6: Group Role Management Tests ✅
+- **Status**: Schema, core behavior, and adversarial edge-case coverage are complete
 - **Files**:
   - Implementation: [conversation_service.ex](../../backend/lib/famichat/chat/conversation_service.ex)
   - Tests: [group_conversation_privileges_test.exs](../../backend/test/famichat/chat/group_conversation_privileges_test.exs)
-- **Next Step**: Expand tests around concurrent permission changes and last-admin invariants
+  - Edge-case tests: [conversation_service_test.exs](../../backend/test/famichat/chat/conversation_service_test.exs)
+- **Coverage Highlights**:
+  - Last-admin invariants (demotion/removal cannot orphan group)
+  - Lock-contention re-checks for stale admin grants (`assign_admin` and `assign_member`)
+  - Non-admin rejection for cross-user privilege removal
 
 #### Story 7.2: Broadcast Testing Follow-through 🔄
 - **Status**: Core tests are present; final outcome-focused verification pass still open
@@ -586,7 +590,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 1. Build LiveView messaging UI (conversation list, message thread) on the same backend/channel contracts already validated by CLI flows.
 2. Integrate LiveView hooks with Phoenix Channels using the same auth and authorization boundaries (no alternate UI-only path).
 3. Consolidate client integration documentation for token acquisition, channel subscribe, and canonical broadcast verification.
-4. Close remaining role/authorization edge-case coverage for group privilege transitions.
+4. Add a repeatable latency baseline capture in CI for canonical flow drift detection.
 
 ### Medium-term (Sprint 9-11)
 1. **Sprint 9 (3 weeks)**: MLS/OpenMLS E2EE implementation

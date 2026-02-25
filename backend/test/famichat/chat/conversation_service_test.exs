@@ -14,6 +14,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
   import Ecto.Query
   require Logger
 
+  @contention_signal_timeout 1_000
+
   describe "create_direct_conversation/2 self conversations" do
     test "creates a self conversation if not exists" do
       user = user_fixture()
@@ -794,39 +796,15 @@ defmodule Famichat.Chat.ConversationServiceTest do
       parent = self()
 
       blocker =
-        Task.async(fn ->
-          Repo.transaction(fn ->
-            Repo.all(
-              from g in GroupConversationPrivileges,
-                where: g.conversation_id == ^group_conversation.id,
-                select: g.id,
-                lock: "FOR UPDATE"
-            )
+        start_grantor_demotion_blocker(
+          parent,
+          group_conversation.id,
+          admin_user.id,
+          second_admin.id,
+          :grantor_demoted_uncommitted
+        )
 
-            grantor_privilege =
-              Repo.get_by!(
-                GroupConversationPrivileges,
-                conversation_id: group_conversation.id,
-                user_id: admin_user.id
-              )
-
-            {:ok, _} =
-              grantor_privilege
-              |> Ecto.Changeset.change(
-                role: :member,
-                granted_by_id: second_admin.id
-              )
-              |> Repo.update()
-
-            send(parent, :grantor_demoted_uncommitted)
-
-            receive do
-              :commit -> :ok
-            end
-          end)
-        end)
-
-      assert_receive :grantor_demoted_uncommitted, 500
+      assert_receive :grantor_demoted_uncommitted, @contention_signal_timeout
 
       grant_task =
         Task.async(fn ->
@@ -846,6 +824,95 @@ defmodule Famichat.Chat.ConversationServiceTest do
         ConversationService.admin?(group_conversation.id, target_user.id)
 
       refute target_is_admin?
+    end
+
+    test "assign_member re-checks grantor authority after lock contention", %{
+      family: family,
+      admin_user: admin_user
+    } do
+      {group_conversation, second_admin} =
+        create_group_with_two_admins!(family, admin_user)
+
+      target_user = user_fixture(%{family_id: family.id, role: :member})
+      add_group_participant!(group_conversation.id, target_user.id)
+
+      {:ok, _} =
+        ConversationService.assign_admin(
+          group_conversation.id,
+          target_user.id,
+          second_admin.id
+        )
+
+      parent = self()
+
+      blocker =
+        start_grantor_demotion_blocker(
+          parent,
+          group_conversation.id,
+          admin_user.id,
+          second_admin.id,
+          :grantor_demoted_uncommitted_assign_member
+        )
+
+      assert_receive :grantor_demoted_uncommitted_assign_member,
+                     @contention_signal_timeout
+
+      demote_task =
+        Task.async(fn ->
+          ConversationService.assign_member(
+            group_conversation.id,
+            target_user.id,
+            admin_user.id
+          )
+        end)
+
+      send(blocker.pid, :commit)
+
+      assert {:ok, :ok} = Task.await(blocker)
+      assert {:error, :not_admin} = Task.await(demote_task)
+
+      {:ok, target_is_admin?} =
+        ConversationService.admin?(group_conversation.id, target_user.id)
+
+      assert target_is_admin?
+    end
+
+    test "remove_privilege rejects non-admin removal attempts with existing target privilege",
+         %{
+           group_conversation: group_conversation,
+           admin_user: admin_user,
+           member_user: member_user,
+           other_member: other_member
+         } do
+      add_group_participant!(group_conversation.id, member_user.id)
+      add_group_participant!(group_conversation.id, other_member.id)
+
+      {:ok, _} =
+        ConversationService.assign_member(
+          group_conversation.id,
+          member_user.id,
+          admin_user.id
+        )
+
+      {:ok, _} =
+        ConversationService.assign_member(
+          group_conversation.id,
+          other_member.id,
+          admin_user.id
+        )
+
+      assert {:error, :not_admin} =
+               ConversationService.remove_privilege(
+                 group_conversation.id,
+                 other_member.id,
+                 member_user.id
+               )
+
+      assert Repo.get_by(GroupConversationPrivileges,
+               conversation_id: group_conversation.id,
+               user_id: other_member.id,
+               role: :member
+             )
     end
 
     test "concurrent admin self-removals cannot orphan a group", %{
@@ -886,8 +953,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
             end
           end)
 
-        assert_receive {:ready, :admin1, task1_pid}, 500
-        assert_receive {:ready, :admin2, task2_pid}, 500
+        assert_receive {:ready, :admin1, task1_pid}, @contention_signal_timeout
+        assert_receive {:ready, :admin2, task2_pid}, @contention_signal_timeout
         send(task1_pid, :go)
         send(task2_pid, :go)
 
@@ -916,6 +983,52 @@ defmodule Famichat.Chat.ConversationServiceTest do
         assert admin_count == 1
       end)
     end
+  end
+
+  defp start_grantor_demotion_blocker(
+         parent,
+         conversation_id,
+         grantor_id,
+         demoted_by_id,
+         ready_message
+       ) do
+    Task.async(fn ->
+      Repo.transaction(fn ->
+        lock_group_privileges(conversation_id)
+        demote_privilege!(conversation_id, grantor_id, demoted_by_id)
+        send(parent, ready_message)
+
+        receive do
+          :commit -> :ok
+        end
+      end)
+    end)
+  end
+
+  defp lock_group_privileges(conversation_id) do
+    Repo.all(
+      from g in GroupConversationPrivileges,
+        where: g.conversation_id == ^conversation_id,
+        select: g.id,
+        lock: "FOR UPDATE"
+    )
+  end
+
+  defp demote_privilege!(conversation_id, user_id, demoted_by_id) do
+    grantor_privilege =
+      Repo.get_by!(
+        GroupConversationPrivileges,
+        conversation_id: conversation_id,
+        user_id: user_id
+      )
+
+    {:ok, _} =
+      grantor_privilege
+      |> Ecto.Changeset.change(
+        role: :member,
+        granted_by_id: demoted_by_id
+      )
+      |> Repo.update()
   end
 
   defp create_group_with_two_admins!(family, primary_admin) do

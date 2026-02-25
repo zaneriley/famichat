@@ -1,7 +1,7 @@
 # Sprint 7: Real–Time Messaging Integration
 
 **Duration**: Oct 1 - Oct 15, 2025
-**Progress**: ✅ Core channel/auth milestones and 7.4.2 secure CLI broadcast hardening are complete; remaining Sprint 7 work is runbook/doc consolidation and targeted role edge-case coverage
+**Progress**: ✅ Core channel/auth milestones, 7.4.2 secure CLI broadcast hardening, and group-role edge-case coverage are complete; remaining Sprint 7 work is runbook/doc consolidation follow-through
 **Status**: 🟡 Sprint 7 closeout in progress; full repo lint/static gates still have pre-existing baseline debt outside the completed stories
 
 ---
@@ -14,12 +14,12 @@
 - ✓ 7.1.4: Encryption telemetry validation (join/broadcast sensitive metadata filtering assertions)
 - ✓ 7.4.2: Secure canonical CLI broadcast workflow (`/api/test/broadcast`) with auth, membership checks, contract tests, and no-broadcast guarantees on non-200 paths
 - ✓ 7.10.1: Type-immutable conversation schema
+- ✓ 7.10.5-7.10.6: Group role management edge-case tests (last-admin + lock-contention authorization re-checks)
 - ✓ 7.10.8: Conversation hidden_by_users field
 - ✓ 7.10.9: Conversation hiding functionality
 - ✓ 7.9: Accounts context refactor (passkey-first onboarding, device trust, single token model)
 
 ### 🚧 In Progress
-- 🔄 7.10.5-6: Group role management tests (needs membership-aware fixtures)
 - 🔄 7.2: Broadcast testing verification and coverage audit follow-through
 - 🔄 7.3: Client integration documentation refresh for auth + CLI broadcast workflows
 
@@ -35,9 +35,9 @@
    - Deterministic runbook: `docs/runbooks/canonical-messaging-flow.md`
    - Locked with integration assertions: `backend/test/famichat_web/integration/canonical_messaging_flow_test.exs`
 
-2. **Role/authorization edge-case follow-through** (MEDIUM PRIORITY)
-   - Existing group privilege functionality is implemented, but edge-case characterization remains incomplete in Sprint 7 tracking.
-   - **Action**: finish focused tests for last-admin and concurrent role-change cases.
+2. ✅ **Role/authorization edge-case follow-through is now covered**
+   - Added adversarial tests for last-admin invariants, stale-admin lock-contention checks, and non-admin removal rejection.
+   - Coverage lives in `backend/test/famichat/chat/conversation_service_test.exs`.
 
 3. **Repo-wide lint/static baseline debt** (LOW PRIORITY)
    - Completed story paths are green in targeted tests/security checks, but repo-wide `elixir:lint` and `elixir:static-analysis` still fail on pre-existing issues.
