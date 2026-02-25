@@ -182,18 +182,18 @@
 
 ---
 
-### Sprint 9: Signal Protocol E2EE Implementation (Planned)
-**Goal**: Implement server-side Signal Protocol encryption via Rust NIF
+### Sprint 9: MLS E2EE Implementation (Planned)
+**Goal**: Implement server-side MLS encryption via Rust NIF (OpenMLS)
 
 **Key Deliverables**:
 - **Week 1-2**: Rust NIF Setup
-  - Add Rustler + libsignal-client to dependencies
+  - Add Rustler + OpenMLS dependency set
   - Multi-stage Docker build (Rust toolchain)
-  - Elixir NIF wrapper for Signal operations
+  - Elixir NIF wrapper for MLS operations
   - Basic encryption/decryption tests
 - **Week 2-3**: Key Management
-  - X3DH key exchange implementation
-  - Database schema for identity keys, prekeys, session states
+  - MLS key package + credential lifecycle implementation
+  - Database schema for MLS group state, epochs, and message metadata
   - User registration: Generate identity keys
   - Cloak.Ecto vault for key encryption at rest
 - **Week 3**: Message Encryption Integration
@@ -204,12 +204,12 @@
 
 **Dependencies**:
 - Sprint 8 (LiveView UI + authentication must exist)
-- Crypto library: libsignal-client (Rust) via Rustler NIF (ADR 006)
+- Crypto library: OpenMLS (Rust) via Rustler NIF (ADR 010)
 
 **Estimated Duration**: 3 weeks
 **Priority**: **CRITICAL** - Must dogfood with encryption from day 1
 
-**Outcome**: Messages encrypted/decrypted server-side using Signal Protocol. Ready for Layer 0 dogfooding.
+**Outcome**: Messages encrypted/decrypted server-side using MLS. Ready for Layer 0 dogfooding.
 
 **Current State**:
 - ✅ Encryption metadata infrastructure exists (serialization, telemetry)
@@ -233,7 +233,7 @@
   - Theme configuration tests
 
 **Dependencies**:
-- Sprint 9 (Signal Protocol E2EE must be working)
+- Sprint 9 (MLS E2EE must be working)
 - Sprint 8 (LiveView UI + authentication)
 
 **Estimated Duration**: 2 weeks
@@ -326,7 +326,7 @@
 - ✅ Encryption metadata infrastructure (serialization, telemetry)
 - 🔄 User authentication (in progress - Story 7.9)
 - 🔄 LiveView UI (messaging interface in progress)
-- ❌ E2E encryption (Signal Protocol - Sprint 9)
+- ❌ E2E encryption (MLS/OpenMLS - Sprint 9)
 - ❌ Production deployment
 
 **Definition of MVP**:
@@ -398,7 +398,7 @@
 
 2. **Encryption Complexity**
    - **Impact**: May take longer than 3 weeks (moved to Sprint 9, extended from 2 to 3 weeks)
-   - **Mitigation**: Using libsignal-client (Rust NIF) - already decided in ADR 006
+   - **Mitigation**: MLS-first direction accepted (ADR 010) with performance guardrails + dependency update discipline
    - **Current State**: Encryption metadata infrastructure ready, but no crypto implementation yet
 
 3. **Native App Decision Point**
@@ -418,11 +418,17 @@
 - **Current Status**: See [STATUS.md](STATUS.md) for comprehensive implementation status
 - **Current Sprint**: See [CURRENT-SPRINT.md](CURRENT-SPRINT.md) for Sprint 7 details
 - **Architecture**: See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design
+- **Encryption Direction**: See [docs/decisions/010-mls-first-for-neighborhood-scale.md](docs/decisions/010-mls-first-for-neighborhood-scale.md)
 - **Vision**: See [docs/VISION.md](docs/VISION.md) for product goals
 
 ---
 
 ## 📝 Change Log
+
+### 2026-02-25
+- Updated E2EE direction from Signal-first to MLS-first (ADR 010)
+- Reframed Sprint 9 deliverables around OpenMLS integration and MLS state lifecycle
+- Updated Sprint 10 dependency wording to require MLS readiness
 
 ### 2025-10-05
 - Updated Sprint 7 status (30% complete)

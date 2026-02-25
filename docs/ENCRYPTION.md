@@ -1,6 +1,6 @@
 # Famichat - Encryption & Security Architecture
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 
 ---
 
@@ -8,11 +8,25 @@
 
 Famichat uses a **hybrid encryption approach**:
 
-1. **Server-Side E2EE**: Signal Protocol for message content (backend Rust NIF + libsignal-client)
+1. **Server-Side E2EE**: MLS via OpenMLS for message content (backend Rust NIF)
 2. **Field-Level Encryption**: Cloak.Ecto for sensitive user data (email, tokens, keys)
 3. **Infrastructure Encryption**: Database encryption at rest
 
-**Trust Model**: Self-hosted = you control the backend. Server has decryption keys but you own the server (similar to Signal's sealed sender trust model).
+**Trust Model**: Self-hosted = you control the backend. We still target "admin cannot read message content" confidentiality for user trust.
+
+### Decision Update (2026-02-25)
+
+The active protocol direction is now **MLS-first** via OpenMLS (see ADR 010), replacing the prior Signal-first direction in ADR 006.
+
+Why this changed:
+
+1. Product direction now includes inter-family and neighborhood-scale communication.
+2. MLS standards and architecture guidance matured (RFC 9420 / RFC 9750).
+3. GSMA RCS E2EE specifications now explicitly define MLS-based interoperability.
+4. We want to align with likely long-term ecosystem direction while maintaining performance guardrails.
+
+Authoritative reference:
+- [ADR 010: MLS-first E2EE direction](decisions/010-mls-first-for-neighborhood-scale.md)
 
 ---
 
@@ -30,44 +44,45 @@ Famichat uses a **hybrid encryption approach**:
 
 ### ❌ Not Implemented - Actual Cryptography
 - ⚠️ **CRITICAL**: **Messages currently stored in plaintext**
-- No libsignal-client library (Rust crate)
+- No OpenMLS integration (Rust crate wiring)
 - No Rustler NIF integration
-- No X3DH key exchange implementation
-- No Double Ratchet encryption/decryption
-- No key management system (identity keys, prekeys, sessions)
+- No MLS key package lifecycle implementation
+- No MLS group state / epoch lifecycle implementation
+- No key management system for MLS credential + group material
 - No Cloak.Ecto vault for key encryption at rest
 - `decrypt_message/1` is a **placeholder stub** (no actual decryption logic)
 
 ### 🔄 Planned Implementation
 
-**Sprint 9 (3 weeks)**: Signal Protocol via Server-Side Rust NIF
-- Week 1-2: Rustler + libsignal-client setup, basic encryption tests
-- Week 2-3: X3DH key exchange, database schema for keys, Cloak.Ecto vault
+**Sprint 9 (3 weeks)**: MLS/OpenMLS via Server-Side Rust NIF
+- Week 1-2: Rustler + OpenMLS setup, basic encryption tests
+- Week 2-3: MLS key package/group state schema + Cloak.Ecto vault
 - Week 3: Wire up message encryption/decryption, integration tests
 
 **Sprint 10 (2 weeks)**: Layer 0 Dogfooding with Encryption Enabled
 
 ---
 
-## Protocol Choice: Signal Protocol
+## Protocol Choice (Current): MLS / OpenMLS
 
-**Decision**: Use Signal Protocol for all end-to-end encrypted messaging.
+**Decision**: Use MLS (OpenMLS) as the primary E2EE direction for Famichat.
 
-**Why Signal?**
-- **Right-sized for families**: Optimized for 2-6 person households (primary use case)
-- **Battle-tested**: WhatsApp (2B+ users), Signal, Facebook Messenger
-- **Performance**: 30-90ms for family groups (well within 200ms budget)
-- **Deniability**: Messages use MACs (not signatures), better for family trust dynamics
-- **Mature ecosystem**: libsignal-client actively maintained by Signal Foundation
+**Why MLS now?**
+- **Neighborhood trajectory fit**: Better aligns with inter-family and larger group requirements.
+- **Standards momentum**: RFC 9420 + RFC 9750 and GSMA RCS MLS-based E2EE specifications.
+- **Interoperability posture**: Reduces protocol lock-in risk as the ecosystem converges.
+- **Performance model with guardrails**: App-message flow can be efficient, but commit/update/remove costs require explicit churn/tree-health monitoring.
 
-**Alternatives Evaluated** (see [ADR 006](decisions/006-signal-protocol-for-e2ee.md)):
-- ❌ **MLS**: Overkill for small groups (2-6 people), tree overhead unnecessary
-- ❌ **Megolm**: No Post-Compromise Security, Matrix-specific (vendor lock-in)
-- ❌ **No E2EE**: Impossible to retrofit later, user expectation for secure messaging
+**Decision history**:
+- ADR 006 (Signal-first) is now superseded.
+- ADR 010 records the updated rationale and implications.
 
 ---
 
-## Signal Protocol Architecture
+## [DEPRECATED] Historical Appendix: Prior Signal-Oriented Plan (Superseded by ADR 010)
+
+The sections below are preserved for historical context from the 2025 Signal-first analysis.
+They are **not** the authoritative implementation plan anymore.
 
 ### Components
 
@@ -110,7 +125,7 @@ Famichat uses a **hybrid encryption approach**:
 
 ---
 
-## Implementation Plan (Sprint 9 - 3 Weeks)
+## [DEPRECATED] Historical Signal Implementation Plan (Superseded)
 
 ### Phase 1: Rust NIF + libsignal-client (Week 1-2)
 
@@ -600,12 +615,13 @@ end
 
 - **ADR 002**: [Hybrid Encryption Strategy](decisions/002-encryption-approach.md)
 - **ADR 005**: [Encryption Metadata Schema](decisions/005-encryption-metadata-schema.md)
-- **ADR 006**: [Signal Protocol for E2EE](decisions/006-signal-protocol-for-e2ee.md) - Full protocol evaluation
+- **ADR 006**: [Signal Protocol for E2EE](decisions/006-signal-protocol-for-e2ee.md) - historical (superseded)
+- **ADR 010**: [MLS-first E2EE direction](decisions/010-mls-first-for-neighborhood-scale.md) - current direction
 - **ARCHITECTURE.md**: [System Architecture](ARCHITECTURE.md)
 - **PERFORMANCE.md**: [Performance Budgets](PERFORMANCE.md)
 
 ---
 
-**Last Updated**: 2025-10-05
-**Status**: Signal Protocol chosen, implementation starts Sprint 8
-**Next Review**: After Layer 5 implementation (if inter-family channels grow >30 people)
+**Last Updated**: 2026-02-25
+**Status**: MLS-first direction chosen (ADR 010); implementation planned in Sprint 9
+**Next Review**: After Sprint 9 planning lock and first MLS telemetry baseline

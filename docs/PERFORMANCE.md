@@ -1,6 +1,9 @@
 # Performance Architecture
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
+
+> Decision update: MLS-first direction is now authoritative (ADR 010).  
+> Any Signal-specific assumptions below are historical until this document is fully refreshed.
 
 ---
 
@@ -145,7 +148,7 @@ User types message
 
 ## Encryption Performance Constraints
 
-### Protocol Selection: Signal Protocol
+### [DEPRECATED] Protocol Selection: Signal Protocol
 
 **Decision**: Use Signal Protocol for all conversations (family scale: 2-6 people)
 
@@ -164,23 +167,23 @@ User types message
 - **6 people (Layer 3)**: 15ms × 6 = 90ms ✅
 - **20-30 people (Layer 5)**: 15ms × 20-30 = 300-450ms ⚠️ (acceptable for infrequent inter-family coordination)
 
-**Why Signal Protocol Works**:
+**Historical (Superseded) Signal Analysis**:
 1. **Right-sized for families**: Pairwise encryption performs well at 2-6 people
 2. **Battle-tested**: WhatsApp (2B+ users), Signal, Facebook Messenger
 3. **Deniability**: Uses MACs (not signatures), better for family trust
 4. **Forward Secrecy + PCS**: Double Ratchet provides both
 5. **Meets 200ms budget for Layers 1-3**: 30-90ms encryption well within budget
 
-**Why Not MLS?**:
+**Historical (Superseded) MLS Rejection Rationale**:
 - MLS optimizes for large groups (100+ people) with tree-based operations
 - At family scale (2-6 people), MLS tree overhead adds unnecessary complexity
 - Signal's pairwise approach is simpler and performs better at this scale
 
-**See**: [ENCRYPTION.md](ENCRYPTION.md) and [ADR 006](decisions/006-signal-protocol-for-e2ee.md) for detailed protocol evaluation
+**See**: [ENCRYPTION.md](ENCRYPTION.md), [ADR 010](decisions/010-mls-first-for-neighborhood-scale.md), and [ADR 006](decisions/006-signal-protocol-for-e2ee.md) (historical)
 
 ---
 
-### Signal Protocol Performance Budget
+### [DEPRECATED] Signal Protocol Performance Budget
 
 **Message Encryption** (critical path):
 ```
@@ -271,7 +274,7 @@ X3DH key exchange: 50-100ms
 
 ---
 
-### 3. Signal Protocol Scaling Limitations
+### 3. [DEPRECATED] Signal Protocol Scaling Limitations
 
 **Tradeoff**: Signal Protocol's pairwise encryption doesn't scale beyond ~30 people (450ms).
 

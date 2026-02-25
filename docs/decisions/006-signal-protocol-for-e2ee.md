@@ -1,7 +1,8 @@
-# ADR 006: Signal Protocol for End-to-End Encryption
+# [DEPRECATED] ADR 006: Signal Protocol for End-to-End Encryption
 
 **Date**: 2025-10-05
-**Status**: Accepted
+**Status**: Superseded by ADR 010
+**Superseded By**: ADR 010 (MLS-first direction for family + neighborhood scale)
 **Supersedes**: ADR 002 (updates encryption protocol choice from "Signal Protocol (planned)" to "Signal Protocol (evaluated vs alternatives)")
 
 ---
@@ -117,7 +118,7 @@ Specifically:
 
 ---
 
-## Rationale for Signal Protocol
+## [DEPRECATED] Rationale for Signal Protocol
 
 ### 1. **Right Fit for Family Scale (2-6 People)**
 

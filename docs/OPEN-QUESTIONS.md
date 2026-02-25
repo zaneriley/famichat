@@ -1,6 +1,6 @@
 # Famichat - Open Questions
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 
 This document tracks architectural and product decisions that require discussion before implementation.
 
@@ -10,90 +10,66 @@ This document tracks architectural and product decisions that require discussion
 
 ### Q1: Encryption Protocol Choice
 
-**Status**: ✅ **RESOLVED: Signal Protocol**
+**Status**: ✅ **RESOLVED: MLS-first (OpenMLS)**
 
-**Final Decision**: Use Signal Protocol for all E2EE messaging
+**Final Decision**: Use MLS/OpenMLS as the primary E2EE direction.
 
 **Rationale**:
-- **Right-sized for families**: 2-6 people per household (not 100+ person groups)
-- **Performance**: 30-90ms for families (well within 200ms budget)
-- **Battle-tested**: WhatsApp, Signal, 2B+ users
-- **Deniability**: Better for family trust (vs MLS signatures)
-- **Simpler**: Easier to implement than MLS (5 weeks vs 8 weeks)
-
-**Alternatives Evaluated**:
-
-1. **MLS (Rejected)**
-   - ✅ Superior for large groups (100+ people)
-   - ❌ Overkill for families (tree overhead unnecessary at 2-6 people scale)
-   - ❌ No deniability (signatures prove authorship)
-   - ❌ Higher complexity (epoch management, tree operations)
-   - **Conclusion**: MLS wins at >20 people. Famichat families are 2-6 people.
-
-2. **Megolm/Matrix (Rejected)**
-   - ✅ Decent performance (~110ms for 100 people)
-   - ❌ No Post-Compromise Security (once compromised, stays compromised)
-   - ❌ Not standardized (Matrix-specific, vendor lock-in)
-   - ❌ Platform coupling (implies Matrix ecosystem dependency)
-   - **Conclusion**: Inferior security, no advantage for families
-
-3. **No E2EE (Rejected)**
-   - ✅ Simplest implementation
-   - ❌ Impossible to retrofit later (must build in from Day 1)
-   - ❌ No zero-knowledge (admin can read messages)
-   - ❌ User expectation (modern apps have E2EE)
-   - **Conclusion**: E2EE is table stakes, must have from start
+- Product trajectory now includes inter-family and neighborhood-scale coordination.
+- MLS is standardized (RFC 9420) with architecture guidance (RFC 9750).
+- GSMA RCS E2EE specifications now define MLS-based interoperability.
+- Strategic fit is stronger for long-term group messaging than maintaining a small-group-only protocol direction.
 
 **Implementation**:
-- libsignal-client (Rust) via Rustler NIF
-- X3DH + Double Ratchet
-- Pairwise encryption for groups
-- Timeline: 5 weeks (Sprints 8-12)
+- OpenMLS (Rust) via Rustler NIF
+- MLS key package + group state + epoch/commit lifecycle
+- Server-side encryption/decryption integration into messaging flow
+- Timeline: Sprint 9-10
 
-**Re-evaluation Trigger**:
-- If Layer 5 (inter-family channels) scales >30 people and latency >400ms
-- Then consider: Hybrid approach (Signal for families, MLS for large channels)
+**Operational Caveat**:
+- OpenMLS requires active dependency hygiene and prompt security updates.
 
-**See**: [ADR 006](decisions/006-signal-protocol-for-e2ee.md) for full evaluation
+**See**:
+- [ADR 010](decisions/010-mls-first-for-neighborhood-scale.md) for decision rationale and references
+- [ADR 006](decisions/006-signal-protocol-for-e2ee.md) for superseded Signal-first analysis
 
 ---
 
 ### Q2: Encryption Budget Flexibility
 
-**Status**: ✅ **RESOLVED: Signal family path meets 200ms budget (MLS benchmark archived)**
+**Status**: ✅ **RESOLVED: MLS-first with explicit performance guardrails**
 
-**Updated Context**: Signal double-ratchet encrypt/decrypt stays within 30-90ms for 2-6 recipients. MLS message encryption clocks 5-10ms (symmetric AEAD) and remains a reference point for large-group contingency planning; the 150ms figure applies only to infrequent group operations (setup, membership changes, key rotation).
+**Updated Context**: MLS app-message flow can meet user-facing latency goals, while commit/update/remove operations are sensitive to churn and tree health. Performance policy now distinguishes steady-state messaging from membership-change operations.
 
 **Revised Budget Breakdown**:
 ```
 Client capture (10ms)
-  → Client encrypt (10ms)   # MLS message encryption (symmetric AEAD)
+  → Encrypt/decrypt via MLS path (steady-state app-message target <=50ms)
   → Network send (50ms)
   → Server process (20ms)
   → Network receive (50ms)
-  → Client decrypt (10ms)
   → Client display (10ms)
-= 160ms total (within 200ms budget) ✅
+= target <=200ms steady-state user path
 ```
 
 **Group Operations** (infrequent, not on critical messaging path):
 ```
 Group setup/membership change:
-  → Tree operations (150ms for 100-person group)
-  → Acceptable: User joins/leaves are infrequent
-  → Not blocking: Regular messaging unaffected
+  → Commit/update/remove latency varies with churn and tree health
+  → Must be monitored separately from app-message latency
+  → Guardrails required for group size + change frequency
 ```
 
 **Conclusion**:
-- **Primary path**: Signal Protocol (per ADR 006) continues to meet family-scale budgets ✅
-- **Reference path**: MLS metrics retained for potential Layer 5 fallback (large channels)
-- **No budget adjustment needed**
+- **Primary path**: MLS/OpenMLS (per ADR 010)
+- **Policy**: Separate SLOs for steady-state app messages vs group commit/update operations
+- **Action**: Instrument p50/p95/p99 for both paths before broad dogfooding
 
-**User Decision Needed**: None - Protocol locked to Signal unless Layer 5 latency triggers MLS evaluation
+**User Decision Needed**: None - protocol direction is locked to MLS-first.
 
-**Timeline**: Resolved (Signal chosen; MLS retained for contingency analysis)
+**Timeline**: Resolved (MLS-first accepted with operational guardrails)
 
-**See**: [ENCRYPTION.md](ENCRYPTION.md#protocol-recommendation) for performance analysis
+**See**: [ENCRYPTION.md](ENCRYPTION.md) and [ADR 010](decisions/010-mls-first-for-neighborhood-scale.md)
 
 ---
 
@@ -357,7 +333,7 @@ Group setup/membership change:
 
 | Question | Priority | Deadline | Status | Owner |
 |----------|----------|----------|--------|-------|
-| Q1: Encryption Protocol | Critical | Sprint 9 | ✅ **Signal Protocol (ADR 006)** | User |
+| Q1: Encryption Protocol | Critical | Sprint 9 | ✅ **MLS-first (ADR 010)** | User |
 | Q2: Encryption Budget | Critical | Sprint 9 | ✅ **Resolved: Meets 200ms budget** | N/A |
 | Q5: Token Architecture | High | Sprint 9 | Developer |
 | Q8: Encryption Metadata Schema | High | Sprint 11 | Developer |
@@ -380,6 +356,6 @@ Group setup/membership change:
 
 ---
 
-**Last Updated**: 2025-10-05
-**Version**: 1.0
+**Last Updated**: 2026-02-25
+**Version**: 1.1
 **Status**: Living document - updated as questions are resolved

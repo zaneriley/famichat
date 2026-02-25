@@ -1,6 +1,6 @@
 # Famichat - System Architecture
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 
 See [STATUS.md](../STATUS.md) for current implementation details.
 
@@ -68,11 +68,13 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 **Decision**: Hybrid encryption (E2EE + field-level + infrastructure)
 
 **Components**:
-- Client-side E2EE (Signal Protocol - planned)
+- Server-side E2EE direction: MLS via OpenMLS (ADR 010)
 - Field-level (Cloak.Ecto for sensitive data)
 - Database encryption at rest
 
-**See**: [ENCRYPTION.md](ENCRYPTION.md)
+**See**:
+- [ENCRYPTION.md](ENCRYPTION.md)
+- [decisions/010-mls-first-for-neighborhood-scale.md](decisions/010-mls-first-for-neighborhood-scale.md)
 
 ---
 
@@ -90,13 +92,13 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 - `group_conversation_privileges` - Group admin/member privileges per conversation
 - `user_tokens` - Context-scoped hashed tokens (invite, magic link, pairing, etc.)
 - `user_devices` - Device trust + refresh token rotation (30 day window)
-- `passkeys` - Stored WebAuthn credentials (registration/assertion implemented via Rustler/libsignal integration TBD); server only accepts attestation/assertion requests tied to signed challenge records (no direct credential registration)
+- `passkeys` - Stored WebAuthn credentials (registration/assertion wired through Wax challenge exchange); server only accepts attestation/assertion requests tied to signed challenge records (no direct credential registration)
 
 **Key Fields / Notes**:
 - `users.email` uses `EncryptedBinary` (Cloak) with deterministic `email_fingerprint` for uniqueness
 - `conversations.direct_key` - SHA256 hash for deduplication
 - `conversations.hidden_by_users` - Array of user IDs (soft delete)
-- `messages.metadata` - JSONB for encryption data (E2EE stubbed until libsignal lands)
+- `messages.metadata` - JSONB for encryption data (E2EE stubbed until MLS/OpenMLS integration lands)
 - Accounts refactor delivered (passkey-first onboarding, single token model). Legacy `users.family_id/role` columns removed in follow-up migration.
 
 ---
@@ -161,10 +163,10 @@ See [ENCRYPTION.md](ENCRYPTION.md) for detailed security design.
 - ⚠️ **Messages currently stored in plaintext** (no crypto implementation)
 
 **Planned** (Sprint 9 - 3 weeks):
-- Server-side Signal Protocol E2EE (Rust NIF + libsignal-client)
-- X3DH key exchange + Double Ratchet
+- Server-side MLS E2EE (Rust NIF + OpenMLS)
+- MLS key package lifecycle + group state/epoch management
 - Key management system (database storage with Cloak.Ecto encryption at rest)
-- Trust model: Self-hosted backend = you control the server (similar to Signal's sealed sender)
+- Trust model: Self-hosted backend = you control the server; message confidentiality target is "admin cannot read content"
 
 ---
 
@@ -181,15 +183,15 @@ Performance is a critical constraint that informs all architectural decisions.
 **Budget Breakdown (Sender → Receiver)**:
 ```
 LiveView captures message (10ms)
-  → Server encrypts via Signal NIF (30-90ms for 2-6 people)
+  → Server encrypts via MLS NIF path (steady-state app-message target <=50ms)
   → Store encrypted in database (10ms)
   → Broadcast to recipients (20ms)
   → Network send (50ms)
   → Recipient LiveView receives (10ms)
-  → Server decrypts via Signal NIF (15ms)
+  → Server decrypts via MLS NIF path (steady-state app-message target <=30ms)
   → LiveView renders (10ms)
 
-= ~245-305ms total for family messaging (2-6 people)
+= target <=200ms for steady-state app-message flow; commit/update/remove paths tracked with separate SLOs
 ```
 
 **Architectural Implications**:
@@ -197,7 +199,7 @@ LiveView captures message (10ms)
 2. **Binary Protocol**: Avoid JSON serialization overhead (10-20ms saved)
 3. **Persistent WebSockets**: Eliminate connection handshake from critical path
 4. **Self-Hosted Deployment**: Neighborhood-local server = 1-30ms network latency (vs 50-150ms cloud)
-5. **Encryption Protocol Constraint**: Signal Protocol rejected for groups (2000ms), evaluating Megolm (110ms) or MLS (150ms)
+5. **Encryption Protocol Constraint**: MLS app-message path can be efficient, but commit/update/remove latency is sensitive to churn and tree health; enforce guardrails + telemetry by default
 
 **Monitoring**:
 - Telemetry on all critical operations (`:telemetry.span/3`)

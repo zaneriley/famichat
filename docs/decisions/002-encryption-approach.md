@@ -1,14 +1,17 @@
-# ADR 002: Hybrid Encryption Strategy
+# [DEPRECATED] ADR 002: Hybrid Encryption Strategy
 
 **Date**: 2025-03-10
-**Status**: Accepted (Updated 2025-10-05)
-**Updated By**: ADR 006 (Signal Protocol evaluation vs alternatives)
+**Status**: Superseded (historical baseline)
+**Updated By**: ADR 006 (historical), ADR 010 (current direction)
 
 ---
 
 ## Context
 
 Need to decide encryption strategy balancing security and implementation complexity for self-hosted family messaging.
+
+> Historical note: this ADR captures the initial hybrid strategy framing.
+> Current protocol direction is defined in ADR 010.
 
 ## Decision
 
@@ -25,7 +28,7 @@ Use **hybrid encryption approach**:
 - User expectation (modern messaging apps have E2EE)
 - Impossible to retrofit later (must build in from Day 1)
 
-### Why Signal Protocol (vs MLS or Megolm)?
+### [DEPRECATED] Why Signal Protocol (vs MLS or Megolm)?
 - Right-sized for families (2-6 people per household)
 - Battle-tested (WhatsApp, Signal, 2B+ users)
 - Deniability (better for family trust dynamics)
@@ -88,10 +91,11 @@ Use **hybrid encryption approach**:
 ## Related Documentation
 
 - **ADR 006**: [Signal Protocol for E2EE](006-signal-protocol-for-e2ee.md) - Full protocol evaluation
+- **ADR 010**: [MLS-first for neighborhood scale](010-mls-first-for-neighborhood-scale.md) - Current protocol direction
 - **ADR 005**: [Encryption Metadata Schema](005-encryption-metadata-schema.md) - Key storage design
 - **ENCRYPTION.md**: [Security Architecture](../ENCRYPTION.md) - Implementation details
 
 ---
 
-**Last Updated**: 2025-10-05 (Updated rationale with ADR 006 evaluation)
-**Next Review**: After Layer 5 implementation
+**Last Updated**: 2026-02-25 (Superseded by ADR 010)
+**Next Review**: None (historical document)

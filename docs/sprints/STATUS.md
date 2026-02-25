@@ -18,7 +18,8 @@
 1. 🚨 **No Actual Encryption** - Metadata infrastructure exists, but no crypto implementation
    - ✅ Encryption metadata storage/serialization works
    - ✅ Telemetry tracks encryption status
-   - ❌ No libsignal-client integration (Sprint 9, 3 weeks)
+   - ❌ No MLS/OpenMLS integration (Sprint 9, 3 weeks)
+   - ✅ Protocol direction locked: MLS-first (ADR 010)
    - ⚠️ **Messages currently stored in plaintext**
 2. ⚠️ **Client Integration Documentation** - Channel/LiveView integration guidance is still incomplete (Story 7.3)
 
@@ -393,9 +394,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
   - Schema has `metadata` JSONB field for encryption data
   - Serialization/deserialization functions exist
   - Telemetry filtering prevents sensitive data leaks
-- **Planned**: Sprint 10 (Signal Protocol with X3DH/Double Ratchet)
+- **Planned**: Sprint 9-10 (MLS/OpenMLS rollout with group-state and commit lifecycle hardening)
 - **Effort**: ~2 weeks
-- **Dependencies**: Need crypto library selection
+- **Dependencies**: ADR 010 accepted; implement OpenMLS integration and ops guardrails
 
 #### 3. Message Status Tracking ❌ PARTIAL
 - **Impact**: Poor UX - users don't know if messages were delivered/read
@@ -531,9 +532,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 #### Medium Priority
 1. **Encryption Metadata Ready but No Crypto Implementation**
    - ✅ Metadata infrastructure complete
-   - ❌ No libsignal-client, no Rustler NIF, no actual encryption
+   - ❌ No OpenMLS integration, no Rustler NIF bridge, no actual encryption
    - ⚠️ Security risk: Messages stored in plaintext
-   - **Action**: Sprint 9 (Signal Protocol via Rust NIF, 3 weeks)
+   - **Action**: Sprint 9 (MLS/OpenMLS via Rust NIF, 3 weeks)
 
 2. **Message Status Only Supports :sent**
    - UX gap
@@ -580,6 +581,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ### Deep Dives
 - [System Architecture](docs/ARCHITECTURE.md) - Overall design and component interactions
 - [Encryption Strategy](docs/ENCRYPTION.md) - Security model and E2EE roadmap
+- [ADR 010](docs/decisions/010-mls-first-for-neighborhood-scale.md) - MLS-first rationale, product implications, and performance guardrails
 - [API Design](docs/API-DESIGN.md) - API principles and response formats
 - [Product Vision](docs/VISION.md) - Goals, users, use cases
 
@@ -603,9 +605,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 4. Create authentication pages (login/registration forms)
 
 ### Medium-term (Sprint 9-11)
-1. **Sprint 9 (3 weeks)**: Signal Protocol E2EE implementation
-   - Rust NIF + libsignal-client integration
-   - X3DH key exchange + Double Ratchet
+1. **Sprint 9 (3 weeks)**: MLS/OpenMLS E2EE implementation
+   - Rust NIF + OpenMLS integration
+   - MLS key package, group state, epoch/commit lifecycle
    - Server-side encryption/decryption
 2. **Sprint 10 (2 weeks)**: Layer 0 dogfooding with encryption + Design System
 3. **Sprint 11**: Code quality, media upload support, message status tracking
