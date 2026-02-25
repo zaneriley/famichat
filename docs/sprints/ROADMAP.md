@@ -183,6 +183,7 @@
 
 ### Sprint 9: MLS E2EE Implementation (Planned)
 **Goal**: Implement server-side MLS encryption via Rust NIF (OpenMLS)
+**Contract Reference**: [9.0-mls-rust-nif-contract-deep-dive.md](9.0-mls-rust-nif-contract-deep-dive.md)
 
 **Key Deliverables**:
 - **Week 1-2**: Rust NIF Setup

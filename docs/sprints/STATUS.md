@@ -562,6 +562,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - [System Architecture](docs/ARCHITECTURE.md) - Overall design and component interactions
 - [Encryption Strategy](docs/ENCRYPTION.md) - Security model and E2EE roadmap
 - [ADR 010](docs/decisions/010-mls-first-for-neighborhood-scale.md) - MLS-first rationale, product implications, and performance guardrails
+- [Sprint 9 MLS/NIF Contract Deep Dive](docs/sprints/9.0-mls-rust-nif-contract-deep-dive.md) - MECE implementation contract and gap closure checklist
 - [API Design](docs/API-DESIGN.md) - API principles and response formats
 - [Product Vision](docs/VISION.md) - Goals, users, use cases
 
