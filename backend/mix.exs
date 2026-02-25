@@ -91,6 +91,7 @@ defmodule Famichat.MixProject do
       {:telemetry_test, "~> 0.1.0", only: :test},
       {:cloak_ecto, "~> 1.3"},
       {:wax_, "~> 0.6"},
+      {:rustler, "~> 0.37"},
       {:boundary, "~> 0.9", runtime: false}
     ]
   end

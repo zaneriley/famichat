@@ -6,6 +6,7 @@ defmodule Famichat.Chat.MessageService do
   import Ecto.Query, warn: false
   alias Famichat.Repo
   alias Famichat.Chat.{Conversation, ConversationAccess, Message}
+  alias Famichat.Crypto.MLS
   alias Famichat.Ecto.Pagination
   require Logger
 
@@ -47,6 +48,7 @@ defmodule Famichat.Chat.MessageService do
     |> apply_pagination()
     |> execute_query()
     |> preload_associations()
+    |> decrypt_messages_if_required()
     |> handle_result()
   end
 
@@ -141,6 +143,7 @@ defmodule Famichat.Chat.MessageService do
     |> validate_sender()
     |> validate_conversation()
     |> verify_sender_in_conversation()
+    |> encrypt_with_mls_if_required()
     |> process_encryption_metadata()
     |> build_changeset()
     |> persist_message()
@@ -536,5 +539,179 @@ defmodule Famichat.Chat.MessageService do
       serialize_message(state.params, Map.get(state, :conversation))
 
     %{state | params: updated_params}
+  end
+
+  defp encrypt_with_mls_if_required(%{error: _} = state), do: state
+
+  defp encrypt_with_mls_if_required(
+         %{conversation: %Conversation{conversation_type: conversation_type}} =
+           state
+       ) do
+    if mls_enforcement_enabled?() and requires_encryption?(conversation_type) do
+      request = %{
+        group_id: state.conversation.id,
+        sender_id:
+          Map.get(state.params, :sender_id) ||
+            Map.get(state.params, "sender_id"),
+        body:
+          Map.get(state.params, :content) || Map.get(state.params, "content")
+      }
+
+      case MLS.create_application_message(request) do
+        {:ok, payload} ->
+          case extract_mls_ciphertext(payload) do
+            {:ok, ciphertext} ->
+              updated_params =
+                apply_mls_ciphertext(state.params, payload, ciphertext)
+
+              %{state | params: updated_params}
+
+            {:error, details} ->
+              emit_mls_failure(:encrypt, :crypto_failure, details, state)
+
+              Map.put(
+                state,
+                :error,
+                {:mls_encryption_failed, :crypto_failure, details}
+              )
+          end
+
+        {:error, code, details} ->
+          emit_mls_failure(:encrypt, code, details, state)
+          Map.put(state, :error, {:mls_encryption_failed, code, details})
+      end
+    else
+      state
+    end
+  end
+
+  defp decrypt_messages_if_required(%{error: _} = state), do: state
+  defp decrypt_messages_if_required(%{result: []} = state), do: state
+
+  defp decrypt_messages_if_required(
+         %{result: messages, conversation_id: conversation_id} = state
+       ) do
+    if not mls_enforcement_enabled?() do
+      state
+    else
+      case Repo.get(Conversation, conversation_id) do
+        %Conversation{conversation_type: type}
+        when type in [:direct, :family, :group, :self] ->
+          do_decrypt_messages(state, messages, conversation_id, type)
+
+        _ ->
+          state
+      end
+    end
+  end
+
+  defp do_decrypt_messages(state, messages, conversation_id, conversation_type) do
+    if requires_encryption?(conversation_type) do
+      case Enum.reduce_while(messages, {:ok, []}, fn message, {:ok, acc} ->
+             case MLS.process_incoming(%{
+                    group_id: conversation_id,
+                    message_id: message.id,
+                    ciphertext: message.content
+                  }) do
+               {:ok, payload} ->
+                 case extract_mls_plaintext(payload) do
+                   {:ok, plaintext} ->
+                     {:cont, {:ok, [%{message | content: plaintext} | acc]}}
+
+                   {:error, details} ->
+                     {:halt, {:error, :crypto_failure, details, message}}
+                 end
+
+               {:error, code, details} ->
+                 {:halt, {:error, code, details, message}}
+             end
+           end) do
+        {:ok, decrypted_reversed} ->
+          %{state | result: Enum.reverse(decrypted_reversed)}
+
+        {:error, code, details, message} ->
+          emit_mls_failure(:decrypt, code, details, state, message)
+          Map.put(state, :error, {:mls_decryption_failed, code, details})
+      end
+    else
+      state
+    end
+  end
+
+  defp extract_mls_ciphertext(payload) do
+    ciphertext = Map.get(payload, :ciphertext) || Map.get(payload, "ciphertext")
+
+    if is_binary(ciphertext) and byte_size(ciphertext) > 0 do
+      {:ok, ciphertext}
+    else
+      {:error,
+       %{
+         operation: :create_application_message,
+         reason: :missing_ciphertext
+       }}
+    end
+  end
+
+  defp extract_mls_plaintext(payload) do
+    plaintext = Map.get(payload, :plaintext) || Map.get(payload, "plaintext")
+
+    if is_binary(plaintext) do
+      {:ok, plaintext}
+    else
+      {:error, %{operation: :process_incoming, reason: :missing_plaintext}}
+    end
+  end
+
+  defp apply_mls_ciphertext(params, _payload, ciphertext) do
+    existing_metadata =
+      Map.get(params, :metadata) || Map.get(params, "metadata") || %{}
+
+    mls_metadata =
+      existing_metadata
+      |> Map.put("mls", %{"encrypted" => true})
+
+    params
+    |> Map.put(:content, ciphertext)
+    |> Map.delete("content")
+    |> Map.put(:metadata, mls_metadata)
+    |> Map.delete("metadata")
+  end
+
+  defp emit_mls_failure(action, code, details, state, message \\ nil) do
+    params = Map.get(state, :params, %{})
+
+    metadata = %{
+      action: action,
+      error_code: code,
+      conversation_id:
+        Map.get(params, :conversation_id) ||
+          Map.get(params, "conversation_id") || Map.get(state, :conversation_id)
+    }
+
+    metadata =
+      if message do
+        Map.put(metadata, :message_id, message.id)
+      else
+        metadata
+      end
+
+    metadata =
+      case Map.get(details, :reason) || Map.get(details, "reason") do
+        reason when is_atom(reason) or is_binary(reason) ->
+          Map.put(metadata, :reason, reason)
+
+        _ ->
+          metadata
+      end
+
+    :telemetry.execute(
+      [:famichat, :message, :mls_failure],
+      %{count: 1},
+      metadata
+    )
+  end
+
+  defp mls_enforcement_enabled? do
+    Application.get_env(:famichat, :mls_enforcement, false)
   end
 end

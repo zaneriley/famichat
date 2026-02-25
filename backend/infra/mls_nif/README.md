@@ -5,9 +5,9 @@ Rust-side contract scaffold for the Famichat MLS adapter.
 This crate is intentionally minimal and currently provides:
 
 1. Stable error-code taxonomy mirroring the Elixir boundary contract.
-2. `nif_version` and `nif_health` scaffolding payloads.
-3. Placeholder operations that fail closed with `unsupported_capability`.
-4. Unit tests that keep the contract shape deterministic while OpenMLS wiring is pending.
+2. Rustler NIF exports for the Elixir MLS bridge (`Famichat.Crypto.MLS.NifBridge`).
+3. Deterministic contract-safe operation implementations for lifecycle/message flows.
+4. Unit tests that validate invariants and result-shape stability while OpenMLS wiring is pending.
 
 ## Validation loop
 

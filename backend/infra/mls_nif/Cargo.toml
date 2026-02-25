@@ -9,3 +9,6 @@ description = "Famichat MLS NIF contract scaffold"
 name = "mls_nif"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rustler = "0.37"
