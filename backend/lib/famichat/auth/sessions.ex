@@ -171,6 +171,18 @@ defmodule Famichat.Auth.Sessions do
     end
   end
 
+  @spec device_active?(Ecto.UUID.t(), String.t()) :: boolean()
+  def device_active?(user_id, device_id)
+      when is_binary(user_id) and is_binary(device_id) do
+    with {:ok, device} <- DeviceStore.fetch(device_id),
+         :ok <- ensure_device_matches(device, user_id),
+         :ok <- ensure_trust_active(device, allow_nil: true) do
+      true
+    else
+      _ -> false
+    end
+  end
+
   @spec require_reauth?(Ecto.UUID.t(), String.t(), atom()) :: boolean()
   def require_reauth?(user_id, device_id, _action) do
     with {:ok, device} <- DeviceStore.fetch(device_id),

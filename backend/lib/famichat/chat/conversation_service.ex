@@ -458,42 +458,60 @@ defmodule Famichat.Chat.ConversationService do
       [:famichat, :conversation_service, :assign_admin],
       metadata,
       fn ->
-        with {:ok, _conversation} <- fetch_group_conversation(conversation_id),
-             {:ok, true} <- admin?(conversation_id, granted_by_id),
-             result <-
-               insert_admin_privilege(
-                 conversation_id,
-                 target_user_id,
-                 granted_by_id
-               ) do
-          {result, Map.put(metadata, :result, result_status(result))}
-        else
-          {:ok, false} ->
-            {{:error, :not_admin}, Map.put(metadata, :result, "error")}
+        result =
+          with_group_privileges_lock(conversation_id, fn ->
+            with {:ok, conversation} <- fetch_group_conversation(conversation_id),
+                 :ok <-
+                   ensure_target_user_assignable(conversation, target_user_id),
+                 {:ok, true} <-
+                   admin_in_conversation?(conversation_id, granted_by_id) do
+              insert_admin_privilege(
+                conversation_id,
+                target_user_id,
+                granted_by_id
+              )
+            else
+              {:ok, false} -> {:error, :not_admin}
+              error -> error
+            end
+          end)
 
-          error ->
-            {error, Map.put(metadata, :result, result_status(error))}
-        end
+        {result, Map.put(metadata, :result, result_status(result))}
       end
     )
   end
 
   # Helper function to insert admin privilege
   defp insert_admin_privilege(conversation_id, target_user_id, granted_by_id) do
-    attrs = %{
-      conversation_id: conversation_id,
-      user_id: target_user_id,
-      role: :admin,
-      granted_by_id: granted_by_id
-    }
+    case Repo.get_by(Famichat.Chat.GroupConversationPrivileges,
+           conversation_id: conversation_id,
+           user_id: target_user_id
+         ) do
+      nil ->
+        attrs = %{
+          conversation_id: conversation_id,
+          user_id: target_user_id,
+          role: :admin,
+          granted_by_id: granted_by_id
+        }
 
-    changeset =
-      Famichat.Chat.GroupConversationPrivileges.changeset(
-        %Famichat.Chat.GroupConversationPrivileges{},
-        attrs
-      )
+        changeset =
+          Famichat.Chat.GroupConversationPrivileges.changeset(
+            %Famichat.Chat.GroupConversationPrivileges{},
+            attrs
+          )
 
-    Repo.insert(changeset)
+        Repo.insert(changeset)
+
+      %Famichat.Chat.GroupConversationPrivileges{} = privilege ->
+        privilege
+        |> Ecto.Changeset.change(
+          role: :admin,
+          granted_by_id: granted_by_id,
+          granted_at: DateTime.utc_now(:second)
+        )
+        |> Repo.update()
+    end
   end
 
   @doc """
@@ -526,18 +544,25 @@ defmodule Famichat.Chat.ConversationService do
       [:famichat, :conversation_service, :assign_member],
       metadata,
       fn ->
-        with {:ok, conversation} <- fetch_group_conversation(conversation_id),
-             {:ok, true} <- admin?(conversation_id, granted_by_id),
-             result <-
-               update_or_insert_member(
-                 conversation,
-                 target_user_id,
-                 granted_by_id
-               ) do
-          {result, Map.put(metadata, :result, result_status(result))}
-        else
-          error -> {error, Map.put(metadata, :result, result_status(error))}
-        end
+        result =
+          with_group_privileges_lock(conversation_id, fn ->
+            with {:ok, conversation} <- fetch_group_conversation(conversation_id),
+                 :ok <-
+                   ensure_target_user_assignable(conversation, target_user_id),
+                 {:ok, true} <-
+                   admin_in_conversation?(conversation_id, granted_by_id) do
+              update_or_insert_member(
+                conversation,
+                target_user_id,
+                granted_by_id
+              )
+            else
+              {:ok, false} -> {:error, :not_admin}
+              error -> error
+            end
+          end)
+
+        {result, Map.put(metadata, :result, result_status(result))}
       end
     )
   end
@@ -554,6 +579,44 @@ defmodule Famichat.Chat.ConversationService do
       _ ->
         {:error, :not_group_conversation}
     end
+  end
+
+  defp with_group_privileges_lock(conversation_id, fun) do
+    lock_query =
+      from g in GroupConversationPrivileges,
+        where: g.conversation_id == ^conversation_id,
+        select: g.id,
+        lock: "FOR UPDATE"
+
+    case Repo.transaction(fn ->
+           Repo.all(lock_query)
+           fun.()
+         end) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_target_user_assignable(
+         %Conversation{} = conversation,
+         target_user_id
+       ) do
+    with {:ok, _user} <- get_user(target_user_id),
+         true <-
+           member_of_family?(target_user_id, conversation.family_id) ||
+             {:error, :family_mismatch},
+         true <-
+           explicit_participant?(conversation.id, target_user_id) ||
+             {:error, :not_participant} do
+      :ok
+    end
+  end
+
+  defp explicit_participant?(conversation_id, user_id) do
+    Repo.exists?(
+      from p in ConversationParticipant,
+        where: p.conversation_id == ^conversation_id and p.user_id == ^user_id
+    )
   end
 
   defp update_or_insert_member(conversation, target_user_id, granted_by_id) do
@@ -692,19 +755,21 @@ defmodule Famichat.Chat.ConversationService do
       [:famichat, :conversation_service, :remove_privilege],
       metadata,
       fn ->
-        privilege =
-          Repo.get_by(Famichat.Chat.GroupConversationPrivileges,
-            conversation_id: conversation_id,
-            user_id: user_id
-          )
-
         result =
-          process_privilege_removal(
-            privilege,
-            conversation_id,
-            user_id,
-            removed_by_id
-          )
+          with_group_privileges_lock(conversation_id, fn ->
+            privilege =
+              Repo.get_by(Famichat.Chat.GroupConversationPrivileges,
+                conversation_id: conversation_id,
+                user_id: user_id
+              )
+
+            process_privilege_removal(
+              privilege,
+              conversation_id,
+              user_id,
+              removed_by_id
+            )
+          end)
 
         {result, Map.put(metadata, :result, result_status(result))}
       end
@@ -745,7 +810,7 @@ defmodule Famichat.Chat.ConversationService do
 
   # Check if the user removing privileges has admin rights
   defp check_admin_privileges(privilege, conversation_id, removed_by_id) do
-    case admin?(conversation_id, removed_by_id) do
+    case admin_in_conversation?(conversation_id, removed_by_id) do
       {:ok, true} -> do_remove_privilege(privilege, conversation_id)
       {:ok, false} -> {:error, :not_admin}
       error -> error

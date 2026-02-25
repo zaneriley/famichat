@@ -1,7 +1,12 @@
 defmodule Famichat.Chat.ConversationServiceTest do
   use Famichat.DataCase
 
-  alias Famichat.Chat.{Conversation, ConversationService}
+  alias Famichat.Chat.{
+    Conversation,
+    ConversationParticipant,
+    ConversationService,
+    GroupConversationPrivileges
+  }
 
   alias Famichat.Accounts.HouseholdMembership
   alias Famichat.Repo
@@ -478,6 +483,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
       # group_creator, we make them an admin of this group_conversation
       # so they can perform administrative actions in other tests.
       if admin_user.id != group_creator.id do
+        add_group_participant!(group_conversation.id, admin_user.id)
+
         {:ok, _} =
           ConversationService.assign_admin(
             group_conversation.id,
@@ -566,6 +573,9 @@ defmodule Famichat.Chat.ConversationServiceTest do
       member_user: member_user,
       admin_user: admin_user
     } do
+      add_group_participant!(group_conversation.id, member_user.id)
+      add_group_participant!(group_conversation.id, other_member.id)
+
       # First make the member_user a member of the group explicitly
       {:ok, _} =
         ConversationService.assign_member(
@@ -581,6 +591,58 @@ defmodule Famichat.Chat.ConversationServiceTest do
           other_member.id,
           member_user.id
         )
+    end
+
+    test "rejects assigning privileges to users outside the conversation family", %{
+      group_conversation: group_conversation,
+      admin_user: admin_user
+    } do
+      outsider_family = family_fixture()
+      outsider_user = user_fixture(%{family_id: outsider_family.id})
+
+      assert {:error, :family_mismatch} =
+               ConversationService.assign_admin(
+                 group_conversation.id,
+                 outsider_user.id,
+                 admin_user.id
+               )
+
+      assert {:error, :family_mismatch} =
+               ConversationService.assign_member(
+                 group_conversation.id,
+                 outsider_user.id,
+                 admin_user.id
+               )
+
+      refute Repo.get_by(GroupConversationPrivileges,
+               conversation_id: group_conversation.id,
+               user_id: outsider_user.id
+             )
+    end
+
+    test "rejects assigning privileges to non-participants", %{
+      group_conversation: group_conversation,
+      member_user: member_user,
+      admin_user: admin_user
+    } do
+      assert {:error, :not_participant} =
+               ConversationService.assign_admin(
+                 group_conversation.id,
+                 member_user.id,
+                 admin_user.id
+               )
+
+      assert {:error, :not_participant} =
+               ConversationService.assign_member(
+                 group_conversation.id,
+                 member_user.id,
+                 admin_user.id
+               )
+
+      refute Repo.get_by(GroupConversationPrivileges,
+               conversation_id: group_conversation.id,
+               user_id: member_user.id
+             )
     end
 
     test "admin? correctly identifies conversation admins", %{
@@ -616,6 +678,8 @@ defmodule Famichat.Chat.ConversationServiceTest do
       member_user: member_user,
       admin_user: admin_user
     } do
+      add_group_participant!(group_conversation.id, member_user.id)
+
       # Assign admin privileges
       {:ok, _privilege} =
         ConversationService.assign_admin(
@@ -647,6 +711,9 @@ defmodule Famichat.Chat.ConversationServiceTest do
       member_user: member_user,
       other_member: other_member
     } do
+      add_group_participant!(group_conversation.id, member_user.id)
+      add_group_participant!(group_conversation.id, other_member.id)
+
       # Create concurrent tasks to assign privileges
       task1 =
         Task.async(fn ->
@@ -680,5 +747,169 @@ defmodule Famichat.Chat.ConversationServiceTest do
       assert is_admin1
       assert is_admin2
     end
+
+    test "assign_admin re-checks grantor authority after lock contention", %{
+      family: family,
+      admin_user: admin_user
+    } do
+      {group_conversation, second_admin} =
+        create_group_with_two_admins!(family, admin_user)
+
+      target_user = user_fixture(%{family_id: family.id, role: :member})
+      add_group_participant!(group_conversation.id, target_user.id)
+
+      parent = self()
+
+      blocker =
+        Task.async(fn ->
+          Repo.transaction(fn ->
+            Repo.all(
+              from g in GroupConversationPrivileges,
+                where: g.conversation_id == ^group_conversation.id,
+                select: g.id,
+                lock: "FOR UPDATE"
+            )
+
+            grantor_privilege =
+              Repo.get_by!(
+                GroupConversationPrivileges,
+                conversation_id: group_conversation.id,
+                user_id: admin_user.id
+              )
+
+            {:ok, _} =
+              grantor_privilege
+              |> Ecto.Changeset.change(role: :member, granted_by_id: second_admin.id)
+              |> Repo.update()
+
+            send(parent, :grantor_demoted_uncommitted)
+
+            receive do
+              :commit -> :ok
+            end
+          end)
+        end)
+
+      assert_receive :grantor_demoted_uncommitted, 500
+
+      grant_task =
+        Task.async(fn ->
+          ConversationService.assign_admin(
+            group_conversation.id,
+            target_user.id,
+            admin_user.id
+          )
+        end)
+
+      send(blocker.pid, :commit)
+
+      assert {:ok, :ok} = Task.await(blocker)
+      assert {:error, :not_admin} = Task.await(grant_task)
+
+      {:ok, target_is_admin?} =
+        ConversationService.admin?(group_conversation.id, target_user.id)
+
+      refute target_is_admin?
+    end
+
+    test "concurrent admin self-removals cannot orphan a group", %{
+      family: family,
+      admin_user: admin_user
+    } do
+      Enum.each(1..5, fn _iteration ->
+        {group_conversation, second_admin} =
+          create_group_with_two_admins!(family, admin_user)
+
+        parent = self()
+
+        task1 =
+          Task.async(fn ->
+            send(parent, {:ready, :admin1, self()})
+
+            receive do
+              :go ->
+                ConversationService.remove_privilege(
+                  group_conversation.id,
+                  admin_user.id,
+                  admin_user.id
+                )
+            end
+          end)
+
+        task2 =
+          Task.async(fn ->
+            send(parent, {:ready, :admin2, self()})
+
+            receive do
+              :go ->
+                ConversationService.remove_privilege(
+                  group_conversation.id,
+                  second_admin.id,
+                  second_admin.id
+                )
+            end
+          end)
+
+        assert_receive {:ready, :admin1, task1_pid}, 500
+        assert_receive {:ready, :admin2, task2_pid}, 500
+        send(task1_pid, :go)
+        send(task2_pid, :go)
+
+        results = [Task.await(task1), Task.await(task2)]
+
+        success_count =
+          Enum.count(results, fn
+            {:ok, _} -> true
+            _ -> false
+          end)
+
+        assert success_count == 1
+        assert Enum.any?(results, &match?({:error, :last_admin}, &1))
+
+        admin_count =
+          Repo.aggregate(
+            from(g in GroupConversationPrivileges,
+              where:
+                g.conversation_id == ^group_conversation.id and
+                  g.role == :admin
+            ),
+            :count,
+            :id
+          )
+
+        assert admin_count == 1
+      end)
+    end
+  end
+
+  defp create_group_with_two_admins!(family, primary_admin) do
+    group_conversation =
+      conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :group,
+        metadata: %{"name" => "Race Group"},
+        user1: primary_admin
+      })
+
+    second_admin = user_fixture(%{family_id: family.id, role: :admin})
+    add_group_participant!(group_conversation.id, second_admin.id)
+
+    {:ok, _} =
+      ConversationService.assign_admin(
+        group_conversation.id,
+        second_admin.id,
+        primary_admin.id
+      )
+
+    {group_conversation, second_admin}
+  end
+
+  defp add_group_participant!(conversation_id, user_id) do
+    %ConversationParticipant{}
+    |> ConversationParticipant.changeset(%{
+      conversation_id: conversation_id,
+      user_id: user_id
+    })
+    |> Repo.insert(on_conflict: :nothing)
   end
 end

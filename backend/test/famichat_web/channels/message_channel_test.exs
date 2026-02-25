@@ -4,6 +4,7 @@ defmodule FamichatWeb.MessageChannelTest do
   require Logger
 
   alias Famichat.Accounts.{User, UserDevice}
+  alias Famichat.Auth.Sessions
   alias Famichat.Chat.{Conversation, ConversationParticipant}
   alias Famichat.ChatFixtures
   alias Famichat.Repo
@@ -21,6 +22,7 @@ defmodule FamichatWeb.MessageChannelTest do
   @family_conversation_id "33333333-3333-3333-3333-333333333333"
   @telemetry_timeout 1000
   @encryption_metadata_fields ~w(version_tag encryption_flag key_id)
+  @encryption_metadata_atom_fields [:version_tag, :encryption_flag, :key_id]
 
   setup do
     # Start a telemetry handler for our tests
@@ -153,6 +155,45 @@ defmodule FamichatWeb.MessageChannelTest do
       token = user_session.access_token
       assert {:ok, socket} = connect(UserSocket, %{"token" => token})
       assert socket.assigns.user_id == @valid_user_id
+      assert socket.assigns.device_id == user_session.device.device_id
+    end
+
+    test "rejects connections for revoked devices", %{user: user} do
+      session = issue_access_token(user)
+
+      assert {:ok, :revoked} =
+               Sessions.revoke_device(user.id, session.device.device_id)
+
+      assert {:error, %{reason: "invalid_token"}} =
+               connect(UserSocket, %{"token" => session.access_token})
+    end
+
+    test "revoking a connected device blocks future joins", %{
+      user: user,
+      user_session: user_session
+    } do
+      {:ok, socket} = connect(UserSocket, %{"token" => user_session.access_token})
+
+      assert {:ok, _, channel_socket} =
+               subscribe_and_join(
+                 socket,
+                 MessageChannel,
+                 "message:direct:#{@direct_conversation_id}"
+               )
+
+      assert {:ok, :revoked} =
+               Sessions.revoke_device(user.id, user_session.device.device_id)
+
+      assert {:error, %{reason: "invalid_token"}} =
+               subscribe_and_join(
+                 socket,
+                 MessageChannel,
+                 "message:group:#{@group_conversation_id}"
+               )
+
+      ref = push(channel_socket, "new_msg", %{"body" => "should not send"})
+      assert_reply ref, :error, %{reason: "invalid_token"}
+      refute_broadcast "new_msg", _
     end
   end
 
@@ -356,10 +397,9 @@ defmodule FamichatWeb.MessageChannelTest do
                       _measurements, metadata},
                      @telemetry_timeout
 
-      # Assert sensitive encryption metadata is NOT present
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :encryption_version)
+      assert metadata.status == :error
+      refute Map.has_key?(metadata, :encryption_status)
+      assert_no_sensitive_encryption_metadata(metadata)
 
       # Test with unauthorized access (using a socket without user_id)
       socket_without_auth = socket_without_user_id()
@@ -373,10 +413,9 @@ defmodule FamichatWeb.MessageChannelTest do
                       _measurements, metadata},
                      @telemetry_timeout
 
-      # Assert sensitive encryption metadata is NOT present
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :encryption_version)
+      assert metadata.status == :error
+      refute Map.has_key?(metadata, :encryption_status)
+      assert_no_sensitive_encryption_metadata(metadata)
     end
 
     test "successful join telemetry only includes encryption_status field", %{
@@ -393,14 +432,10 @@ defmodule FamichatWeb.MessageChannelTest do
                       _measurements, metadata},
                      @telemetry_timeout
 
-      # Assert only encryption_status is present, not other encryption metadata
+      assert metadata.status == :success
       assert Map.has_key?(metadata, :encryption_status)
       assert metadata.encryption_status in ["enabled", "disabled"]
-
-      # Assert sensitive encryption metadata is NOT present
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :encryption_version)
+      assert_no_sensitive_encryption_metadata(metadata)
 
       # Test with self conversation
       topic = "message:self:#{@self_conversation_id}"
@@ -413,14 +448,10 @@ defmodule FamichatWeb.MessageChannelTest do
                       _measurements, metadata},
                      @telemetry_timeout
 
-      # Assert only encryption_status is present, not other encryption metadata
+      assert metadata.status == :success
       assert Map.has_key?(metadata, :encryption_status)
       assert metadata.encryption_status in ["enabled", "disabled"]
-
-      # Assert sensitive encryption metadata is NOT present
-      refute Map.has_key?(metadata, :key_id)
-      refute Map.has_key?(metadata, :encryption_flag)
-      refute Map.has_key?(metadata, :encryption_version)
+      assert_no_sensitive_encryption_metadata(metadata)
     end
   end
 
@@ -1226,11 +1257,19 @@ defmodule FamichatWeb.MessageChannelTest do
     assert metadata.message_size == message_size
     assert Map.has_key?(metadata, :timestamp)
 
-    refute Map.has_key?(metadata, :key_id)
-    refute Map.has_key?(metadata, :encryption_flag)
-    refute Map.has_key?(metadata, :version_tag)
+    assert_no_sensitive_encryption_metadata(metadata)
 
     {measurements, metadata}
+  end
+
+  defp assert_no_sensitive_encryption_metadata(metadata) do
+    Enum.each(@encryption_metadata_atom_fields, fn field ->
+      refute Map.has_key?(metadata, field)
+    end)
+
+    Enum.each(@encryption_metadata_fields, fn field ->
+      refute Map.has_key?(metadata, field)
+    end)
   end
 
   defp conversation_topic(type) do

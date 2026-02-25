@@ -109,7 +109,7 @@ defmodule FamichatWeb.MessageChannel do
     MessageService
   }
 
-  alias Famichat.Auth.Identity
+  alias Famichat.Auth.{Identity, Sessions}
 
   alias Famichat.Repo
 
@@ -150,25 +150,37 @@ defmodule FamichatWeb.MessageChannel do
 
       {:error, %{reason: "unauthorized"}}
     else
-      topic_parts = String.split(rest, ":")
-      Logger.debug("Topic parts: #{inspect(topic_parts)}")
+      case ensure_socket_device_active(socket) do
+        :ok ->
+          topic_parts = String.split(rest, ":")
+          Logger.debug("Topic parts: #{inspect(topic_parts)}")
 
-      case topic_parts do
-        # Type-aware format - conversation type and ID
-        [type, id] when type in ["self", "direct", "group", "family"] ->
-          handle_type_aware_join(socket, type, id, user_id, measurements)
+          case topic_parts do
+            # Type-aware format - conversation type and ID
+            [type, id] when type in ["self", "direct", "group", "family"] ->
+              handle_type_aware_join(socket, type, id, user_id, measurements)
 
-        # Invalid format
-        _ ->
-          Logger.warning("Invalid topic format: #{inspect(topic_parts)}")
+            # Invalid format
+            _ ->
+              Logger.warning("Invalid topic format: #{inspect(topic_parts)}")
 
+              emit_join_telemetry(measurements, %{
+                user_id: user_id,
+                status: :error,
+                error_reason: :invalid_topic_format
+              })
+
+              {:error, %{reason: "invalid_topic_format"}}
+          end
+
+        {:error, reason} ->
           emit_join_telemetry(measurements, %{
             user_id: user_id,
             status: :error,
-            error_reason: :invalid_topic_format
+            error_reason: reason
           })
 
-          {:error, %{reason: "invalid_topic_format"}}
+          {:error, %{reason: reason_to_string(reason)}}
       end
     end
   end
@@ -234,53 +246,59 @@ defmodule FamichatWeb.MessageChannel do
 
   @impl true
   def handle_in("new_msg", %{"body" => _body} = payload, socket) do
-    start_time = System.monotonic_time()
+    case ensure_socket_device_active(socket) do
+      :ok ->
+        start_time = System.monotonic_time()
 
-    broadcast_payload =
-      payload
-      |> Map.take(["body"] ++ @encryption_metadata_fields)
-      |> Map.put("user_id", socket.assigns.user_id)
+        broadcast_payload =
+          payload
+          |> Map.take(["body"] ++ @encryption_metadata_fields)
+          |> Map.put("user_id", socket.assigns.user_id)
 
-    topic_parts = String.split(socket.topic, ":")
-    Logger.debug("Topic parts: #{inspect(topic_parts)}")
+        topic_parts = String.split(socket.topic, ":")
+        Logger.debug("Topic parts: #{inspect(topic_parts)}")
 
-    case topic_parts do
-      # Type-aware format
-      ["message", type, id] when type in ["self", "direct", "group", "family"] ->
-        measurements = compute_measurements(start_time)
+        case topic_parts do
+          # Type-aware format
+          ["message", type, id] when type in ["self", "direct", "group", "family"] ->
+            measurements = compute_measurements(start_time)
 
-        # Calculate message size for metrics
-        message_size =
-          if is_binary(payload["body"]) do
-            byte_size(payload["body"])
-          else
-            0
-          end
+            # Calculate message size for metrics
+            message_size =
+              if is_binary(payload["body"]) do
+                byte_size(payload["body"])
+              else
+                0
+              end
 
-        metadata = %{
-          user_id: socket.assigns.user_id,
-          conversation_type: type,
-          conversation_id: id,
-          message_size: message_size,
-          encryption_status:
-            if(Map.get(payload, "encryption_flag"),
-              do: "enabled",
-              else: "disabled"
-            )
-        }
+            metadata = %{
+              user_id: socket.assigns.user_id,
+              conversation_type: type,
+              conversation_id: id,
+              message_size: message_size,
+              encryption_status:
+                if(Map.get(payload, "encryption_flag"),
+                  do: "enabled",
+                  else: "disabled"
+                )
+            }
 
-        # Broadcast the message
-        broadcast!(socket, "new_msg", broadcast_payload)
+            # Broadcast the message
+            broadcast!(socket, "new_msg", broadcast_payload)
 
-        # Emit telemetry for the broadcast
-        emit_broadcast_telemetry(measurements, metadata)
+            # Emit telemetry for the broadcast
+            emit_broadcast_telemetry(measurements, metadata)
 
-        {:noreply, socket}
+            {:noreply, socket}
 
-      # Invalid format
-      _ ->
-        Logger.error("Unexpected topic format: #{inspect(topic_parts)}")
-        {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
+          # Invalid format
+          _ ->
+            Logger.error("Unexpected topic format: #{inspect(topic_parts)}")
+            {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: reason_to_string(reason)}}, socket}
     end
   end
 
@@ -322,42 +340,48 @@ defmodule FamichatWeb.MessageChannel do
   # Private helper function that processes message acknowledgments.
   # See the @doc for handle_in("message_ack") for full documentation.
   defp handle_message_ack(payload, socket) do
-    start_time = System.monotonic_time()
-    topic_parts = String.split(socket.topic, ":")
+    case ensure_socket_device_active(socket) do
+      :ok ->
+        start_time = System.monotonic_time()
+        topic_parts = String.split(socket.topic, ":")
 
-    case topic_parts do
-      ["message", type, id]
-      when type in ["self", "direct", "group", "family"] ->
-        message_id = Map.get(payload, "message_id", "unknown")
+        case topic_parts do
+          ["message", type, id]
+          when type in ["self", "direct", "group", "family"] ->
+            message_id = Map.get(payload, "message_id", "unknown")
 
-        # Create measurements for telemetry
-        measurements = compute_measurements(start_time)
+            # Create measurements for telemetry
+            measurements = compute_measurements(start_time)
 
-        # Metadata for the acknowledgment
-        metadata = %{
-          user_id: socket.assigns.user_id,
-          conversation_type: type,
-          conversation_id: id,
-          message_id: message_id
-        }
+            # Metadata for the acknowledgment
+            metadata = %{
+              user_id: socket.assigns.user_id,
+              conversation_type: type,
+              conversation_id: id,
+              message_id: message_id
+            }
 
-        # Log the acknowledgment
-        Logger.info(
-          "[MessageChannel] Message acknowledgment: " <>
-            "conversation_type=#{type} " <>
-            "conversation_id=#{id} " <>
-            "user_id=#{socket.assigns.user_id} " <>
-            "message_id=#{message_id}"
-        )
+            # Log the acknowledgment
+            Logger.info(
+              "[MessageChannel] Message acknowledgment: " <>
+                "conversation_type=#{type} " <>
+                "conversation_id=#{id} " <>
+                "user_id=#{socket.assigns.user_id} " <>
+                "message_id=#{message_id}"
+            )
 
-        # Emit telemetry for the acknowledgment
-        emit_ack_telemetry(measurements, metadata)
+            # Emit telemetry for the acknowledgment
+            emit_ack_telemetry(measurements, metadata)
 
-        {:reply, :ok, socket}
+            {:reply, :ok, socket}
 
-      _ ->
-        Logger.error("Unexpected topic format for ACK: #{inspect(topic_parts)}")
-        {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
+          _ ->
+            Logger.error("Unexpected topic format for ACK: #{inspect(topic_parts)}")
+            {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: reason_to_string(reason)}}, socket}
     end
   end
 
@@ -429,6 +453,18 @@ defmodule FamichatWeb.MessageChannel do
   end
 
   defp fetch_user(user_id), do: Identity.fetch_user(user_id)
+
+  defp ensure_socket_device_active(socket) do
+    user_id = socket.assigns[:user_id]
+    device_id = socket.assigns[:device_id]
+
+    if is_binary(user_id) and is_binary(device_id) and
+         Sessions.device_active?(user_id, device_id) do
+      :ok
+    else
+      {:error, :invalid_token}
+    end
+  end
 
   defp authorize_conversation(conversation, user, _type) do
     authorized? =

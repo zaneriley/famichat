@@ -27,7 +27,7 @@ defmodule FamichatWeb.UserSocket do
           "User connected with user_id=#{user_id} device_id=#{device_id}"
         )
 
-        {:ok, assign(socket, :user_id, user_id)}
+        {:ok, socket |> assign(:user_id, user_id) |> assign(:device_id, device_id)}
 
       {:error, reason} ->
         Logger.error(
