@@ -73,6 +73,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 USER elixir
 
+# Install Rust toolchain for Rustler/OpenMLS development and validation loops.
+ENV RUSTUP_HOME="/home/elixir/.rustup" \
+    CARGO_HOME="/home/elixir/.cargo" \
+    PATH="/home/elixir/.cargo/bin:${PATH}"
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+  | sh -s -- -y --profile minimal --default-toolchain stable \
+  && rustup component add rustfmt clippy rust-analyzer
+
 # Install Hex and Rebar
 RUN mix local.hex --force && mix local.rebar --force
 

@@ -1,0 +1,11 @@
+[package]
+name = "mls_nif"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Famichat MLS NIF contract scaffold"
+
+[lib]
+name = "mls_nif"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]

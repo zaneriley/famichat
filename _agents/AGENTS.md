@@ -80,3 +80,71 @@ Before merging, ask:
 1. Does this change preserve one shared production path?
 2. Can an agent execute and verify this through documented playbooks?
 3. Did we reduce or increase hidden branches, silent behavior, and vector count?
+
+## 9. Rust + LLM Toolchain Feedback Loop
+Rust changes must be proposed and validated in a tight loop where compiler, lints, and tests are the source of truth.
+
+### 9.1. Required Context for Rust Tasks
+Every Rust task must include:
+*   Target crate/workspace and relevant `Cargo.toml` section(s) (edition, features, dependencies).
+*   Rust toolchain constraints (MSRV/edition if set by the repo).
+*   Exact failing diagnostics or failing test output (not paraphrased).
+*   Explicit constraints (for example: no new crates, no `unsafe`, no API breakage).
+
+### 9.2. Oracle Loop (Default)
+For Rust work, run this loop before claiming completion:
+1. `./run rust:fmt`
+2. `./run rust:clippy`
+3. `./run rust:test`
+
+Use small diffs and iterate on real tool feedback. Do not jump to large rewrites.
+
+### 9.3. Read-Before-Write and Type Awareness
+*   Find and reuse existing patterns before adding new abstractions.
+*   Prefer type-aware navigation (rust-analyzer/LSP) when available over string matching.
+*   Explain ownership/lifetime tradeoffs explicitly when changing borrow behavior.
+
+### 9.4. Safety and Dependency Gates
+*   **No new crates without explicit approval** and rationale.
+*   **No `unsafe` without explicit approval**.
+*   Any `unsafe` introduction must include:
+    1. a written safety contract (invariants/assumptions),
+    2. focused boundary tests,
+    3. Miri validation (`./run rust:miri`) when supported.
+
+### 9.5. Completion Standard for Rust PRs
+Rust-related changes are not complete unless:
+1. `fmt`, `clippy`, and `test` loop is green.
+2. Failure modes are explicit (no silent fallback).
+3. Docs/playbooks are updated if commands, contracts, or behavior changed.
+
+## 10. Messaging Invariants and Bug-Bash Gates (Non-Negotiable)
+
+### 10.1 Product Invariants
+*   `self` routing is actor-owned only. Clients must not be able to target another user's `self`.
+*   Message visibility must be keyed by `(conversation, user, device)` semantics where applicable.
+*   Same-user different-tab/device behavior must be explicitly defined and tested.
+
+### 10.2 Required Test Matrix for Messaging Changes
+Any PR touching chat/channel/controller/live messaging logic must include or pass:
+*   Same user, same device/tab echo behavior.
+*   Same user, different tab/device delivery behavior.
+*   Different user isolation behavior for `self`.
+*   Unauthorized target/spoof attempts (topic-only and conversation-id paths).
+
+### 10.3 No Throwaway-Surface Confidence
+*   Manual test LiveViews are probes, not proof.
+*   Acceptance requires domain-level characterization tests and channel/controller assertions.
+
+### 10.4 Agent Bug-Bash Deliverables
+For messaging PRs, agents must output:
+*   Invariant checklist.
+*   Scenario matrix executed.
+*   Failing/expected visibility table.
+*   Exact commands run and results.
+
+### 10.5 Definition of Done for Messaging
+A messaging change is not complete unless:
+1. Invariants are asserted in tests.
+2. Multi-actor/multi-device scenarios are covered.
+3. No client-controlled field can violate ownership boundaries.
