@@ -160,14 +160,14 @@ defmodule Famichat.Chat.ConversationVisibilityServiceTest do
       conversation2: conversation2,
       conversation3: conversation3
     } do
-      # Initially all conversations should be visible
+      # Initially only the caller's member conversations should be visible
       visible =
         ConversationVisibilityService.list_visible_conversations(user1.id)
 
-      assert length(visible) >= 3
+      assert length(visible) >= 2
       assert Enum.any?(visible, fn c -> c.id == conversation1.id end)
       assert Enum.any?(visible, fn c -> c.id == conversation2.id end)
-      assert Enum.any?(visible, fn c -> c.id == conversation3.id end)
+      refute Enum.any?(visible, fn c -> c.id == conversation3.id end)
 
       # Hide conversation1
       {:ok, _} =
@@ -182,7 +182,7 @@ defmodule Famichat.Chat.ConversationVisibilityServiceTest do
 
       refute Enum.any?(visible, fn c -> c.id == conversation1.id end)
       assert Enum.any?(visible, fn c -> c.id == conversation2.id end)
-      assert Enum.any?(visible, fn c -> c.id == conversation3.id end)
+      refute Enum.any?(visible, fn c -> c.id == conversation3.id end)
 
       # Hide conversation2
       {:ok, _} =
@@ -197,7 +197,7 @@ defmodule Famichat.Chat.ConversationVisibilityServiceTest do
 
       refute Enum.any?(visible, fn c -> c.id == conversation1.id end)
       refute Enum.any?(visible, fn c -> c.id == conversation2.id end)
-      assert Enum.any?(visible, fn c -> c.id == conversation3.id end)
+      refute Enum.any?(visible, fn c -> c.id == conversation3.id end)
     end
 
     test "list_visible_conversations/2 can preload associations", %{

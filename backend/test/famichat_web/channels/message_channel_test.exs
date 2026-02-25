@@ -5,7 +5,7 @@ defmodule FamichatWeb.MessageChannelTest do
 
   alias Famichat.Accounts.{HouseholdMembership, User, UserDevice}
   alias Famichat.Auth.Sessions
-  alias Famichat.Chat.{Conversation, ConversationParticipant}
+  alias Famichat.Chat.{Conversation, ConversationParticipant, Message}
   alias Famichat.ChatFixtures
   alias Famichat.Repo
   alias FamichatWeb.MessageChannel
@@ -548,6 +548,20 @@ defmodule FamichatWeb.MessageChannelTest do
       assert plain_metadata.encryption_status == "disabled"
       assert plain_metadata.user_id == @valid_user_id
     end
+
+    test "persists messages before broadcast", %{socket: socket} do
+      payload = %{"body" => "persisted direct message"}
+      push_and_assert_broadcast(socket, :direct, payload)
+
+      persisted =
+        Repo.get_by(Message,
+          conversation_id: @direct_conversation_id,
+          sender_id: @valid_user_id,
+          content: "persisted direct message"
+        )
+
+      assert persisted
+    end
   end
 
   # New test blocks for different conversation types
@@ -712,38 +726,11 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, %{socket: socket, topic: topic}}
     end
 
-    @doc """
-    Tests handling of empty message bodies.
-
-    This test verifies:
-    1. Empty message bodies are still broadcast (current implementation)
-    2. The message is broadcast with the correct payload
-    3. Telemetry events are emitted with the correct metadata
-    """
-    test "handles messages with empty body", %{socket: socket} do
-      # Send message with empty body
+    test "rejects messages with empty body", %{socket: socket} do
       ref = push(socket, "new_msg", %{"body" => ""})
 
-      # Verify the message is broadcast
-      assert_broadcast "new_msg", %{
-        "body" => "",
-        "user_id" => @valid_user_id
-      }
-
-      # Verify no error response
-      refute_reply ref, :error, _
-
-      # Verify broadcast telemetry
-      assert_receive {:broadcast_telemetry_event,
-                      [:famichat, :message_channel, :broadcast], _measurements,
-                      metadata},
-                     @telemetry_timeout
-
-      # Assert telemetry metadata
-      assert metadata.user_id == @valid_user_id
-      assert metadata.conversation_type == "direct"
-      assert metadata.conversation_id == @direct_conversation_id
-      assert metadata.encryption_status == "disabled"
+      assert_reply ref, :error, %{reason: "invalid_message"}
+      refute_broadcast "new_msg", _
     end
 
     @doc """
@@ -1273,11 +1260,13 @@ defmodule FamichatWeb.MessageChannelTest do
 
   defp push_and_assert_broadcast(socket, type, payload, opts \\ []) do
     user_id = Keyword.get(opts, :user_id, @valid_user_id)
+    device_id = Keyword.get(opts, :device_id, socket.assigns.device_id)
 
     expected_payload =
       payload
       |> Map.take(["body"] ++ @encryption_metadata_fields)
       |> Map.put("user_id", user_id)
+      |> Map.put("device_id", device_id)
 
     push(socket, "new_msg", payload)
     assert_broadcast("new_msg", ^expected_payload)

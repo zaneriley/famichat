@@ -9,7 +9,7 @@ defmodule Famichat.Chat.ConversationVisibilityService do
 
   import Ecto.Query
   alias Famichat.Repo
-  alias Famichat.Chat.Conversation
+  alias Famichat.Chat.{Conversation, ConversationQueries}
 
   @doc """
   Hides a conversation for a specific user.
@@ -126,8 +126,8 @@ defmodule Famichat.Chat.ConversationVisibilityService do
     - List of conversations that aren't hidden by the user
   """
   def list_visible_conversations(user_id, opts \\ []) do
-    # Ensure we have a binary UUID
-    user_id = ensure_binary_uuid(user_id)
+    # Ensure we have a UUID string that can be cast across all query paths.
+    user_id = ensure_uuid_string(user_id)
 
     :telemetry.span(
       [
@@ -154,8 +154,13 @@ defmodule Famichat.Chat.ConversationVisibilityService do
 
   defp do_list_visible_conversations(user_id, opts) do
     query =
-      from c in Conversation,
-        where: fragment("? != ALL(?)", ^user_id, c.hidden_by_users),
+      from c in ConversationQueries.for_user(user_id),
+        where:
+          fragment(
+            "? != ALL(?)",
+            type(^user_id, :binary_id),
+            c.hidden_by_users
+          ),
         select: c
 
     query
@@ -184,13 +189,13 @@ defmodule Famichat.Chat.ConversationVisibilityService do
   defp result_to_telemetry_value({:error, :not_found}), do: :not_found
   defp result_to_telemetry_value({:error, _}), do: :error
 
-  # Ensures a UUID is in binary format as expected by Postgres
-  defp ensure_binary_uuid(uuid) when is_binary(uuid) do
-    case Ecto.UUID.dump(uuid) do
-      {:ok, binary_uuid} -> binary_uuid
+  # Ensures a UUID is in canonical string form for Ecto query casting.
+  defp ensure_uuid_string(uuid) when is_binary(uuid) do
+    case Ecto.UUID.cast(uuid) do
+      {:ok, cast_uuid} -> cast_uuid
       :error -> raise ArgumentError, "Invalid UUID format: #{inspect(uuid)}"
     end
   end
 
-  defp ensure_binary_uuid(uuid), do: uuid
+  defp ensure_uuid_string(uuid), do: uuid
 end

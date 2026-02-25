@@ -105,6 +105,7 @@ defmodule FamichatWeb.MessageChannel do
 
   alias Famichat.Chat.{
     Conversation,
+    Message,
     ConversationQueries,
     MessageService,
     Self
@@ -293,42 +294,54 @@ defmodule FamichatWeb.MessageChannel do
       :ok ->
         start_time = System.monotonic_time()
 
-        broadcast_payload =
-          payload
-          |> Map.take(["body"] ++ @encryption_metadata_fields)
-          |> Map.put("user_id", socket.assigns.user_id)
-
         case topic_context(socket) do
           {:ok, type, id} ->
-            measurements = compute_measurements(start_time)
+            message_params =
+              build_message_params(
+                payload,
+                socket.assigns.user_id,
+                id
+              )
 
-            # Calculate message size for metrics
-            message_size =
-              if is_binary(payload["body"]) do
-                byte_size(payload["body"])
-              else
-                0
-              end
+            case MessageService.send_message(message_params) do
+              {:ok, message} ->
+                measurements = compute_measurements(start_time)
 
-            metadata = %{
-              user_id: socket.assigns.user_id,
-              conversation_type: type,
-              conversation_id: id,
-              message_size: message_size,
-              encryption_status:
-                if(Map.get(payload, "encryption_flag"),
-                  do: "enabled",
-                  else: "disabled"
-                )
-            }
+                # Calculate message size for metrics
+                message_size =
+                  if is_binary(payload["body"]) do
+                    byte_size(payload["body"])
+                  else
+                    0
+                  end
 
-            # Broadcast the message
-            broadcast!(socket, "new_msg", broadcast_payload)
+                metadata = %{
+                  user_id: socket.assigns.user_id,
+                  conversation_type: type,
+                  conversation_id: id,
+                  message_size: message_size,
+                  encryption_status:
+                    if(Map.get(payload, "encryption_flag"),
+                      do: "enabled",
+                      else: "disabled"
+                    )
+                }
 
-            # Emit telemetry for the broadcast
-            emit_broadcast_telemetry(measurements, metadata)
+                broadcast_payload =
+                  build_broadcast_payload(message, socket.assigns.device_id)
 
-            {:noreply, socket}
+                # Broadcast the message
+                broadcast!(socket, "new_msg", broadcast_payload)
+
+                # Emit telemetry for the broadcast
+                emit_broadcast_telemetry(measurements, metadata)
+
+                {:noreply, socket}
+
+              {:error, reason} ->
+                {:reply, {:error, %{reason: message_send_error(reason)}},
+                 socket}
+            end
 
           {:error, reason} ->
             {:reply, {:error, %{reason: reason_to_string(reason)}}, socket}
@@ -372,6 +385,57 @@ defmodule FamichatWeb.MessageChannel do
   @impl true
   def handle_in("message_ack", payload, socket) do
     handle_message_ack(payload, socket)
+  end
+
+  defp build_message_params(payload, sender_id, conversation_id) do
+    params = %{
+      sender_id: sender_id,
+      conversation_id: conversation_id,
+      content: payload["body"]
+    }
+
+    case extract_encryption_metadata(payload) do
+      nil ->
+        params
+
+      encryption_metadata ->
+        Map.put(params, :encryption_metadata, encryption_metadata)
+    end
+  end
+
+  defp extract_encryption_metadata(payload) do
+    encryption_metadata =
+      payload
+      |> Map.take(@encryption_metadata_fields)
+      |> Enum.reject(fn {_field, value} -> is_nil(value) end)
+      |> Map.new()
+
+    if map_size(encryption_metadata) > 0 do
+      encryption_metadata
+    else
+      nil
+    end
+  end
+
+  defp message_send_error(%Ecto.Changeset{}), do: "invalid_message"
+  defp message_send_error({:missing_fields, _missing}), do: "invalid_message"
+  defp message_send_error(:not_participant), do: "unauthorized"
+  defp message_send_error(:wrong_family), do: "unauthorized"
+  defp message_send_error(reason), do: reason_to_string(reason)
+
+  defp build_broadcast_payload(%Message{} = message, device_id) do
+    encryption_metadata =
+      message
+      |> Map.get(:metadata, %{})
+      |> Map.get("encryption", %{})
+      |> Map.take(@encryption_metadata_fields)
+
+    %{
+      "body" => message.content,
+      "user_id" => message.sender_id,
+      "device_id" => device_id
+    }
+    |> Map.merge(encryption_metadata)
   end
 
   # Private helper function that processes message acknowledgments.
