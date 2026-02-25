@@ -18,6 +18,7 @@ x-app: &default-app
   tty: true
   volumes:
     - "${DOCKER_WEB_VOLUME:-./priv/static:/app/priv/static}"
+    - "mix:/mix"
 
 x-assets: &default-assets
   build:
@@ -84,3 +85,4 @@ services:
 
 volumes:
   postgres: {}
+  mix: {}

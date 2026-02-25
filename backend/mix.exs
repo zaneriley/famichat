@@ -7,7 +7,7 @@ defmodule Famichat.MixProject do
       version: "0.0.1",
       elixir: "~> 1.13",
       elixirc_paths: elixirc_paths(Mix.env()),
-      compilers: [:boundary] ++ Mix.compilers(),
+      compilers: compilers(Mix.env()),
       start_permanent: Mix.env() == :prod,
       build_path: "/mix/_build",
       deps_path: "/mix/deps",
@@ -42,6 +42,9 @@ defmodule Famichat.MixProject do
       extra_applications: [:logger, :runtime_tools, :cloak]
     ]
   end
+
+  defp compilers(:test), do: Mix.compilers()
+  defp compilers(_), do: [:boundary] ++ Mix.compilers()
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]

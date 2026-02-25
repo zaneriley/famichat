@@ -3,7 +3,7 @@ defmodule FamichatWeb.MessageChannelTest do
   import Phoenix.ChannelTest
   require Logger
 
-  alias Famichat.Accounts.{User, UserDevice}
+  alias Famichat.Accounts.{HouseholdMembership, User, UserDevice}
   alias Famichat.Auth.Sessions
   alias Famichat.Chat.{Conversation, ConversationParticipant}
   alias Famichat.ChatFixtures
@@ -122,20 +122,13 @@ defmodule FamichatWeb.MessageChannelTest do
       ])
 
     user_session = issue_access_token(user)
-    second_session = issue_access_token(second_user)
-    third_session = issue_access_token(third_user)
 
     {:ok,
      %{
-       handler_id: handler_id,
-       broadcast_handler_id: broadcast_handler_id,
        family: family,
        user: user,
        second_user: second_user,
-       third_user: third_user,
        user_session: user_session,
-       second_session: second_session,
-       third_session: third_session,
        self_conversation: self_conversation,
        direct_conversation: direct_conversation,
        group_conversation: group_conversation,
@@ -812,11 +805,11 @@ defmodule FamichatWeb.MessageChannelTest do
     """
     test "client can subscribe to channel and receive messages", %{
       user_session: user_session,
-      second_session: second_session
+      second_user: second_user
     } do
       # Create two clients
       token1 = user_session.access_token
-      token2 = second_session.access_token
+      token2 = token_for_user(second_user)
 
       # Connect first client
       {:ok, socket1} = connect(UserSocket, %{"token" => token1})
@@ -861,11 +854,11 @@ defmodule FamichatWeb.MessageChannelTest do
     """
     test "client can subscribe to channel and receive encrypted messages", %{
       user_session: user_session,
-      second_session: second_session
+      second_user: second_user
     } do
       # Create two clients
       token1 = user_session.access_token
-      token2 = second_session.access_token
+      token2 = token_for_user(second_user)
 
       # Connect first client
       {:ok, socket1} = connect(UserSocket, %{"token" => token1})
@@ -1166,10 +1159,10 @@ defmodule FamichatWeb.MessageChannelTest do
     """
     test "end-to-end message delivery with acknowledgment logging", %{
       socket: socket,
-      second_session: second_session
+      second_user: second_user
     } do
       # Create a second client
-      token2 = second_session.access_token
+      token2 = token_for_user(second_user)
       {:ok, socket2} = connect(UserSocket, %{"token" => token2})
       topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket2} = subscribe_and_join(socket2, MessageChannel, topic)
@@ -1309,13 +1302,13 @@ defmodule FamichatWeb.MessageChannelTest do
       |> User.changeset(user_attrs)
       |> Repo.insert!()
 
-    family = Repo.get!(Famichat.Chat.Family, family_id)
-
-    ChatFixtures.membership_fixture(
-      user,
-      family,
-      Map.get(user_attrs, :role, :member)
-    )
+    %HouseholdMembership{}
+    |> HouseholdMembership.changeset(%{
+      user_id: user.id,
+      family_id: family_id,
+      role: Map.get(user_attrs, :role, :member)
+    })
+    |> Repo.insert!()
 
     user
   end
@@ -1337,14 +1330,21 @@ defmodule FamichatWeb.MessageChannelTest do
       |> Conversation.create_changeset(conversation_attrs)
       |> Repo.insert!()
 
-    Enum.each(participant_ids, fn participant_id ->
-      %ConversationParticipant{}
-      |> ConversationParticipant.changeset(%{
-        conversation_id: conversation.id,
-        user_id: participant_id
-      })
-      |> Repo.insert!()
-    end)
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    participant_rows =
+      Enum.map(participant_ids, fn participant_id ->
+        %{
+          conversation_id: conversation.id,
+          user_id: participant_id,
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    if participant_rows != [] do
+      Repo.insert_all(ConversationParticipant, participant_rows)
+    end
 
     conversation
   end
@@ -1354,10 +1354,11 @@ defmodule FamichatWeb.MessageChannelTest do
     user_agent = Keyword.get(opts, :user_agent, "test-agent")
     ip = Keyword.get(opts, :ip, "127.0.0.1")
     trust? = Keyword.get(opts, :trust?, true)
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
     trusted_until =
       if trust? do
-        DateTime.add(DateTime.utc_now(), 30 * 24 * 60 * 60, :second)
+        DateTime.add(now, 30 * 24 * 60 * 60, :second)
       else
         nil
       end
@@ -1368,7 +1369,7 @@ defmodule FamichatWeb.MessageChannelTest do
       user_agent: user_agent,
       ip: ip,
       trusted_until: trusted_until,
-      last_active_at: DateTime.utc_now(),
+      last_active_at: now,
       refresh_token_hash: Keyword.get(opts, :refresh_token_hash),
       previous_token_hash: Keyword.get(opts, :previous_token_hash),
       revoked_at: Keyword.get(opts, :revoked_at)
