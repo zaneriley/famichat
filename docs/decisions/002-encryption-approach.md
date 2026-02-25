@@ -1,101 +1,41 @@
-# [DEPRECATED] ADR 002: Hybrid Encryption Strategy
+# [DEPRECATED] ADR 002: Early Encryption Approach (Historical)
 
 **Date**: 2025-03-10
-**Status**: Superseded (historical baseline)
-**Updated By**: ADR 006 (historical), ADR 010 (current direction)
+**Status**: Deprecated and superseded
+**Superseded By**: [ADR 010](010-mls-first-for-neighborhood-scale.md)
 
 ---
 
-## Context
+## Purpose of This File
 
-Need to decide encryption strategy balancing security and implementation complexity for self-hosted family messaging.
+This ADR is preserved only as historical context for the original pre-MLS framing.
 
-> Historical note: this ADR captures the initial hybrid strategy framing.
-> Current protocol direction is defined in ADR 010.
-
-## Decision
-
-Use **hybrid encryption approach**:
-1. **Client-side E2EE** (Signal Protocol) - for message content
-2. **Field-level encryption** (Cloak.Ecto) - for sensitive user data
-3. **Database encryption at rest** - for defense-in-depth
-
-## Rationale
-
-### Why E2EE (vs database encryption only)?
-- Zero-knowledge guarantee (admin cannot read messages)
-- Forward secrecy (past messages safe if server compromised)
-- User expectation (modern messaging apps have E2EE)
-- Impossible to retrofit later (must build in from Day 1)
-
-### [DEPRECATED] Why Signal Protocol (vs MLS or Megolm)?
-- Right-sized for families (2-6 people per household)
-- Battle-tested (WhatsApp, Signal, 2B+ users)
-- Deniability (better for family trust dynamics)
-- Performance: 30-90ms for families (vs MLS 150ms)
-
-**See ADR 006 for full Signal vs MLS vs Megolm evaluation**
-
-### Why Field-Level Encryption?
-- Protects sensitive user data (email, tokens) while allowing queries
-- Complements E2EE (different threat model)
-
-### Why Database Encryption at Rest?
-- Defense-in-depth for infrastructure layer
-- Protects backups, snapshots
-- Standard security practice
-
-## Implementation
-
-**Sprint 8-12:** Signal Protocol E2EE
-- Rust NIF wrapper for libsignal-client
-- X3DH for asynchronous key exchange
-- Double Ratchet for forward secrecy + post-compromise security
-- Pairwise encryption for group messages
-
-**Timeline:** 5 weeks
-- Week 1-2: Rust toolchain + libsignal integration
-- Week 3: Key management (identity keys, prekeys, sessions)
-- Week 4: Message encryption/decryption
-- Week 5: LiveView UI integration
-
-## Consequences
-
-### Positive
-- ✅ Strong privacy guarantees (zero-knowledge)
-- ✅ Industry-standard protocol (proven at billions-of-users scale)
-- ✅ Layered security (E2EE + field-level + infrastructure)
-- ✅ Deniability (better for family trust)
-- ✅ Performance acceptable (30-90ms for families)
-
-### Negative
-- ❌ Complexity (key management, session state, rotation)
-- ❌ Performance overhead (encryption latency)
-- ❌ Cannot search encrypted messages server-side
-- ❌ Rust dependency (adds build complexity)
-- ❌ Key recovery challenges (lost device = lost keys, need backup strategy)
-
-### Risks & Mitigations
-
-**Risk:** Layer 5 (inter-family, 20-30 people) may exceed performance budget (450ms)
-**Mitigation:** Acceptable latency for infrequent coordination, or pivot to hybrid (Signal for families, MLS for large channels)
-
-**Risk:** Rust NIF crashes BEAM VM
-**Mitigation:** Panic handlers, error boundaries, telemetry, dirty schedulers
-
-**Risk:** Key management complexity causes user friction
-**Mitigation:** Defer multi-device and key backup to post-MVP, focus on single-device first
+It is **not** the active encryption decision and must not be used as implementation guidance.
 
 ---
 
-## Related Documentation
+## Historical Summary
 
-- **ADR 006**: [Signal Protocol for E2EE](006-signal-protocol-for-e2ee.md) - Full protocol evaluation
-- **ADR 010**: [MLS-first for neighborhood scale](010-mls-first-for-neighborhood-scale.md) - Current protocol direction
-- **ADR 005**: [Encryption Metadata Schema](005-encryption-metadata-schema.md) - Key storage design
-- **ENCRYPTION.md**: [Security Architecture](../ENCRYPTION.md) - Implementation details
+ADR 002 captured an early hybrid-security framing:
+
+1. E2EE for message confidentiality.
+2. Field-level encryption for sensitive account/auth fields.
+3. Encryption at rest for infrastructure defense-in-depth.
+
+That framing predated the MLS-first direction now required by product scope.
 
 ---
 
-**Last Updated**: 2026-02-25 (Superseded by ADR 010)
-**Next Review**: None (historical document)
+## Canonical Sources (Use These Instead)
+
+1. [ADR 010: MLS-first E2EE direction](010-mls-first-for-neighborhood-scale.md)
+2. [ENCRYPTION.md](../ENCRYPTION.md)
+3. [Sprint 9 MLS NIF contract](../sprints/9.0-mls-rust-nif-contract-deep-dive.md)
+4. [Sprint 9 MLS TDD plan](../sprints/9.1-mls-contract-tdd-plan.md)
+
+---
+
+## Migration Note
+
+Any references in older documents to Signal/Megolm-specific implementation details are historical and non-authoritative.
+

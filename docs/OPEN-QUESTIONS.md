@@ -31,7 +31,7 @@ This document tracks architectural and product decisions that require discussion
 
 **See**:
 - [ADR 010](decisions/010-mls-first-for-neighborhood-scale.md) for decision rationale and references
-- [ADR 006](decisions/006-signal-protocol-for-e2ee.md) for superseded Signal-first analysis
+- [ADR 006 (deprecated)](decisions/006-signal-protocol-for-e2ee.md) for superseded Signal-first analysis
 
 ---
 
@@ -126,7 +126,7 @@ Group setup/membership change:
    - User can recover keys with passphrase
    - Risk: Weak passphrase = compromised keys
 
-3. **Social Key Recovery** (Signal-Style)
+3. **Social Key Recovery** (Threshold-Style)
    - User designates trusted contacts
    - Key split among contacts (Shamir Secret Sharing)
    - Requires 3-of-5 contacts to recover
