@@ -4,6 +4,8 @@
 **Sprint**: 9 (MLS E2EE Implementation)
 **Overall Progress**: 40% to MVP
 
+Terminology authority: [../ia-lexicon.md](../ia-lexicon.md)
+
 ---
 
 ## 📊 Executive Summary
@@ -23,10 +25,12 @@
    - ✅ OpenMLS-backed NIF integration is active for core `create_group -> encrypt -> process_incoming`
    - ✅ MessageService fail-closed runtime health gating is implemented
    - ✅ NIF session snapshot export/restore contract is implemented (runtime state blobs)
-   - ✅ MLS session snapshots are now persisted as encrypted envelopes in conversation metadata (`mls.session_snapshot_encrypted`)
+   - ✅ Dedicated conversation security state persistence is active in `conversation_security_states` via `Famichat.Chat.ConversationSecurityStateStore`
+   - ✅ Legacy metadata envelopes are read for compatibility and migrated into the dedicated store on access
    - ✅ Replay-idempotency cache export is now bounded (max 256 entries)
    - ✅ Adversarial contract tests now cover malformed ciphertext, cross-group misuse, and replay rejection
-   - ⚠️ Dedicated MLS state store (group/epoch/pending commit model with optimistic locking) is not complete
+   - ✅ Optimistic lock-version conflict handling is active (`:stale_state` mapped fail-closed to `:storage_inconsistent`)
+   - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage remains incomplete
    - ❌ Key lifecycle hardening (rotation/rejoin persistence/revocation strategy) is not complete
 2. ⚠️ **Operational Confidence Gaps** - quality visibility is incomplete
    - Test coverage snapshot is not yet captured
@@ -62,7 +66,8 @@
   - `encrypt_with_mls_if_required/1` ([line 546](../../backend/lib/famichat/chat/message_service.ex#L546)) - Calls MLS adapter and stores ciphertext when required
   - `decrypt_messages_if_required/1` ([line 596](../../backend/lib/famichat/chat/message_service.ex#L596)) - Decrypts via MLS adapter when required
   - `ensure_mls_runtime_ready/0` ([line 733](../../backend/lib/famichat/chat/message_service.ex#L733)) - Fail-closed runtime health gate
-  - MLS session snapshot persistence now uses encrypted envelope metadata (`mls.session_snapshot_encrypted`) with restore-path request wiring after runtime state reset
+  - MLS conversation security state persists in dedicated `conversation_security_states` storage with optimistic locking
+  - Legacy metadata envelope is compatibility-read only and migrates to dedicated storage on access
   - Replay-idempotency cache is capped to reduce state growth pressure
   - `requires_encryption?/1` ([line 266](../../backend/lib/famichat/chat/message_service.ex#L266)) - Policy enforcement per conversation type
   - **Tests**:
@@ -601,16 +606,16 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ### Immediate (This Week)
 1. ✅ Canonical runbook + integration lock landed for `auth -> subscribe -> send -> receive`.
-2. 🚨 Sprint 9 hardening follow-through: move encrypted metadata envelope to dedicated MLS state model with versioned writes.
+2. ✅ Sprint 9 hardening follow-through delivered: dedicated `conversation_security_states` store with optimistic lock-version conflict handling is active.
 3. ⚠️ Add routine timing capture around the canonical flow command for drift tracking.
 4. ⚠️ Triage repo-wide `elixir:lint` / `elixir:static-analysis` baseline debt separately so completed story behavior stays trackable.
 5. ⚠️ Measure test coverage snapshot (`cd backend && ./run mix coveralls`).
 
 ### Short-term (Current P0 Track - Sprint 9)
-1. Replace conversation-metadata snapshot persistence with dedicated MLS state storage and optimistic locking semantics.
-2. Harden commit/update/add/remove lifecycle handling with explicit epoch/pending-commit invariants.
-3. Lock telemetry/metrics gates for app-message and group lifecycle operations.
-4. Expand adversarial/characterization tests for protocol invariants and storage/recovery semantics.
+1. Harden commit/update/add/remove lifecycle handling with explicit epoch/pending-commit invariants on top of `conversation_security_states`.
+2. Lock telemetry/metrics gates for app-message and group lifecycle operations.
+3. Expand adversarial/characterization tests for protocol invariants and storage/recovery semantics.
+4. Complete key lifecycle hardening (rotation/rejoin durability/revocation strategy).
 
 ### Medium-term (Sprint 8 + Sprint 10-11)
 1. **Sprint 8 (P1)**: LiveView messaging UI + auth UX on top of the same backend/channel contracts.

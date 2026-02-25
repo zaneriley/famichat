@@ -4,6 +4,10 @@
 
 ---
 
+Use [ia-lexicon.md](ia-lexicon.md) as the terminology authority for `conversation security state` and related ownership language.
+
+---
+
 ## Security Model
 
 Famichat uses a layered security model:
@@ -28,6 +32,17 @@ Historical Signal-era analysis is retained only in deprecated ADRs and is not an
 
 ---
 
+## Terminology and Ownership Contract
+
+1. Product default term: `conversation security state`.
+2. Engineering default term: `conversation security state record`.
+3. Protocol-qualified implementation term: `MLS protocol state` (when needed).
+4. Durable state write ownership belongs to `Famichat.Chat`.
+5. `Famichat.Crypto.MLS` and Rust NIF (`backend/infra/mls_nif`) are adapter-only and do not own DB persistence tables.
+6. `Famichat.Chat.MessageService` remains the orchestrator that loads/persists through Chat-owned state boundaries.
+
+---
+
 ## Current State (As of 2026-02-25)
 
 ### Implemented
@@ -35,17 +50,24 @@ Historical Signal-era analysis is retained only in deprecated ADRs and is not an
 1. Real OpenMLS cryptography is integrated via Rustler NIF for `create_group -> create_application_message -> process_incoming`.
 2. MessageService enforces fail-closed runtime health gating (`nif_health`) before MLS encrypt/decrypt paths.
 3. Canonical message path stores ciphertext at rest and decrypts on read via the shared backend path.
-4. MLS session state persistence is active through an encrypted envelope in `conversation.metadata` (`mls.session_snapshot_encrypted`).
+4. Durable conversation security state persistence is active in `conversation_security_states` through `Famichat.Chat.ConversationSecurityStateStore` (encrypted state blobs + optimistic locking).
 5. Replay-idempotency cache is bounded (`max 256`) to cap snapshot growth under high replay-cardinality reads.
 6. Adversarial coverage includes malformed ciphertext, cross-group misuse rejection, replay/idempotency behavior, and tampered-snapshot fail-closed behavior.
+7. Transactional send path now fails closed on stale state conflicts (message insert is rolled back if state write cannot commit).
 
 ### Not Implemented Yet
 
-1. Dedicated durable MLS state model (group/epoch/pending commit lifecycle) with explicit versioning/optimistic locking.
-2. Full key package and credential lifecycle hardening (rotation, rejoin durability, revocation strategy).
+1. Full key package and credential lifecycle hardening (rotation, rejoin durability, revocation strategy).
+2. Commit/update/add/remove lifecycle hardening on the dedicated store (pending-commit semantics and rollback guarantees).
 3. Multi-node/state-distribution strategy for deterministic MLS state recovery across instances.
 
 **Current risk**: encryption is active, but production trust still depends on finishing state lifecycle hardening and key lifecycle controls.
+
+### Transitional Persistence Policy
+
+1. `conversations.metadata.mls.session_snapshot_encrypted` remains a compatibility-only read path for legacy state.
+2. Canonical writes/reads now use `conversation_security_states` with optimistic lock-version checks.
+3. Metadata-envelope fallback must be removed after migration completion criteria are met.
 
 ---
 

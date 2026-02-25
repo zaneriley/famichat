@@ -1,7 +1,13 @@
 defmodule Famichat.Chat.MessageServiceMLSContractTest do
   use Famichat.DataCase, async: false
 
-  alias Famichat.Chat.{ConversationService, Message, MessageService}
+  alias Famichat.Chat.{
+    ConversationSecurityState,
+    ConversationService,
+    Message,
+    MessageService
+  }
+
   alias Famichat.Crypto.MLS.Adapter.Nif
   alias Famichat.Repo
   import Famichat.ChatFixtures
@@ -135,6 +141,54 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     end
   end
 
+  defmodule StaleStateAdapter do
+    @behaviour Famichat.Crypto.MLS.Adapter
+    import Ecto.Query, warn: false
+
+    alias Famichat.Chat.ConversationSecurityState
+    alias Famichat.Repo
+
+    def nif_version, do: {:ok, %{}}
+    def nif_health, do: {:ok, %{status: "ok"}}
+    def create_key_package(_params), do: {:ok, %{}}
+    def create_group(_params), do: {:ok, %{}}
+    def join_from_welcome(_params), do: {:ok, %{}}
+    def process_incoming(_params), do: {:ok, %{plaintext: "ok"}}
+    def commit_to_pending(_params), do: {:ok, %{}}
+    def mls_commit(_params), do: {:ok, %{}}
+    def mls_update(_params), do: {:ok, %{}}
+    def mls_add(_params), do: {:ok, %{}}
+    def mls_remove(_params), do: {:ok, %{}}
+    def merge_staged_commit(_params), do: {:ok, %{}}
+    def clear_pending_commit(_params), do: {:ok, %{}}
+    def export_group_info(_params), do: {:ok, %{}}
+    def export_ratchet_tree(_params), do: {:ok, %{}}
+
+    def create_application_message(params) do
+      group_id = Map.get(params, :group_id) || Map.get(params, "group_id")
+      body = Map.get(params, :body) || Map.get(params, "body") || ""
+
+      _ =
+        Repo.update_all(
+          from(s in ConversationSecurityState,
+            where: s.conversation_id == ^group_id
+          ),
+          inc: [lock_version: 1]
+        )
+
+      {:ok,
+       %{
+         ciphertext: "ciphertext:#{body}",
+         epoch: 2,
+         session_sender_storage: Base.encode64("sender-storage"),
+         session_recipient_storage: Base.encode64("recipient-storage"),
+         session_sender_signer: Base.encode64("sender-signer"),
+         session_recipient_signer: Base.encode64("recipient-signer"),
+         session_cache: Base.encode64("cache")
+       }}
+    end
+  end
+
   setup do
     previous_adapter = Application.get_env(:famichat, :mls_adapter)
     previous_enforcement = Application.get_env(:famichat, :mls_enforcement)
@@ -246,7 +300,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
            end)
   end
 
-  test "real NIF adapter persists encrypted session snapshot envelope in conversation metadata",
+  test "real NIF adapter persists encrypted snapshot in conversation_security_states",
        %{conversation: conversation, sender: sender} do
     Application.put_env(:famichat, :mls_adapter, Nif)
 
@@ -255,20 +309,13 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
                message_params(sender.id, conversation.id, "snapshot-persist")
              )
 
-    updated_conversation =
-      Repo.get!(Famichat.Chat.Conversation, conversation.id)
+    persisted_state = Repo.get!(ConversationSecurityState, conversation.id)
 
-    encrypted_snapshot =
-      get_in(updated_conversation.metadata, [
-        "mls",
-        "session_snapshot_encrypted"
-      ])
-
-    assert is_binary(encrypted_snapshot)
-    assert byte_size(encrypted_snapshot) > 0
-    assert get_in(updated_conversation.metadata, ["mls", "session_snapshot_format"]) ==
-             "vault_term_v1"
-    assert get_in(updated_conversation.metadata, ["mls", "session_snapshot"]) in [nil, %{}]
+    assert is_binary(persisted_state.state_ciphertext)
+    assert byte_size(persisted_state.state_ciphertext) > 0
+    assert persisted_state.state_format == "vault_term_v1"
+    assert persisted_state.protocol == "mls"
+    assert persisted_state.lock_version >= 1
   end
 
   test "read path restores from persisted snapshot after runtime state reset",
@@ -303,7 +350,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
            end)
   end
 
-  test "read path fails closed when persisted encrypted snapshot is tampered",
+  test "read path fails closed when persisted state ciphertext is tampered",
        %{conversation: conversation, sender: sender} do
     Application.put_env(:famichat, :mls_adapter, Nif)
 
@@ -312,20 +359,15 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
                message_params(sender.id, conversation.id, "tamper-detection")
              )
 
-    conversation = Repo.get!(Famichat.Chat.Conversation, conversation.id)
+    {count, _rows} =
+      Repo.update_all(
+        from(s in ConversationSecurityState,
+          where: s.conversation_id == ^conversation.id
+        ),
+        set: [state_ciphertext: <<9, 9, 9, 9>>]
+      )
 
-    tampered_metadata =
-      update_in(conversation.metadata, ["mls", "session_snapshot_encrypted"], fn
-        value when is_binary(value) and value != "" -> value <> "tampered"
-        _ -> "tampered"
-      end)
-
-    assert {:ok, _} =
-             conversation
-             |> Famichat.Chat.Conversation.update_changeset(%{
-               metadata: tampered_metadata
-             })
-             |> Repo.update()
+    assert count == 1
 
     reloaded_message = Repo.get!(Message, message.id)
 
@@ -361,6 +403,28 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
              )
 
     assert details[:reason] == :missing_ciphertext
+    assert Repo.aggregate(Message, :count, :id) == before_count
+  end
+
+  test "send_message rolls back message insert when state lock is stale",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(:famichat, :mls_adapter, StaleStateAdapter)
+
+    assert {:ok, _persisted_state} =
+             Famichat.Chat.ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{state: snapshot_payload(), epoch: 1, protocol: "mls"},
+               nil
+             )
+
+    before_count = Repo.aggregate(Message, :count, :id)
+
+    assert {:error, {:mls_encryption_failed, :storage_inconsistent, details}} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "lock-conflict")
+             )
+
+    assert details[:reason] == :lock_version_mismatch
     assert Repo.aggregate(Message, :count, :id) == before_count
   end
 
@@ -467,6 +531,16 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
       sender_id: sender_id,
       conversation_id: conversation_id,
       content: content
+    }
+  end
+
+  defp snapshot_payload do
+    %{
+      "session_sender_storage" => Base.encode64("sender-storage"),
+      "session_recipient_storage" => Base.encode64("recipient-storage"),
+      "session_sender_signer" => Base.encode64("sender-signer"),
+      "session_recipient_signer" => Base.encode64("recipient-signer"),
+      "session_cache" => Base.encode64("cache")
     }
   end
 

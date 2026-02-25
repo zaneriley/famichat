@@ -5,7 +5,14 @@ defmodule Famichat.Chat.MessageService do
   """
   import Ecto.Query, warn: false
   alias Famichat.Repo
-  alias Famichat.Chat.{Conversation, ConversationAccess, Message}
+
+  alias Famichat.Chat.{
+    Conversation,
+    ConversationAccess,
+    ConversationSecurityStateStore,
+    Message
+  }
+
   alias Famichat.Crypto.MLS
   alias Famichat.Vault
   alias Famichat.Ecto.Pagination
@@ -34,6 +41,7 @@ defmodule Famichat.Chat.MessageService do
   @mls_snapshot_envelope_key "session_snapshot_encrypted"
   @mls_snapshot_envelope_format_key "session_snapshot_format"
   @mls_snapshot_envelope_format "vault_term_v1"
+  @mls_state_protocol "mls"
 
   @doc """
   Pipeline-based message retrieval with structured error handling:
@@ -148,7 +156,9 @@ defmodule Famichat.Chat.MessageService do
       params: params,
       changeset: nil,
       message: nil,
-      mls_session_snapshot: nil
+      mls_session_snapshot: nil,
+      mls_state_lock_version: nil,
+      mls_state_epoch: 0
     }
 
     initial_state
@@ -156,6 +166,7 @@ defmodule Famichat.Chat.MessageService do
     |> validate_sender()
     |> validate_conversation()
     |> verify_sender_in_conversation()
+    |> load_mls_state_for_send()
     |> encrypt_with_mls_if_required()
     |> process_encryption_metadata()
     |> build_changeset()
@@ -217,6 +228,29 @@ defmodule Famichat.Chat.MessageService do
     end
   end
 
+  defp load_mls_state_for_send(%{error: _} = state), do: state
+
+  defp load_mls_state_for_send(
+         %{conversation: %Conversation{conversation_type: conversation_type}} =
+           state
+       ) do
+    if mls_enforcement_enabled?() and requires_encryption?(conversation_type) do
+      case load_mls_snapshot_with_lock(state.conversation) do
+        {:ok, snapshot, lock_version, epoch} ->
+          state
+          |> Map.put(:mls_session_snapshot, snapshot)
+          |> Map.put(:mls_state_lock_version, lock_version)
+          |> Map.put(:mls_state_epoch, epoch)
+
+        {:error, code, details} ->
+          emit_mls_failure(:load_state, code, details, state)
+          Map.put(state, :error, {:mls_encryption_failed, code, details})
+      end
+    else
+      state
+    end
+  end
+
   defp build_changeset(%{error: _} = state), do: state
 
   defp build_changeset(state) do
@@ -234,45 +268,61 @@ defmodule Famichat.Chat.MessageService do
   defp persist_message(%{error: _} = state), do: state
 
   defp persist_message(state) do
-    case Repo.insert(state.changeset) do
-      {:ok, message} -> Map.put(state, :message, message)
-      {:error, reason} -> Map.put(state, :error, reason)
+    case Repo.transaction(fn ->
+           with {:ok, message} <- Repo.insert(state.changeset),
+                {:ok, updated_state} <-
+                  persist_mls_session_snapshot_in_tx(state) do
+             Map.put(updated_state, :message, message)
+           else
+             {:error, reason} -> Repo.rollback(reason)
+           end
+         end) do
+      {:ok, updated_state} ->
+        updated_state
+
+      {:error, reason} ->
+        Map.put(state, :error, reason)
     end
   end
 
-  defp persist_mls_session_snapshot(%{error: _} = state), do: state
-
-  defp persist_mls_session_snapshot(
+  defp persist_mls_session_snapshot_in_tx(
          %{
            conversation: %Conversation{} = conversation,
            mls_session_snapshot: snapshot
          } = state
        )
        when is_map(snapshot) and snapshot != %{} do
-    if mls_snapshot_from_conversation(conversation) == snapshot do
-      state
-    else
-      case persist_mls_snapshot_to_conversation(conversation, snapshot) do
-        {:ok, updated_conversation} ->
-          Map.put(state, :conversation, updated_conversation)
+    expected_lock_version = Map.get(state, :mls_state_lock_version)
+    epoch = Map.get(state, :mls_state_epoch, 0)
 
-        {:error, _reason} ->
-          details = %{
-            operation: :persist_mls_session_snapshot,
-            reason: :conversation_update_failed
-          }
+    attrs = %{
+      protocol: @mls_state_protocol,
+      state: snapshot,
+      epoch: epoch
+    }
 
-          emit_mls_failure(:persist_state, :storage_inconsistent, details, state)
+    case ConversationSecurityStateStore.upsert(
+           conversation.id,
+           attrs,
+           expected_lock_version
+         ) do
+      {:ok, persisted} ->
+        {:ok,
+         state
+         |> Map.put(:mls_state_lock_version, persisted.lock_version)
+         |> Map.put(:mls_state_epoch, persisted.epoch)
+         |> Map.put(:mls_session_snapshot, persisted.state)}
 
-          Map.put(
-            state,
-            :error,
-            {:mls_encryption_failed, :storage_inconsistent, details}
-          )
-      end
+      {:error, code, details} ->
+        mapped_code = map_state_store_error_code(code)
+        emit_mls_failure(:persist_state, mapped_code, details, state)
+        {:error, {:mls_encryption_failed, mapped_code, details}}
     end
   end
 
+  defp persist_mls_session_snapshot_in_tx(state), do: {:ok, state}
+
+  defp persist_mls_session_snapshot(%{error: _} = state), do: state
   defp persist_mls_session_snapshot(state), do: state
 
   defp notify_participants(%{error: _} = state), do: state
@@ -609,9 +659,7 @@ defmodule Famichat.Chat.MessageService do
                 Map.get(state.params, :content) ||
                   Map.get(state.params, "content")
             }
-            |> maybe_put_mls_snapshot(
-              mls_snapshot_from_conversation(state.conversation)
-            )
+            |> maybe_put_mls_snapshot(state.mls_session_snapshot)
 
           case MLS.create_application_message(request) do
             {:ok, payload} ->
@@ -682,62 +730,75 @@ defmodule Famichat.Chat.MessageService do
          conversation
        ) do
     if requires_encryption?(conversation_type) do
-      initial_snapshot =
-        case conversation do
-          %Conversation{} = value -> mls_snapshot_from_conversation(value)
-          _ -> nil
-        end
+      case load_mls_snapshot_with_lock(conversation) do
+        {:ok, initial_snapshot, initial_lock_version, initial_epoch} ->
+          case ensure_mls_runtime_ready() do
+            :ok ->
+              case Enum.reduce_while(
+                     messages,
+                     {:ok, [], initial_snapshot, initial_epoch},
+                     fn message, {:ok, acc, snapshot, epoch} ->
+                       request =
+                         %{
+                           group_id: conversation_id,
+                           message_id: message.id,
+                           ciphertext: message.content
+                         }
+                         |> maybe_put_mls_snapshot(snapshot)
 
-      case ensure_mls_runtime_ready() do
-        :ok ->
-          case Enum.reduce_while(
-                 messages,
-                 {:ok, [], initial_snapshot},
-                 fn message, {:ok, acc, snapshot} ->
-                   request =
-                     %{
-                       group_id: conversation_id,
-                       message_id: message.id,
-                       ciphertext: message.content
-                     }
-                     |> maybe_put_mls_snapshot(snapshot)
+                       case MLS.process_incoming(request) do
+                         {:ok, payload} ->
+                           case extract_mls_plaintext(payload) do
+                             {:ok, plaintext} ->
+                               next_snapshot =
+                                 case extract_mls_snapshot(payload) do
+                                   {:ok, restored} -> restored
+                                   :none -> snapshot
+                                 end
 
-                   case MLS.process_incoming(request) do
-                     {:ok, payload} ->
-                       case extract_mls_plaintext(payload) do
-                         {:ok, plaintext} ->
-                           next_snapshot =
-                             case extract_mls_snapshot(payload) do
-                               {:ok, restored} -> restored
-                               :none -> snapshot
-                             end
+                               next_epoch =
+                                 extract_mls_epoch(payload) || epoch
 
-                           {:cont,
-                            {:ok, [%{message | content: plaintext} | acc],
-                             next_snapshot}}
+                               {:cont,
+                                {:ok, [%{message | content: plaintext} | acc],
+                                 next_snapshot, next_epoch}}
 
-                         {:error, details} ->
-                           {:halt, {:error, :crypto_failure, details, message}}
+                             {:error, details} ->
+                               {:halt,
+                                {:error, :crypto_failure, details, message}}
+                           end
+
+                         {:error, code, details} ->
+                           {:halt, {:error, code, details, message}}
                        end
+                     end
+                   ) do
+                {:ok, decrypted_reversed, final_snapshot, final_epoch} ->
+                  updated_state =
+                    %{state | result: Enum.reverse(decrypted_reversed)}
 
-                     {:error, code, details} ->
-                       {:halt, {:error, code, details, message}}
-                   end
-                 end
-               ) do
-            {:ok, decrypted_reversed, final_snapshot} ->
-              updated_state =
-                %{state | result: Enum.reverse(decrypted_reversed)}
+                  maybe_persist_decrypt_snapshot(
+                    updated_state,
+                    conversation,
+                    initial_snapshot,
+                    final_snapshot,
+                    initial_lock_version,
+                    initial_epoch,
+                    final_epoch
+                  )
 
-              maybe_persist_decrypt_snapshot(
-                updated_state,
-                conversation,
-                initial_snapshot,
-                final_snapshot
-              )
+                {:error, code, details, message} ->
+                  emit_mls_failure(:decrypt, code, details, state, message)
 
-            {:error, code, details, message} ->
-              emit_mls_failure(:decrypt, code, details, state, message)
+                  Map.put(
+                    state,
+                    :error,
+                    {:mls_decryption_failed, code, details}
+                  )
+              end
+
+            {:error, code, details} ->
+              emit_mls_failure(:decrypt, code, details, state)
               Map.put(state, :error, {:mls_decryption_failed, code, details})
           end
 
@@ -792,9 +853,21 @@ defmodule Famichat.Chat.MessageService do
   defp maybe_store_mls_snapshot(state, payload) do
     case extract_mls_snapshot(payload) do
       {:ok, snapshot} ->
-        Map.put(state, :mls_session_snapshot, snapshot)
+        state
+        |> Map.put(:mls_session_snapshot, snapshot)
+        |> maybe_store_mls_epoch(payload)
 
       :none ->
+        maybe_store_mls_epoch(state, payload)
+    end
+  end
+
+  defp maybe_store_mls_epoch(state, payload) do
+    case extract_mls_epoch(payload) do
+      epoch when is_integer(epoch) and epoch >= 0 ->
+        Map.put(state, :mls_state_epoch, epoch)
+
+      _ ->
         state
     end
   end
@@ -806,17 +879,80 @@ defmodule Famichat.Chat.MessageService do
 
   defp maybe_put_mls_snapshot(request, _snapshot), do: request
 
-  defp mls_snapshot_from_conversation(%Conversation{metadata: metadata}) do
+  defp load_mls_snapshot_with_lock(%Conversation{} = conversation) do
+    case ConversationSecurityStateStore.load(conversation.id) do
+      {:ok, persisted} ->
+        {:ok, persisted.state, persisted.lock_version, persisted.epoch}
+
+      {:error, :not_found, _details} ->
+        case legacy_mls_snapshot_from_conversation_metadata(conversation) do
+          %{} = legacy_snapshot ->
+            migrate_legacy_snapshot_if_present(conversation, legacy_snapshot)
+
+          _ ->
+            {:ok, nil, nil, 0}
+        end
+
+      {:error, code, details} ->
+        {:error, map_state_store_error_code(code), details}
+    end
+  end
+
+  defp migrate_legacy_snapshot_if_present(
+         %Conversation{} = conversation,
+         snapshot
+       )
+       when is_map(snapshot) and snapshot != %{} do
+    attrs = %{protocol: @mls_state_protocol, state: snapshot, epoch: 0}
+
+    case ConversationSecurityStateStore.upsert(conversation.id, attrs, nil) do
+      {:ok, persisted} ->
+        {:ok, persisted.state, persisted.lock_version, persisted.epoch}
+
+      {:error, :stale_state, _details} ->
+        case ConversationSecurityStateStore.load(conversation.id) do
+          {:ok, persisted} ->
+            {:ok, persisted.state, persisted.lock_version, persisted.epoch}
+
+          {:error, code, details} ->
+            {:error, map_state_store_error_code(code), details}
+        end
+
+      {:error, code, details} ->
+        {:error, map_state_store_error_code(code), details}
+    end
+  end
+
+  defp map_state_store_error_code(:stale_state), do: :storage_inconsistent
+
+  defp map_state_store_error_code(:state_encode_failed),
+    do: :storage_inconsistent
+
+  defp map_state_store_error_code(:state_decode_failed),
+    do: :storage_inconsistent
+
+  defp map_state_store_error_code(:invalid_input), do: :storage_inconsistent
+  defp map_state_store_error_code(code), do: code
+
+  defp legacy_mls_snapshot_from_conversation_metadata(%Conversation{
+         metadata: metadata
+       }) do
     with %{} = mls <- Map.get(metadata || %{}, "mls") do
       case Map.get(mls, @mls_snapshot_envelope_key) do
         envelope when is_binary(envelope) and envelope != "" ->
-          case decode_mls_snapshot_envelope(envelope) do
+          envelope_format =
+            Map.get(mls, @mls_snapshot_envelope_format_key)
+
+          case decode_mls_snapshot_envelope(
+                 envelope,
+                 envelope_format
+               ) do
             {:ok, snapshot} -> snapshot
-            :none -> legacy_snapshot_from_metadata(mls)
+            :none -> legacy_mls_snapshot_from_metadata(mls)
           end
 
         _ ->
-          legacy_snapshot_from_metadata(mls)
+          legacy_mls_snapshot_from_metadata(mls)
       end
     else
       _ -> nil
@@ -827,91 +963,87 @@ defmodule Famichat.Chat.MessageService do
     normalize_mls_snapshot(payload)
   end
 
+  defp extract_mls_epoch(payload) when is_map(payload) do
+    value = Map.get(payload, :epoch) || Map.get(payload, "epoch")
+
+    if is_integer(value) and value >= 0 do
+      value
+    else
+      nil
+    end
+  end
+
+  defp extract_mls_epoch(_), do: nil
+
   defp maybe_persist_decrypt_snapshot(
          state,
          %Conversation{} = conversation,
          initial_snapshot,
-         final_snapshot
-       )
-       when is_map(final_snapshot) and final_snapshot != initial_snapshot do
-    case persist_mls_snapshot_to_conversation(conversation, final_snapshot) do
-      {:ok, updated_conversation} ->
-        Map.put(state, :conversation, updated_conversation)
-
-      {:error, _changeset} ->
-        details = %{
-          operation: :persist_mls_session_snapshot,
-          reason: :conversation_update_failed
-        }
-
-        emit_mls_failure(:persist_state, :storage_inconsistent, details, state)
-
-        Map.put(
-          state,
-          :error,
-          {:mls_decryption_failed, :storage_inconsistent, details}
-        )
-    end
-  end
-
-  defp maybe_persist_decrypt_snapshot(state, _conversation, _initial, _final),
-    do: state
-
-  defp persist_mls_snapshot_to_conversation(
-         %Conversation{} = conversation,
-         snapshot
+         final_snapshot,
+         initial_lock_version,
+         initial_epoch,
+         final_epoch
        ) do
-    with {:ok, envelope} <- encode_mls_snapshot_envelope(snapshot) do
-      metadata = conversation.metadata || %{}
-      mls_metadata = Map.get(metadata, "mls", %{})
+    should_persist_snapshot =
+      is_map(final_snapshot) and
+        (final_snapshot != initial_snapshot or final_epoch != initial_epoch)
 
-      updated_mls_metadata =
-        mls_metadata
-        |> Map.put(@mls_snapshot_envelope_key, envelope)
-        |> Map.put(
-          @mls_snapshot_envelope_format_key,
-          @mls_snapshot_envelope_format
-        )
-        |> Map.delete(@mls_snapshot_legacy_key)
+    if should_persist_snapshot do
+      attrs = %{
+        protocol: @mls_state_protocol,
+        state: final_snapshot,
+        epoch: final_epoch || initial_epoch || 0
+      }
 
-      updated_metadata = Map.put(metadata, "mls", updated_mls_metadata)
+      case ConversationSecurityStateStore.upsert(
+             conversation.id,
+             attrs,
+             initial_lock_version
+           ) do
+        {:ok, persisted} ->
+          state
+          |> Map.put(:mls_session_snapshot, persisted.state)
+          |> Map.put(:mls_state_lock_version, persisted.lock_version)
+          |> Map.put(:mls_state_epoch, persisted.epoch)
 
-      conversation
-      |> Conversation.update_changeset(%{metadata: updated_metadata})
-      |> Repo.update()
+        {:error, code, details} ->
+          mapped_code = map_state_store_error_code(code)
+          emit_mls_failure(:persist_state, mapped_code, details, state)
+
+          Map.put(
+            state,
+            :error,
+            {:mls_decryption_failed, mapped_code, details}
+          )
+      end
+    else
+      state
     end
   end
 
-  defp encode_mls_snapshot_envelope(snapshot) do
-    try do
-      snapshot
-      |> :erlang.term_to_binary([:compressed])
-      |> Vault.encrypt!()
-      |> Base.encode64()
-      |> then(&{:ok, &1})
-    rescue
-      _ -> {:error, :snapshot_envelope_encode_failed}
-    end
-  end
-
-  defp decode_mls_snapshot_envelope(envelope) when is_binary(envelope) do
-    try do
-      with {:ok, encrypted} <- Base.decode64(envelope),
-           decrypted when is_binary(decrypted) <- Vault.decrypt!(encrypted),
-           decoded <- :erlang.binary_to_term(decrypted, [:safe]),
-           {:ok, snapshot} <- normalize_mls_snapshot(decoded) do
-        {:ok, snapshot}
-      else
+  defp decode_mls_snapshot_envelope(envelope, envelope_format)
+       when is_binary(envelope) do
+    if envelope_format in [nil, @mls_snapshot_envelope_format] do
+      try do
+        with {:ok, encrypted} <- Base.decode64(envelope),
+             decrypted when is_binary(decrypted) <- Vault.decrypt!(encrypted),
+             decoded <- :erlang.binary_to_term(decrypted, [:safe]),
+             {:ok, snapshot} <- normalize_mls_snapshot(decoded) do
+          {:ok, snapshot}
+        else
+          _ -> :none
+        end
+      rescue
         _ -> :none
       end
-    rescue
-      _ -> :none
+    else
+      :none
     end
   end
 
-  defp decode_mls_snapshot_envelope(_), do: :none
+  defp decode_mls_snapshot_envelope(_envelope, _envelope_format), do: :none
 
-  defp legacy_snapshot_from_metadata(mls) when is_map(mls) do
+  defp legacy_mls_snapshot_from_metadata(mls) when is_map(mls) do
     case Map.get(mls, @mls_snapshot_legacy_key) do
       %{} = snapshot ->
         case normalize_mls_snapshot(snapshot) do
@@ -924,7 +1056,7 @@ defmodule Famichat.Chat.MessageService do
     end
   end
 
-  defp legacy_snapshot_from_metadata(_), do: nil
+  defp legacy_mls_snapshot_from_metadata(_), do: nil
 
   defp normalize_mls_snapshot(payload) when is_map(payload) do
     snapshot =

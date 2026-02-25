@@ -3,6 +3,7 @@
 **Last Updated**: 2026-02-25
 
 See [sprints/STATUS.md](sprints/STATUS.md) for current implementation details.
+See [ia-lexicon.md](ia-lexicon.md) for canonical terminology and ownership language.
 
 ---
 
@@ -38,6 +39,7 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
   - `MessageService` - Send/retrieve messages
   - `ConversationService` - Create/manage conversations
   - `ConversationVisibilityService` - Hide/unhide conversations
+  - Planned Sprint 9 hardening boundary: `ConversationSecurityStateStore` (durable conversation security state)
 - `Accounts` - User authentication, invites, passkeys, and device trust (invite completion issues a short-lived passkey register token; passkey challenges only issued after exchanging that token or from trusted sessions)
 
 ### Key Design Decisions
@@ -79,6 +81,30 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 
 ---
 
+#### 4. Conversation Security State Ownership Boundary
+**Decision**: Durable conversation security state is owned by `Famichat.Chat`; crypto modules are adapter-only.
+
+**Rationale**:
+- Keeps persistence ownership in the chat domain where message orchestration lives
+- Avoids leaking database ownership into NIF/crypto adapter layers
+- Preserves one canonical backend path for API, CLI, LiveView, and agent-driven testing
+
+**Current Durable Shape**:
+- Dedicated table: `conversation_security_states`
+- Chat-owned schema/store boundary modules:
+  - `Famichat.Chat.ConversationSecurityState`
+  - `Famichat.Chat.ConversationSecurityStateStore`
+- Protocol remains a data attribute (current default: MLS), not a storage/module naming prefix
+
+**Compatibility Read Path**:
+- Legacy encrypted envelope in `conversations.metadata.mls.session_snapshot_encrypted` is still read for migration and converted into the dedicated store on access
+
+**See**:
+- [ia-lexicon.md](ia-lexicon.md)
+- [sprints/STATUS.md](sprints/STATUS.md)
+
+---
+
 ### Database Schema
 
 **Current Migrations**: See `backend/priv/repo/migrations` (active schema evolution; avoid fixed-count drift in this doc)
@@ -99,7 +125,9 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 - `users.email` uses `EncryptedBinary` (Cloak) with deterministic `email_fingerprint` for uniqueness
 - `conversations.direct_key` - SHA256 hash for deduplication
 - `conversations.hidden_by_users` - Array of user IDs (soft delete)
-- `messages.metadata` - JSONB for encryption data (E2EE stubbed until MLS/OpenMLS integration lands)
+- `messages.metadata` - JSONB for encryption metadata and MLS delivery context
+- `conversation_security_states` - Durable encrypted conversation security state with optimistic `lock_version`
+- `conversations.metadata.mls.session_snapshot_encrypted` - Compatibility-only legacy read path for migration
 - Accounts refactor delivered (passkey-first onboarding, single token model). Legacy `users.family_id/role` columns removed in follow-up migration.
 
 ---
@@ -157,16 +185,17 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 
 See [ENCRYPTION.md](ENCRYPTION.md) for detailed security design.
 
-**Current** (End of Sprint 7):
+**Current** (Sprint 9 hardening track):
 - Token-based channel authentication ✅
 - Family-based authorization ✅
-- Encryption metadata infrastructure ✅ (serialization, telemetry)
-- ⚠️ **Messages currently stored in plaintext** (no crypto implementation)
+- OpenMLS-backed encryption/decryption vertical slice ✅
+- Fail-closed runtime gating for MLS operations ✅
+- ⚠️ Durable MLS lifecycle/state-store hardening still in progress
 
 **Planned** (Sprint 9 - 3 weeks):
 - Server-side MLS E2EE (Rust NIF + OpenMLS)
 - MLS key package lifecycle + group state/epoch management
-- Key management system (database storage with Cloak.Ecto encryption at rest)
+- Dedicated durable conversation security state store with optimistic locking
 - Trust model: Self-hosted backend = you control the server; message confidentiality target is "admin cannot read content"
 
 ---

@@ -2,6 +2,8 @@
 
 **Last Updated**: 2026-02-25
 
+Terminology authority: [../ia-lexicon.md](../ia-lexicon.md)
+
 ## Progress Overview
 
 **Overall**: ████████░░░░░░░░░░░░ 40% to MVP
@@ -202,7 +204,8 @@
   - Basic encryption/decryption tests
 - **Week 2-3**: Key Management
   - MLS key package + credential lifecycle implementation
-  - Database schema for MLS group state, epochs, and message metadata
+  - Database schema for MLS conversation security state, epochs, and pending-commit lifecycle
+  - Planned durable store naming: `conversation_security_states` + `Famichat.Chat.ConversationSecurityStateStore` (`protocol = "mls"` in data)
   - User registration: Generate identity keys
   - Cloak.Ecto vault for key encryption at rest
 - **Week 3**: Message Encryption Integration
@@ -226,9 +229,11 @@
 - ✅ OpenMLS-backed NIF vertical slice is implemented (`create_group`, `create_application_message`, `process_incoming`)
 - ✅ Fail-closed runtime health gating is in place in `MessageService`
 - ✅ Adversarial MLS contract tests cover malformed ciphertext, cross-group misuse, and replay rejection
-- ✅ Encrypted MLS snapshot envelope persistence is active in `conversation.metadata` (restart recovery path for current backend flow)
+- ✅ Dedicated conversation security state persistence is active in `conversation_security_states` via `Famichat.Chat.ConversationSecurityStateStore`
+- ✅ Legacy metadata-envelope snapshots are compatibility-read and migrated into dedicated storage
 - ✅ Replay-idempotency cache export is bounded to cap snapshot growth
-- ⚠️ Dedicated durable MLS group/epoch/pending-commit state model with versioned writes is still pending
+- ✅ Optimistic lock-version conflict handling is active (`:stale_state` fail-closed behavior covered by tests)
+- ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage is still pending
 - ⚠️ Key lifecycle hardening (rotation/rejoin persistence/revocation strategy) is still pending
 
 ---
