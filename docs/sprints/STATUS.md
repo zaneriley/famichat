@@ -321,61 +321,41 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ---
 
-## 🚧 In Progress (Sprint 7 - 30% Complete)
+## 🚧 In Progress (Sprint 7 Closeout)
 
-### Completed Stories (6/9)
+### Completed Core Stories
 - ✅ **7.1.1-7.1.2**: Phoenix Channel module with comprehensive tests
+- ✅ **7.1.3**: Channel routing and authorization integration landed
 - ✅ **7.1.4**: Encryption telemetry validation (join/broadcast assertions with sensitive metadata filtering)
+- ✅ **7.4.2**: Secure canonical CLI broadcast workflow (`/api/test/broadcast`) with `200/401/403/422` contract coverage and no-broadcast guarantees on non-200 paths
+- ✅ **7.9**: Accounts context refactor (single-table token model, passkey-first onboarding, device trust, recovery)
 - ✅ **7.10.1**: Type-immutable conversation schema (separate changesets)
 - ✅ **7.10.8**: Conversation `hidden_by_users` field added
 - ✅ **7.10.9**: Conversation hiding/unhiding functionality
-- ✅ **7.9**: Accounts context refactor (single-table token model, passkey-first onboarding, device trust, recovery)
 
 ### Active Stories
 
-#### Story 7.1.3: Channel Routing & Authorization 🔄
-- **Status**: Configuration done (80%), authorization testing pending (20%)
-- **Blocker**: Need to decide on auth flow (token-based vs session-based for production)
-- **Files**:
-  - [user_socket.ex](backend/lib/famichat_web/channels/user_socket.ex)
-  - [router.ex](backend/lib/famichat_web/router.ex)
-- **Next Step**: Complete authorization tests, document decision in ADR
-- **ETA**: 2 days
-
 #### Story 7.10.5-6: Group Role Management Tests 🔄
-- **Status**: Schema complete, need edge case coverage
+- **Status**: Schema and core behavior are implemented; adversarial edge-case coverage is still incomplete
 - **Files**:
   - Implementation: [conversation_service.ex](backend/lib/famichat/chat/conversation_service.ex)
   - Tests: [group_conversation_privileges_test.exs](backend/test/famichat/chat/group_conversation_privileges_test.exs)
-- **Next Step**: Test concurrent permission changes, last admin protection
+- **Next Step**: Expand tests around concurrent permission changes and last-admin invariants
 
-#### Story 7.4.2: Secure CLI Broadcast Endpoint 🔄
-- **Status**: Implementation landed; awaiting cleanup of unrelated repo-wide lint/static gate debt
-- **Contract Target**:
-  - Canonical endpoint: `POST /api/test/broadcast`
-  - Alias endpoint: `POST /api/test/test_events` (temporary compatibility window with deprecation signaling)
-  - Required semantics: `200/401/403/422`, server-side topic derivation, membership authorization, no broadcast on non-200
-- **Execution Tracks**:
-  - Agent A: Router + pipeline hardening ✅
-  - Agent B: Controller contract + authorization behavior ✅
-  - Agent C: Contract tests + verification gates ✅ (with pre-existing repo gate failures noted)
-- **Verification Snapshot**:
-  - ✅ Targeted controller contract tests green (canonical + alias)
-  - ✅ Security check (`sobelow`) green
-  - ⚠️ Lint/static-analysis still fail due existing repo-wide issues outside 7.4.2 scope
+#### Story 7.2: Broadcast Testing Follow-through 🔄
+- **Status**: Core tests are present; final outcome-focused verification pass still open
+- **Scope**: Keep assertions centered on externally observable behavior and side effects
+- **Dependency**: Canonical path depends on the completed 7.1.3 and 7.4.2 foundations
+
+#### Story 7.3: Client/Operator Documentation Consolidation 🔄
+- **Status**: Draft docs exist; one canonical runbook is still missing
+- **Scope**: Consolidate token acquisition + subscribe + canonical broadcast + receive verification into one deterministic workflow
+
+### Cross-cutting Follow-through
+
+#### Repo-wide Gate Debt ⚠️
+- **Status**: Targeted story verification is green, but repo-wide `elixir:lint` and `elixir:static-analysis` have pre-existing failures outside completed story scope
 - **Tracking Doc**: [7.4.2-cli-broadcast-plan.md](7.4.2-cli-broadcast-plan.md)
-
-### Follow-through Stories
-
-#### Story 7.2: Broadcast Testing 🔄
-- **Status**: Partial implementation; final verification and coverage measurement pending
-- **Scope**: Unit & integration tests for message broadcasting
-- **Dependencies**: 7.1.3 should be complete
-
-#### Story 7.3: Client Integration Documentation 🔄
-- **Status**: Draft-level docs exist; canonical auth + CLI broadcast workflow needs consolidation
-- **Scope**: Write guide for LiveView Hooks to connect to channels
-- **Note**: Some examples exist in test LiveViews; add one operator-facing token + curl + subscriber recipe
 
 ---
 
@@ -386,10 +366,10 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 #### 1. End-to-End Encryption ❌ INFRASTRUCTURE READY
 - **Impact**: Security risk, cannot market as "secure family chat"
 - **What's Missing**:
-  - No actual cryptography (hooks exist but no implementation)
-  - No key exchange protocol
-  - No client-side encryption
-  - Metadata fields ready but empty
+  - No OpenMLS Rust NIF integration (actual cryptography not wired)
+  - No MLS key package / credential lifecycle implementation
+  - No MLS group state + epoch/commit lifecycle implementation
+  - Metadata hooks exist, but message content remains plaintext
 - **Infrastructure Ready**:
   - Schema has `metadata` JSONB field for encryption data
   - Serialization/deserialization functions exist
@@ -446,7 +426,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ✅ Document `Accounts.reissue_pairing/2` in the API surface or mark it internal-only — captured in `docs/API-DESIGN.md`
 - 🔄 Add perf-budget checks for invite issuance & refresh (PERF-01/02)
 - ✅ Explicit DM cross-family isolation tests (FAM-02) now live in `conversation_service_test.exs`
-- 🔄 Passkey spec compliance: `wax_` dependency landed, but registration/assertion flows still bypass WebAuthn verification and return legacy payloads
+- ✅ Passkey payload compliance landed: challenge endpoints now emit WebAuthn `publicKey` options and opaque handles (legacy challenge-token payload removed)
 
 #### 6. LiveView Messaging UI 🔄 IN PROGRESS
 - **Impact**: Needed to dogfood the product
@@ -497,13 +477,13 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - **Test Files**: 20
 - **Source Files**: 49 Elixir modules
 - **Test Coverage**: ⚠️ **UNKNOWN** (not measured - need to run `mix coveralls`)
-- **Linting**: ✅ Passing (Credo)
-- **Security**: ✅ Passing (Sobelow - no vulnerabilities)
-- **Static Analysis**: ✅ Passing (Dialyzer - typespec checks)
+- **Linting**: ⚠️ Repo-wide baseline debt remains (Credo)
+- **Security**: ✅ Targeted checks passing (Sobelow - no new vulnerabilities in recent story scope)
+- **Static Analysis**: ⚠️ Repo-wide baseline debt remains (Dialyzer)
 - **Lines of Code**: ~12,000 (backend only)
 
 ### Performance Metrics
-- **Performance Budget**: 200ms default (all measured operations under budget ✅)
+- **Performance Budget**: 200ms target for steady-state app-message path; encrypted-path measurements pending MLS integration
 - **Telemetry Events**: All critical paths instrumented ✅
 - **Database Queries**: ⚠️ Need to verify indexes on `conversation_id`, `sender_id`
 - **Response Times**: Not formally measured in production (no prod environment)
@@ -594,15 +574,16 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ## 🎯 Next Steps
 
 ### Immediate (This Week)
-1. ✅ Complete Story 7.1.3 (Channel authorization)
-2. 🚨 **START Story 7.9** (Accounts context) - CRITICAL!
-3. ⚠️ Measure test coverage (`cd backend && ./run mix coveralls`)
+1. 🚨 Publish one canonical operator runbook for `auth -> subscribe -> send -> receive` (single deterministic path).
+2. 🚨 Lock that runbook with integration tests, including non-happy-path assertions (`401/403/422` and explicit no-broadcast guarantees on non-200 paths).
+3. ⚠️ Triage repo-wide `elixir:lint` / `elixir:static-analysis` baseline debt separately so completed story behavior stays trackable.
+4. ⚠️ Measure test coverage snapshot (`cd backend && ./run mix coveralls`).
 
 ### Short-term (Next Sprint - Sprint 8)
-1. Complete Accounts context (Story 7.9 - user registration, login, logout)
-2. Build LiveView messaging UI (conversation list, message thread)
-3. Integrate LiveView Hooks with Phoenix Channels
-4. Create authentication pages (login/registration forms)
+1. Build LiveView messaging UI (conversation list, message thread) on the same backend/channel contracts already validated by CLI flows.
+2. Integrate LiveView hooks with Phoenix Channels using the same auth and authorization boundaries (no alternate UI-only path).
+3. Consolidate client integration documentation for token acquisition, channel subscribe, and canonical broadcast verification.
+4. Close remaining role/authorization edge-case coverage for group privilege transitions.
 
 ### Medium-term (Sprint 9-11)
 1. **Sprint 9 (3 weeks)**: MLS/OpenMLS E2EE implementation

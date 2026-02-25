@@ -116,7 +116,7 @@
 
 ## 🚧 Current Sprint
 
-### Sprint 7: Real-Time Messaging Integration (Oct 2025) - 30%
+### Sprint 7: Real-Time Messaging Integration (Oct 2025) - Closeout
 📍 **See [CURRENT-SPRINT.md](CURRENT-SPRINT.md) for detailed tasks**
 
 **Duration**: Oct 1 - Oct 15, 2025
@@ -134,17 +134,16 @@
 - ✅ Username fingerprint migration + single-use invite acceptance (registration JWT handshake)
 
 **In Progress**:
-- 🔄 Channel routing & authorization (80%)
 - 🔄 Group role management edge case tests
 - 🔄 Story 7.4.2 secure CLI broadcast endpoint follow-through (implementation landed; repo-wide gate debt cleanup pending)
-- 🔄 Story 7.2/7.3 final verification and documentation consolidation
+- 🔄 Story 7.2/7.3 final verification, runbook, and documentation consolidation
 
 **Not Started**:
 - ❌ Story 7.4.1 dummy UI route / LiveView test harness
 
 **Key Deliverables**:
 - Phoenix Channels configured ✓
-- Channel authorization ⚠️ (needs testing)
+- Channel authorization ✓ (implemented; regression coverage follow-through ongoing)
 - Encryption telemetry assertions ✓ (Story 7.1.4 complete)
 - **Accounts context** ✅ shipped (Story 7.9)
 
@@ -164,16 +163,16 @@
 **Goal**: Build functional LiveView messaging interface with authentication
 
 **Key Deliverables**:
-- Complete Accounts context (Story 7.9 - registration, login, logout)
 - LiveView messaging UI (conversation list, message view)
 - LiveView Hooks for real-time channel integration
-- Session management and authentication flows
-- User registration/login pages
+- Session management and authentication UX wiring on top of shipped Accounts APIs
+- User registration/login pages backed by the existing Accounts context
 - Integration tests (LiveView ↔ channels)
+- One canonical end-to-end operator runbook and verification flow (`auth -> subscribe -> send -> receive`)
 
 **Dependencies**:
-- Sprint 7 must complete (channel authorization)
-- Story 7.9 (Accounts) - to be completed in this sprint
+- Sprint 7 closeout (runbook/docs consolidation + role edge-case test follow-through)
+- Story 7.9 follow-up HTTP/LiveView surfacing work (core Accounts context already shipped)
 
 **Estimated Duration**: 2 weeks
 **Priority**: **HIGH** - needed to demonstrate product value and enable dogfooding
@@ -324,7 +323,7 @@
 - ✅ Conversations (direct, self, group)
 - ✅ Real-time updates (channels)
 - ✅ Encryption metadata infrastructure (serialization, telemetry)
-- 🔄 User authentication (in progress - Story 7.9)
+- ✅ User authentication foundation (Story 7.9 shipped; UX integration follow-through continues)
 - 🔄 LiveView UI (messaging interface in progress)
 - ❌ E2E encryption (MLS/OpenMLS - Sprint 9)
 - ❌ Production deployment
@@ -377,7 +376,7 @@
 - **Sprint 4**: 5 stories completed
 - **Sprint 5**: 5 stories completed
 - **Sprint 6**: 5 stories completed
-- **Sprint 7**: 4/9 stories completed (in progress)
+- **Sprint 7**: closeout in progress (core channel/auth/7.4.2 and 7.9 complete; docs and verification follow-through open)
 
 **Average Velocity**: ~5 stories per sprint (1 point each)
 
@@ -406,7 +405,7 @@
    - **Mitigation**: Defer until Layer 3 validates LiveView UX (Sprints 8-10)
 
 ### Dependencies
-- **Sprint 8 depends on**: Sprint 7 completion (especially Story 7.9 auth)
+- **Sprint 8 depends on**: Sprint 7 closeout (operator runbook + docs + targeted role-edge coverage)
 - **Sprint 9 depends on**: Sprint 8 completion (authentication + LiveView UI)
 - **Sprint 10 depends on**: Sprint 9 completion (E2EE must work for dogfooding)
 - **Sprint 13 depends on**: All previous sprints (production readiness)
