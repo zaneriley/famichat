@@ -22,7 +22,8 @@ defmodule Famichat.Auth.Recovery do
 
   alias Famichat.Accounts.{HouseholdMembership, User, UserToken}
 
-  alias Famichat.Auth.{Identity, IssuedToken, Passkeys, Sessions, Tokens}
+  alias Famichat.Auth.{Identity, Passkeys, Sessions, Tokens}
+  alias Famichat.Auth.Tokens.IssuedToken
   alias Famichat.Auth.Runtime.Audit
   alias Famichat.Repo
   require Logger

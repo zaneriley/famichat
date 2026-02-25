@@ -24,7 +24,7 @@ defmodule Famichat.Auth.Sessions do
   alias Famichat.Auth.Households
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens
-  alias Famichat.Auth.IssuedToken
+  alias Famichat.Auth.Tokens.IssuedToken
   alias Famichat.Auth.Sessions.DeviceStore
   alias Famichat.Auth.Sessions.RefreshRotation
   alias Famichat.Auth.RateLimit

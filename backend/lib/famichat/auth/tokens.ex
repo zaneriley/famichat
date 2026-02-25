@@ -17,7 +17,7 @@ defmodule Famichat.Auth.Tokens do
     ]
 
   alias Famichat.Accounts.UserToken
-  alias Famichat.Auth.IssuedToken
+  alias Famichat.Auth.Tokens.IssuedToken
   alias Famichat.Auth.Tokens.Storage, as: Storage
   alias Famichat.Auth.Tokens.Policy
   alias Famichat.Auth.Tokens.Policy.Definition

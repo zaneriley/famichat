@@ -23,8 +23,8 @@ defmodule Famichat.Auth.Onboarding do
   alias Famichat.Auth.Runtime.Instrumentation
   alias Famichat.Auth.RateLimit
   alias Famichat.Auth.Tokens
+  alias Famichat.Auth.Tokens.IssuedToken
   alias Famichat.Auth.Tokens.Storage, as: TokenStorage
-  alias Famichat.Auth.IssuedToken
   alias Famichat.Chat.Family
   alias Famichat.Repo
   alias Famichat.Vault

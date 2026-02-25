@@ -1,5 +1,5 @@
 defmodule Famichat.Auth.Tokens.Issue do
-  @moduledoc "Deprecated type alias; use `Famichat.Auth.IssuedToken`."
+  @moduledoc "Deprecated type alias; use `Famichat.Auth.Tokens.IssuedToken`."
 
-  @type t :: Famichat.Auth.IssuedToken.t()
+  @type t :: Famichat.Auth.Tokens.IssuedToken.t()
 end

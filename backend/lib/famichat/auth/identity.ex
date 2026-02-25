@@ -18,9 +18,9 @@ defmodule Famichat.Auth.Identity do
   import Ecto.Query
   alias Famichat.Accounts.{Passkey, User, UserToken}
   alias Famichat.Accounts.Username
-  alias Famichat.Auth.IssuedToken
   alias Famichat.Auth.RateLimit
   alias Famichat.Auth.Tokens
+  alias Famichat.Auth.Tokens.IssuedToken
   alias Famichat.Repo
 
   @allowed_user_keys [

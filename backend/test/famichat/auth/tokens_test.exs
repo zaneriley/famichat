@@ -3,7 +3,7 @@ defmodule Famichat.Auth.TokensTest do
 
   alias Famichat.Accounts.User
   alias Famichat.Auth.Tokens
-  alias Famichat.Auth.IssuedToken
+  alias Famichat.Auth.Tokens.IssuedToken
   alias Famichat.Repo
 
   describe "issue/3 for ledgered kinds" do
