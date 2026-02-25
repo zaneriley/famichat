@@ -2,6 +2,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
   use Famichat.DataCase, async: false
 
   alias Famichat.Chat.{ConversationService, Message, MessageService}
+  alias Famichat.Crypto.MLS.Adapter.Nif
   alias Famichat.Repo
   import Famichat.ChatFixtures
 
@@ -9,7 +10,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     @behaviour Famichat.Crypto.MLS.Adapter
 
     def nif_version, do: {:ok, %{}}
-    def nif_health, do: {:ok, %{}}
+    def nif_health, do: {:ok, %{status: "ok"}}
     def create_key_package(_params), do: {:ok, %{}}
     def create_group(_params), do: {:ok, %{}}
     def join_from_welcome(_params), do: {:ok, %{}}
@@ -34,7 +35,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     @behaviour Famichat.Crypto.MLS.Adapter
 
     def nif_version, do: {:ok, %{}}
-    def nif_health, do: {:ok, %{}}
+    def nif_health, do: {:ok, %{status: "ok"}}
     def create_key_package(_params), do: {:ok, %{}}
     def create_group(_params), do: {:ok, %{}}
     def join_from_welcome(_params), do: {:ok, %{}}
@@ -56,7 +57,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     @behaviour Famichat.Crypto.MLS.Adapter
 
     def nif_version, do: {:ok, %{}}
-    def nif_health, do: {:ok, %{}}
+    def nif_health, do: {:ok, %{status: "ok"}}
     def create_key_package(_params), do: {:ok, %{}}
     def create_group(_params), do: {:ok, %{}}
     def join_from_welcome(_params), do: {:ok, %{}}
@@ -81,11 +82,35 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     end
   end
 
+  defmodule DegradedHealthAdapter do
+    @behaviour Famichat.Crypto.MLS.Adapter
+
+    def nif_version, do: {:ok, %{adapter: "degraded"}}
+
+    def nif_health,
+      do: {:ok, %{status: "degraded", reason: "openmls_not_wired"}}
+
+    def create_key_package(_params), do: {:ok, %{}}
+    def create_group(_params), do: {:ok, %{}}
+    def join_from_welcome(_params), do: {:ok, %{}}
+    def commit_to_pending(_params), do: {:ok, %{}}
+    def mls_commit(_params), do: {:ok, %{}}
+    def mls_update(_params), do: {:ok, %{}}
+    def mls_add(_params), do: {:ok, %{}}
+    def mls_remove(_params), do: {:ok, %{}}
+    def merge_staged_commit(_params), do: {:ok, %{}}
+    def clear_pending_commit(_params), do: {:ok, %{}}
+    def export_group_info(_params), do: {:ok, %{}}
+    def export_ratchet_tree(_params), do: {:ok, %{}}
+    def create_application_message(_params), do: raise("must not be called")
+    def process_incoming(_params), do: raise("must not be called")
+  end
+
   defmodule TelemetryLeakAdapter do
     @behaviour Famichat.Crypto.MLS.Adapter
 
     def nif_version, do: {:ok, %{}}
-    def nif_health, do: {:ok, %{}}
+    def nif_health, do: {:ok, %{status: "ok"}}
     def create_key_package(_params), do: {:ok, %{}}
     def create_group(_params), do: {:ok, %{}}
     def join_from_welcome(_params), do: {:ok, %{}}
@@ -190,6 +215,141 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     assert get_in(reloaded.metadata, ["mls", "encrypted"]) == true
   end
 
+  test "real NIF adapter encrypts at rest and keeps read path idempotent",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(:famichat, :mls_adapter, Nif)
+    plaintext = "roundtrip via openmls nif"
+
+    assert {:ok, message} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, plaintext)
+             )
+
+    reloaded = Repo.get!(Message, message.id)
+    refute reloaded.content == plaintext
+    assert is_binary(reloaded.content)
+    assert byte_size(reloaded.content) > 0
+    assert get_in(reloaded.metadata, ["mls", "encrypted"]) == true
+
+    assert {:ok, first_read} =
+             MessageService.get_conversation_messages(conversation.id)
+
+    assert Enum.any?(first_read, fn item ->
+             item.id == message.id and item.content == plaintext
+           end)
+
+    assert {:ok, second_read} =
+             MessageService.get_conversation_messages(conversation.id)
+
+    assert Enum.any?(second_read, fn item ->
+             item.id == message.id and item.content == plaintext
+           end)
+  end
+
+  test "real NIF adapter persists encrypted session snapshot envelope in conversation metadata",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(:famichat, :mls_adapter, Nif)
+
+    assert {:ok, _message} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "snapshot-persist")
+             )
+
+    updated_conversation =
+      Repo.get!(Famichat.Chat.Conversation, conversation.id)
+
+    encrypted_snapshot =
+      get_in(updated_conversation.metadata, [
+        "mls",
+        "session_snapshot_encrypted"
+      ])
+
+    assert is_binary(encrypted_snapshot)
+    assert byte_size(encrypted_snapshot) > 0
+    assert get_in(updated_conversation.metadata, ["mls", "session_snapshot_format"]) ==
+             "vault_term_v1"
+    assert get_in(updated_conversation.metadata, ["mls", "session_snapshot"]) in [nil, %{}]
+  end
+
+  test "read path restores from persisted snapshot after runtime state reset",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(:famichat, :mls_adapter, Nif)
+    plaintext = "restore-after-reset"
+
+    assert {:ok, message} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, plaintext)
+             )
+
+    reloaded_message = Repo.get!(Message, message.id)
+
+    assert {:ok, _clobbered_runtime} =
+             Famichat.Crypto.MLS.create_group(%{
+               group_id: conversation.id,
+               ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"
+             })
+
+    assert {:error, :commit_rejected, _details} =
+             Famichat.Crypto.MLS.process_incoming(%{
+               group_id: conversation.id,
+               ciphertext: reloaded_message.content
+             })
+
+    assert {:ok, messages} =
+             MessageService.get_conversation_messages(conversation.id)
+
+    assert Enum.any?(messages, fn item ->
+             item.id == message.id and item.content == plaintext
+           end)
+  end
+
+  test "read path fails closed when persisted encrypted snapshot is tampered",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(:famichat, :mls_adapter, Nif)
+
+    assert {:ok, message} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "tamper-detection")
+             )
+
+    conversation = Repo.get!(Famichat.Chat.Conversation, conversation.id)
+
+    tampered_metadata =
+      update_in(conversation.metadata, ["mls", "session_snapshot_encrypted"], fn
+        value when is_binary(value) and value != "" -> value <> "tampered"
+        _ -> "tampered"
+      end)
+
+    assert {:ok, _} =
+             conversation
+             |> Famichat.Chat.Conversation.update_changeset(%{
+               metadata: tampered_metadata
+             })
+             |> Repo.update()
+
+    reloaded_message = Repo.get!(Message, message.id)
+
+    assert {:ok, _clobbered_runtime} =
+             Famichat.Crypto.MLS.create_group(%{
+               group_id: conversation.id,
+               ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"
+             })
+
+    assert {:error, :commit_rejected, _details} =
+             Famichat.Crypto.MLS.process_incoming(%{
+               group_id: conversation.id,
+               ciphertext: reloaded_message.content
+             })
+
+    assert {:error, {:mls_decryption_failed, _code, details}} =
+             MessageService.get_conversation_messages(conversation.id)
+
+    refute Map.has_key?(details, :plaintext)
+    refute Map.has_key?(details, "plaintext")
+    refute Map.has_key?(details, :ciphertext)
+    refute Map.has_key?(details, "ciphertext")
+  end
+
   test "send_message fails when adapter returns success without ciphertext",
        %{conversation: conversation, sender: sender} do
     Application.put_env(:famichat, :mls_adapter, MissingCiphertextAdapter)
@@ -201,6 +361,22 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
              )
 
     assert details[:reason] == :missing_ciphertext
+    assert Repo.aggregate(Message, :count, :id) == before_count
+  end
+
+  test "send_message fails closed when mls runtime health is degraded",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(:famichat, :mls_adapter, DegradedHealthAdapter)
+    before_count = Repo.aggregate(Message, :count, :id)
+
+    assert {:error, {:mls_encryption_failed, :unsupported_capability, details}} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id)
+             )
+
+    assert details[:reason] == :mls_runtime_not_ready
+    assert details[:status] == "degraded"
+    assert details[:operation] == :nif_health
     assert Repo.aggregate(Message, :count, :id) == before_count
   end
 
@@ -220,6 +396,29 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     refute Map.has_key?(details, :ciphertext)
     refute Map.has_key?(details, :plaintext)
     refute Map.has_key?(details, :key_material)
+  end
+
+  test "get_conversation_messages fails closed when mls runtime health is degraded",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(
+      :famichat,
+      :mls_adapter,
+      Famichat.TestSupport.MLS.FakeAdapter
+    )
+
+    assert {:ok, _message} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "secret payload")
+             )
+
+    Application.put_env(:famichat, :mls_adapter, DegradedHealthAdapter)
+
+    assert {:error, {:mls_decryption_failed, :unsupported_capability, details}} =
+             MessageService.get_conversation_messages(conversation.id)
+
+    assert details[:reason] == :mls_runtime_not_ready
+    assert details[:status] == "degraded"
+    assert details[:operation] == :nif_health
   end
 
   test "mls failure telemetry stays scalar and excludes nested sensitive data",
