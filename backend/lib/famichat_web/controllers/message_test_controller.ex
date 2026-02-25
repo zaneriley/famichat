@@ -10,7 +10,7 @@ defmodule FamichatWeb.MessageTestController do
   """
   use FamichatWeb, :controller
 
-  alias Famichat.Chat.{Conversation, ConversationAccess}
+  alias Famichat.Chat.{Conversation, ConversationAccess, Self}
   alias Famichat.Repo
 
   @type_map %{
@@ -46,10 +46,10 @@ defmodule FamichatWeb.MessageTestController do
 
   defp handle_broadcast(%{assigns: %{current_user_id: user_id}} = conn, params) do
     with {:ok, request} <- normalize_request(params),
-         {:ok, conversation} <- fetch_conversation(request),
+         {:ok, conversation} <- fetch_conversation(request, user_id),
          :ok <- authorize_membership(conversation.id, user_id),
          {:ok, payload} <- build_payload(request, user_id) do
-      topic = topic_for(request)
+      topic = topic_for(request, user_id)
       FamichatWeb.Endpoint.broadcast!(topic, "new_msg", payload)
 
       json(conn, %{
@@ -92,11 +92,10 @@ defmodule FamichatWeb.MessageTestController do
 
   defp canonicalize_params(params) do
     cond do
-      has_key?(params, "conversation_type") and
-          has_key?(params, "conversation_id") ->
+      has_key?(params, "conversation_type") ->
         %{
           "conversation_type" => params["conversation_type"],
-          "conversation_id" => params["conversation_id"],
+          "conversation_id" => Map.get(params, "conversation_id"),
           "body" => params["body"],
           "encryption_flag" => Map.get(params, "encryption_flag"),
           "key_id" => Map.get(params, "key_id"),
@@ -153,9 +152,15 @@ defmodule FamichatWeb.MessageTestController do
   end
 
   defp parse_topic("message:" <> rest) do
-    case String.split(rest, ":", parts: 2) do
+    case String.split(rest, ":", parts: 3) do
+      ["self"] ->
+        {:ok, "self", nil}
+
+      ["self", _user_id] ->
+        {:ok, "self", nil}
+
       [conversation_type, conversation_id]
-      when conversation_type in ["self", "direct", "group", "family"] ->
+      when conversation_type in ["direct", "group", "family"] ->
         {:ok, conversation_type, conversation_id}
 
       _ ->
@@ -200,9 +205,27 @@ defmodule FamichatWeb.MessageTestController do
   end
 
   defp validate_conversation_id(details, params) do
-    case Ecto.UUID.cast(Map.get(params, "conversation_id")) do
-      {:ok, _uuid} -> details
-      :error -> Map.put(details, "conversation_id", "must be a valid UUID")
+    case Map.get(params, "conversation_type") do
+      "self" ->
+        case Map.get(params, "conversation_id") do
+          nil ->
+            details
+
+          id ->
+            case Ecto.UUID.cast(id) do
+              {:ok, _uuid} ->
+                details
+
+              :error ->
+                Map.put(details, "conversation_id", "must be a valid UUID")
+            end
+        end
+
+      _ ->
+        case Ecto.UUID.cast(Map.get(params, "conversation_id")) do
+          {:ok, _uuid} -> details
+          :error -> Map.put(details, "conversation_id", "must be a valid UUID")
+        end
     end
   end
 
@@ -263,10 +286,32 @@ defmodule FamichatWeb.MessageTestController do
     end
   end
 
-  defp fetch_conversation(%{
-         conversation_id: conversation_id,
-         conversation_type: conversation_type
-       }) do
+  defp fetch_conversation(
+         %{
+           conversation_type: :self,
+           conversation_id: requested_id
+         },
+         user_id
+       ) do
+    with {:ok, conversation} <- Self.get_or_create(user_id),
+         :ok <- validate_self_owner_target(conversation.id, requested_id) do
+      {:ok, conversation}
+    else
+      {:error, :forbidden} = error ->
+        error
+
+      {:error, _reason} ->
+        {:error, :validation, %{"conversation_id" => "conversation not found"}}
+    end
+  end
+
+  defp fetch_conversation(
+         %{
+           conversation_id: conversation_id,
+           conversation_type: conversation_type
+         },
+         _user_id
+       ) do
     case Repo.get(Conversation, conversation_id) do
       %Conversation{conversation_type: ^conversation_type} = conversation ->
         {:ok, conversation}
@@ -278,6 +323,31 @@ defmodule FamichatWeb.MessageTestController do
       nil ->
         {:error, :validation, %{"conversation_id" => "conversation not found"}}
     end
+  end
+
+  defp validate_self_owner_target(_actual_id, nil), do: :ok
+  defp validate_self_owner_target(actual_id, actual_id), do: :ok
+
+  defp validate_self_owner_target(_actual_id, _requested_id),
+    do: {:error, :forbidden}
+
+  defp topic_for(
+         %{
+           conversation_type_string: "self"
+         },
+         user_id
+       ) do
+    "message:self:#{user_id}"
+  end
+
+  defp topic_for(
+         %{
+           conversation_type_string: conversation_type,
+           conversation_id: conversation_id
+         },
+         _user_id
+       ) do
+    "message:#{conversation_type}:#{conversation_id}"
   end
 
   defp authorize_membership(conversation_id, user_id) do
@@ -308,13 +378,6 @@ defmodule FamichatWeb.MessageTestController do
        "key_id" => key_id,
        "version_tag" => version_tag
      }}
-  end
-
-  defp topic_for(%{
-         conversation_type_string: conversation_type,
-         conversation_id: conversation_id
-       }) do
-    "message:#{conversation_type}:#{conversation_id}"
   end
 
   defp build_request(params) do

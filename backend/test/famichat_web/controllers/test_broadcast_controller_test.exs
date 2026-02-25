@@ -48,7 +48,8 @@ defmodule FamichatWeb.TestBroadcastControllerTest do
       conversation: conversation,
       self_conversation: self_conversation,
       partner_self_conversation: partner_self_conversation,
-      user: user
+      user: user,
+      partner: partner
     }
   end
 
@@ -142,11 +143,12 @@ defmodule FamichatWeb.TestBroadcastControllerTest do
 
     test "self ownership checks still apply on legacy alias endpoint", %{
       authed_conn: authed_conn,
-      self_conversation: self_conversation,
+      user: user,
+      partner: partner,
       partner_self_conversation: partner_self_conversation
     } do
-      target_topic = topic(:self, partner_self_conversation.id)
-      spoofed_topic = topic(:self, self_conversation.id)
+      target_topic = topic(:self, partner.id)
+      spoofed_topic = topic(:self, user.id)
       @endpoint.subscribe(target_topic)
       @endpoint.subscribe(spoofed_topic)
 
@@ -178,6 +180,10 @@ defmodule FamichatWeb.TestBroadcastControllerTest do
       )
 
     put_req_header(conn, "authorization", "Bearer #{session.access_token}")
+  end
+
+  defp topic(:self, user_id) do
+    "message:self:#{user_id}"
   end
 
   defp topic(type, conversation_id) do

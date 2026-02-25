@@ -66,6 +66,7 @@ defmodule FamichatWeb.MessageTestControllerTest do
       authed_conn: authed_conn,
       outsider_conn: outsider_conn,
       user: user,
+      partner: partner,
       conversation: conversation,
       self_conversation: self_conversation,
       partner_self_conversation: partner_self_conversation,
@@ -218,7 +219,7 @@ defmodule FamichatWeb.MessageTestControllerTest do
       user: user,
       self_conversation: self_conversation
     } do
-      topic = topic(:self, self_conversation.id)
+      topic = topic(:self, user.id)
       @endpoint.subscribe(topic)
 
       conn =
@@ -242,11 +243,12 @@ defmodule FamichatWeb.MessageTestControllerTest do
     test "returns 403 when trying to target another user's self conversation even with a caller-supplied topic",
          %{
            authed_conn: authed_conn,
-           self_conversation: self_conversation,
+           user: user,
+           partner: partner,
            partner_self_conversation: partner_self_conversation
          } do
-      partner_topic = topic(:self, partner_self_conversation.id)
-      spoofed_topic = topic(:self, self_conversation.id)
+      partner_topic = topic(:self, partner.id)
+      spoofed_topic = topic(:self, user.id)
       @endpoint.subscribe(partner_topic)
       @endpoint.subscribe(spoofed_topic)
 
@@ -264,6 +266,35 @@ defmodule FamichatWeb.MessageTestControllerTest do
              }
 
       assert_no_broadcast_on_topic(partner_topic)
+      assert_no_broadcast_on_topic(spoofed_topic)
+    end
+
+    test "ignores topic-only self spoof attempts and broadcasts to caller self topic",
+         %{
+           authed_conn: authed_conn,
+           user: user,
+           partner: partner
+         } do
+      caller_topic = topic(:self, user.id)
+      spoofed_topic = topic(:self, partner.id)
+
+      @endpoint.subscribe(caller_topic)
+      @endpoint.subscribe(spoofed_topic)
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "topic" => spoofed_topic,
+          "content" => "topic-only spoof attempt"
+        })
+
+      response = json_response(conn, 200)
+      assert response["status"] == "success"
+      assert response["topic"] == caller_topic
+      assert response["event_name"] == "new_msg"
+      assert response["payload"]["body"] == "topic-only spoof attempt"
+      assert response["payload"]["user_id"] == user.id
+
+      assert_single_broadcast(caller_topic, "new_msg", response["payload"])
       assert_no_broadcast_on_topic(spoofed_topic)
     end
 
@@ -327,6 +358,10 @@ defmodule FamichatWeb.MessageTestControllerTest do
       )
 
     put_req_header(conn, "authorization", "Bearer #{session.access_token}")
+  end
+
+  defp topic(:self, user_id) do
+    "message:self:#{user_id}"
   end
 
   defp topic(type, conversation_id) do

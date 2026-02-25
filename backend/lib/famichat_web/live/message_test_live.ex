@@ -14,16 +14,18 @@ defmodule FamichatWeb.MessageTestLive do
   require Logger
 
   alias Famichat.Auth.{Households, Identity, Sessions}
-  alias Famichat.Chat.{Conversation, ConversationParticipant, Family}
+  alias Famichat.Chat.{Family, Self}
   alias Famichat.Repo
 
-  @test_username "test-user"
+  @default_test_username_prefix "test-user"
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
+    test_username = resolve_test_username(params)
+
     # Create or fetch test user and session with real auth tokens
     # This validates the auth refactor works end-to-end
-    case ensure_test_user_and_session() do
+    case ensure_test_user_and_session(test_username) do
       {:ok,
        %{
          access_token: access_token,
@@ -41,6 +43,7 @@ defmodule FamichatWeb.MessageTestLive do
            key_id: "KEY_TEST_v1",
            version_tag: "v1.0.0",
            user_id: user.id,
+           test_username: test_username,
            error_message: nil,
            show_options: false,
            auth_token: access_token,
@@ -61,6 +64,7 @@ defmodule FamichatWeb.MessageTestLive do
            key_id: "KEY_TEST_v1",
            version_tag: "v1.0.0",
            user_id: nil,
+           test_username: test_username,
            error_message:
              "Failed to initialize test session: #{inspect(reason)}",
            show_options: false,
@@ -72,13 +76,13 @@ defmodule FamichatWeb.MessageTestLive do
 
   # Create test user and session using real auth system
   # This fires actual telemetry events visible in the dashboard
-  defp ensure_test_user_and_session do
+  defp ensure_test_user_and_session(test_username) do
     Repo.transaction(fn ->
       family = ensure_test_family!()
-      user = ensure_test_user!()
+      user = ensure_test_user!(test_username)
 
       ensure_membership!(user.id, family.id)
-      conversation = ensure_self_conversation!(family, user)
+      conversation = ensure_self_conversation!(user.id)
 
       session_data = start_test_session!(user)
       Map.put(session_data, :conversation_id, conversation.id)
@@ -92,53 +96,20 @@ defmodule FamichatWeb.MessageTestLive do
       |> Repo.insert!()
   end
 
-  defp ensure_test_user! do
-    case Identity.ensure_user(%{"username" => @test_username}) do
+  defp ensure_test_user!(test_username) do
+    case Identity.ensure_user(%{"username" => test_username}) do
       {:ok, user} -> user
       {:error, reason} -> Repo.rollback(reason)
     end
   end
 
-  defp ensure_self_conversation!(family, user) do
-    conversation =
-      Repo.get_by(Conversation, conversation_type: :self, family_id: family.id) ||
-        create_self_conversation!(family, user)
+  defp ensure_self_conversation!(user_id) do
+    case Self.get_or_create(user_id) do
+      {:ok, conversation} ->
+        conversation
 
-    ensure_participant!(conversation.id, user.id)
-    conversation
-  end
-
-  defp create_self_conversation!(family, user) do
-    {:ok, conversation} =
-      %Conversation{}
-      |> Conversation.changeset(%{
-        conversation_type: :self,
-        family_id: family.id,
-        name: "Test Self Conversation"
-      })
-      |> Repo.insert()
-
-    ensure_participant!(conversation.id, user.id)
-    conversation
-  end
-
-  defp ensure_participant!(conversation_id, user_id) do
-    case Repo.get_by(ConversationParticipant,
-           conversation_id: conversation_id,
-           user_id: user_id
-         ) do
-      %ConversationParticipant{} ->
-        :ok
-
-      nil ->
-        %ConversationParticipant{}
-        |> ConversationParticipant.changeset(%{
-          conversation_id: conversation_id,
-          user_id: user_id
-        })
-        |> Repo.insert!()
-
-        :ok
+      {:error, reason} ->
+        Repo.rollback(reason)
     end
   end
 
@@ -218,10 +189,13 @@ defmodule FamichatWeb.MessageTestLive do
 
   @impl true
   def handle_event("send-message", _params, socket) do
-    if socket.assigns.channel_joined && socket.assigns.current_message != "" do
+    message_body =
+      socket.assigns.current_message |> to_string() |> String.trim()
+
+    if socket.assigns.channel_joined && message_body != "" do
       # Prepare the message payload
       payload = %{
-        "body" => socket.assigns.current_message,
+        "body" => message_body,
         "user_id" => socket.assigns.user_id
       }
 
@@ -242,7 +216,7 @@ defmodule FamichatWeb.MessageTestLive do
 
       # Add the message to our local list
       sent_message = %{
-        body: socket.assigns.current_message,
+        body: message_body,
         timestamp: DateTime.utc_now(),
         outgoing: true,
         encrypted: socket.assigns.encryption_enabled
@@ -254,6 +228,29 @@ defmodule FamichatWeb.MessageTestLive do
     else
       {:noreply, socket}
     end
+  end
+
+  # Handle socket errors reported by the hook
+  @impl true
+  def handle_event("socket_error", %{"reason" => reason}, socket) do
+    Logger.error("Socket error: #{inspect(reason)}")
+
+    messages =
+      socket.assigns.messages ++
+        [
+          %{
+            body: "Socket error: #{inspect(reason)}",
+            timestamp: DateTime.utc_now(),
+            system_message: true
+          }
+        ]
+
+    {:noreply,
+     assign(socket,
+       channel_joined: false,
+       error_message: "Socket error: #{inspect(reason)}",
+       messages: messages
+     )}
   end
 
   # Handle channel join success event from the hook
@@ -358,6 +355,40 @@ defmodule FamichatWeb.MessageTestLive do
   @impl true
   def handle_info({:channel_push_confirmed, _ref}, socket) do
     {:noreply, socket}
+  end
+
+  defp last_payload_message(messages) do
+    messages
+    |> Enum.reverse()
+    |> Enum.find(fn message -> not Map.get(message, :system_message, false) end)
+  end
+
+  defp resolve_test_username(params) do
+    params
+    |> Map.get("user")
+    |> normalize_test_username()
+    |> case do
+      nil -> unique_test_username()
+      username -> username
+    end
+  end
+
+  defp normalize_test_username(username) when is_binary(username) do
+    username
+    |> String.trim()
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9_-]+/, "-")
+    |> String.trim("-")
+    |> case do
+      "" -> nil
+      sanitized -> sanitized
+    end
+  end
+
+  defp normalize_test_username(_), do: nil
+
+  defp unique_test_username do
+    "#{@default_test_username_prefix}-#{System.unique_integer([:positive])}"
   end
 
   # Helper to generate a stable message ID based on timestamp and body

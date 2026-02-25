@@ -106,7 +106,8 @@ defmodule FamichatWeb.MessageChannel do
   alias Famichat.Chat.{
     Conversation,
     ConversationQueries,
-    MessageService
+    MessageService,
+    Self
   }
 
   alias Famichat.Auth.{Identity, Sessions}
@@ -156,8 +157,16 @@ defmodule FamichatWeb.MessageChannel do
           Logger.debug("Topic parts: #{inspect(topic_parts)}")
 
           case topic_parts do
+            ["self", topic_user_id] ->
+              handle_self_join(
+                socket,
+                user_id,
+                topic_user_id,
+                measurements
+              )
+
             # Type-aware format - conversation type and ID
-            [type, id] when type in ["self", "direct", "group", "family"] ->
+            [type, id] when type in ["direct", "group", "family"] ->
               handle_type_aware_join(socket, type, id, user_id, measurements)
 
             # Invalid format
@@ -185,11 +194,45 @@ defmodule FamichatWeb.MessageChannel do
     end
   end
 
+  defp handle_self_join(socket, user_id, topic_user_id, measurements) do
+    with true <- topic_user_id == user_id,
+         {:ok, conversation} <- Self.get_or_create(user_id) do
+      emit_join_telemetry(measurements, %{
+        user_id: user_id,
+        conversation_type: "self",
+        conversation_id: conversation.id,
+        encryption_status: encryption_status(conversation),
+        status: :success
+      })
+
+      {:ok, assign(socket, :conversation_id, conversation.id)}
+    else
+      false ->
+        emit_join_telemetry(measurements, %{
+          user_id: user_id,
+          conversation_type: "self",
+          status: :error,
+          error_reason: :unauthorized
+        })
+
+        {:error, %{reason: "unauthorized"}}
+
+      {:error, reason} ->
+        emit_join_telemetry(measurements, %{
+          user_id: user_id,
+          conversation_type: "self",
+          status: :error,
+          error_reason: reason
+        })
+
+        {:error, %{reason: reason_to_string(reason)}}
+    end
+  end
+
   # Helper function to authorize and join based on conversation type
   defp handle_type_aware_join(socket, type, id, user_id, measurements) do
     type_atom =
       case type do
-        "self" -> :self
         "direct" -> :direct
         "group" -> :group
         "family" -> :family
@@ -211,7 +254,7 @@ defmodule FamichatWeb.MessageChannel do
         status: :success
       })
 
-      {:ok, socket}
+      {:ok, assign(socket, :conversation_id, id)}
     else
       {:error, reason} ->
         Logger.debug(
@@ -255,12 +298,8 @@ defmodule FamichatWeb.MessageChannel do
           |> Map.take(["body"] ++ @encryption_metadata_fields)
           |> Map.put("user_id", socket.assigns.user_id)
 
-        topic_parts = String.split(socket.topic, ":")
-        Logger.debug("Topic parts: #{inspect(topic_parts)}")
-
-        case topic_parts do
-          # Type-aware format
-          ["message", type, id] when type in ["self", "direct", "group", "family"] ->
+        case topic_context(socket) do
+          {:ok, type, id} ->
             measurements = compute_measurements(start_time)
 
             # Calculate message size for metrics
@@ -291,10 +330,8 @@ defmodule FamichatWeb.MessageChannel do
 
             {:noreply, socket}
 
-          # Invalid format
-          _ ->
-            Logger.error("Unexpected topic format: #{inspect(topic_parts)}")
-            {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
+          {:error, reason} ->
+            {:reply, {:error, %{reason: reason_to_string(reason)}}, socket}
         end
 
       {:error, reason} ->
@@ -343,11 +380,9 @@ defmodule FamichatWeb.MessageChannel do
     case ensure_socket_device_active(socket) do
       :ok ->
         start_time = System.monotonic_time()
-        topic_parts = String.split(socket.topic, ":")
 
-        case topic_parts do
-          ["message", type, id]
-          when type in ["self", "direct", "group", "family"] ->
+        case topic_context(socket) do
+          {:ok, type, id} ->
             message_id = Map.get(payload, "message_id", "unknown")
 
             # Create measurements for telemetry
@@ -375,9 +410,8 @@ defmodule FamichatWeb.MessageChannel do
 
             {:reply, :ok, socket}
 
-          _ ->
-            Logger.error("Unexpected topic format for ACK: #{inspect(topic_parts)}")
-            {:reply, {:error, %{reason: "invalid_topic_format"}}, socket}
+          {:error, reason} ->
+            {:reply, {:error, %{reason: reason_to_string(reason)}}, socket}
         end
 
       {:error, reason} ->
@@ -491,7 +525,36 @@ defmodule FamichatWeb.MessageChannel do
     do: "invalid_conversation_type"
 
   defp reason_to_string(:user_not_found), do: "unauthorized"
+  defp reason_to_string(:not_in_family), do: "unauthorized"
+
+  defp reason_to_string(:invalid_self_conversation),
+    do: "invalid_self_conversation"
+
+  defp reason_to_string(:lock_failed), do: "temporary_failure"
   defp reason_to_string(:unauthorized), do: "unauthorized"
   defp reason_to_string(:invalid_topic_format), do: "invalid_topic_format"
   defp reason_to_string(other), do: to_string(other)
+
+  defp topic_context(%{
+         topic: "message:self:" <> topic_user_id,
+         assigns: %{conversation_id: id, user_id: user_id}
+       })
+       when is_binary(id) and topic_user_id == user_id do
+    {:ok, "self", id}
+  end
+
+  defp topic_context(%{topic: "message:self:" <> _topic_user_id}),
+    do: {:error, :unauthorized}
+
+  defp topic_context(%{topic: "message:" <> rest}) do
+    case String.split(rest, ":") do
+      [type, id] when type in ["direct", "group", "family"] ->
+        {:ok, type, id}
+
+      _ ->
+        {:error, :invalid_topic_format}
+    end
+  end
+
+  defp topic_context(_), do: {:error, :invalid_topic_format}
 end

@@ -18,9 +18,8 @@ const MessageChannelHook = {
     try {
       // Get configuration from data attributes
       this.conversationType = this.el.dataset.conversationType || "direct";
-      this.conversationId =
-        this.el.dataset.conversationId || "test-conversation";
-      this.userId = this.el.dataset.userId || "test-user";
+      this.conversationId = this.el.dataset.conversationId || "";
+      this.userId = this.el.dataset.userId || "";
 
       // Initialize connection state
       this.channel = null;
@@ -73,8 +72,7 @@ const MessageChannelHook = {
         this.pushEvent("socket_error", { reason: "connection_error" });
       });
 
-      // Create topic based on conversation type and ID
-      const topic = `message:${this.conversationType}:${this.conversationId}`;
+      const topic = this.topicFor(this.conversationType, this.conversationId);
       console.log("[MessageChannel] Joining topic:", topic);
 
       // Join the channel
@@ -167,20 +165,25 @@ const MessageChannelHook = {
 
   updated() {
     // Check if conversation parameters have changed
-    const newType = this.el.dataset.conversationType;
-    const newId = this.el.dataset.conversationId;
+    const newType = this.el.dataset.conversationType || this.conversationType;
+    const newId = this.el.dataset.conversationId || "";
+    const newUserId = this.el.dataset.userId || "";
+    const previousTopic = this.topicFor(
+      this.conversationType,
+      this.conversationId,
+      this.userId,
+    );
+    const nextTopic = this.topicFor(newType, newId, newUserId);
+
+    // Always sync latest params so a later connect() uses fresh values.
+    this.conversationType = newType;
+    this.conversationId = newId;
+    this.userId = newUserId;
 
     // If conversation parameters changed and we're connected, reconnect
-    if (
-      this.connected &&
-      (newType !== this.conversationType || newId !== this.conversationId)
-    ) {
+    if (this.connected && nextTopic !== previousTopic) {
       console.log("[MessageChannel] Conversation changed, reconnecting");
       this.disconnect();
-
-      // Update our stored values
-      this.conversationType = newType;
-      this.conversationId = newId;
 
       // Reconnect with new parameters
       this.connect();
@@ -214,6 +217,14 @@ const MessageChannelHook = {
         "[MessageChannel] Cannot send acknowledgment - not connected",
       );
     }
+  },
+
+  topicFor(type, id, userId = this.userId) {
+    if (type === "self") {
+      return userId ? `message:self:${userId}` : "message:self";
+    }
+
+    return `message:${type}:${id}`;
   },
 };
 

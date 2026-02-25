@@ -212,7 +212,7 @@ defmodule FamichatWeb.MessageChannelTest do
     test "successfully joins self conversation channel", %{
       socket: socket
     } do
-      topic = "message:self:#{@self_conversation_id}"
+      topic = "message:self:#{@valid_user_id}"
 
       assert {:ok, _reply, _socket} =
                subscribe_and_join(socket, MessageChannel, topic)
@@ -231,26 +231,43 @@ defmodule FamichatWeb.MessageChannelTest do
       assert Map.has_key?(metadata, :timestamp)
     end
 
-    test "currently allows joins when a malformed self conversation has multiple participants",
-         %{socket: socket, family: family, second_user: second_user} do
-      malformed_self_conversation =
+    test "rejects legacy self topic without actor user id", %{socket: socket} do
+      assert {:error, %{reason: "invalid_topic_format"}} =
+               subscribe_and_join(socket, MessageChannel, "message:self")
+
+      assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      assert metadata.status == :error
+      assert metadata.error_reason == :invalid_topic_format
+    end
+
+    test "rejects join when resolved self conversation is malformed", %{
+      socket: socket,
+      family: family,
+      self_conversation: self_conversation
+    } do
+      Repo.delete!(self_conversation)
+
+      _malformed_self_conversation =
         insert_conversation(Ecto.UUID.generate(), :self, family.id, [
           @valid_user_id,
           @second_user_id
         ])
 
-      topic = "message:self:#{malformed_self_conversation.id}"
+      topic = "message:self:#{@valid_user_id}"
 
-      assert {:ok, _reply, _socket} =
+      assert {:error, %{reason: "invalid_self_conversation"}} =
                subscribe_and_join(socket, MessageChannel, topic)
 
-      second_user_token = token_for_user(second_user)
+      assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
+                      _measurements, metadata},
+                     @telemetry_timeout
 
-      {:ok, second_socket} =
-        connect(UserSocket, %{"token" => second_user_token})
-
-      assert {:ok, _reply, _socket} =
-               subscribe_and_join(second_socket, MessageChannel, topic)
+      assert metadata.status == :error
+      assert metadata.error_reason == :invalid_self_conversation
+      assert metadata.conversation_type == "self"
     end
 
     test "successfully joins direct conversation channel", %{socket: socket} do
@@ -454,7 +471,7 @@ defmodule FamichatWeb.MessageChannelTest do
       assert_no_sensitive_encryption_metadata(metadata)
 
       # Test with self conversation
-      topic = "message:self:#{@self_conversation_id}"
+      topic = "message:self:#{@valid_user_id}"
 
       assert {:ok, _reply, _socket} =
                subscribe_and_join(socket, MessageChannel, topic)
@@ -941,7 +958,30 @@ defmodule FamichatWeb.MessageChannelTest do
     2. The client is rejected when trying to join a channel they don't have access to
     3. The error response includes an appropriate reason
     """
-    test "client is rejected when joining unauthorized channel", %{
+    test "client is rejected when joining another user's self topic",
+         %{
+           user_session: user_session
+         } do
+      # Create a client
+      token = user_session.access_token
+
+      # Connect client
+      {:ok, socket} = connect(UserSocket, %{"token" => token})
+
+      topic = "message:self:#{Ecto.UUID.generate()}"
+
+      assert {:error, %{reason: "unauthorized"}} =
+               subscribe_and_join(socket, MessageChannel, topic)
+
+      assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      assert metadata.status == :error
+      assert metadata.error_reason == :unauthorized
+    end
+
+    test "client is rejected when joining unauthorized direct channel", %{
       family: family,
       second_user: second_user,
       user_session: user_session
@@ -952,12 +992,13 @@ defmodule FamichatWeb.MessageChannelTest do
       # Connect client
       {:ok, socket} = connect(UserSocket, %{"token" => token})
 
-      other_self_conversation =
-        insert_conversation(Ecto.UUID.generate(), :self, family.id, [
-          second_user.id
+      other_direct_conversation =
+        insert_conversation(Ecto.UUID.generate(), :direct, family.id, [
+          second_user.id,
+          @third_user_id
         ])
 
-      topic = "message:self:#{other_self_conversation.id}"
+      topic = "message:direct:#{other_direct_conversation.id}"
 
       # This should be rejected
       assert {:error, %{reason: "unauthorized"}} =
@@ -969,8 +1010,8 @@ defmodule FamichatWeb.MessageChannelTest do
 
       assert metadata.status == :error
       assert metadata.error_reason == :unauthorized
-      assert metadata.conversation_type == "self"
-      assert metadata.conversation_id == other_self_conversation.id
+      assert metadata.conversation_type == "direct"
+      assert metadata.conversation_id == other_direct_conversation.id
     end
 
     @doc """
@@ -1299,7 +1340,7 @@ defmodule FamichatWeb.MessageChannelTest do
 
   defp conversation_topic(type) do
     case type do
-      :self -> "message:self:#{@self_conversation_id}"
+      :self -> "message:self:#{@valid_user_id}"
       :direct -> "message:direct:#{@direct_conversation_id}"
       :group -> "message:group:#{@group_conversation_id}"
       :family -> "message:family:#{@family_conversation_id}"
