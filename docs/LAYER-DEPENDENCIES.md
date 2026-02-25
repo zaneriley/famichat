@@ -1,6 +1,6 @@
 # Famichat - Layer Dependencies & Decision Tree
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 
 ---
 
@@ -14,7 +14,7 @@
 │ Duration: 2 weeks                                               │
 │                                                                 │
 │ Deliverables:                                                   │
-│ ✓ Self-hosted Phoenix + Signal Protocol encryption             │
+│ ✓ Self-hosted Phoenix + MLS/OpenMLS encryption                 │
 │ ✓ Send/receive encrypted messages to self via LiveView         │
 │ ✓ Performance <200ms                                            │
 └─────────────────────────────────────────────────────────────────┘
@@ -30,7 +30,7 @@
                    ↓                 ↓
 ┌─────────────────────────────┐   ┌──────────────────────────┐
 │ LAYER 1: DYAD               │   │ KILL/PIVOT:              │
-│ (Parent + Spouse)           │   │ - Signal too complex?    │
+│ (Parent + Spouse)           │   │ - MLS rollout too complex?│
 │                             │   │ - Self-hosting broken?   │
 │ Goal: Prove family          │   │ - Performance bad?       │
 │       messaging core        │   │ - LiveView UX clunky?    │
@@ -201,7 +201,7 @@
                             ↓
               ┌─────────────────────────────────┐
               │ Phoenix LiveView +              │
-              │ Signal Protocol                 │
+              │ MLS/OpenMLS                     │
               │ (Web UI for dogfooding Layers   │
               │  0-3, backend encryption)       │
               └─────────────────────────────────┘
@@ -326,7 +326,7 @@ L3 validates
 
 | Risk | Mitigation | Fallback |
 |------|------------|----------|
-| Signal Protocol too complex | Time-box to 5 weeks (Sprint 10) | Defer E2EE to Layer 2, use TLS only |
+| MLS/OpenMLS rollout too complex | Time-box to 5 weeks (Sprint 10) | Defer E2EE to Layer 2, use TLS only |
 | Self-hosting broken | Use DigitalOcean for testing | Managed hosting (abandon self-host) |
 | Performance bad | Profile + optimize | Adjust budget to 300ms |
 | LiveView UX inadequate | Iterate on design, add PWA features | Pivot to native app (+4-6 months) |
@@ -538,6 +538,6 @@ Total to full feature set: ~29 weeks (~7 months)
 
 ---
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 **Version**: 1.0
 **Status**: Strategic roadmap - guides all technical decisions

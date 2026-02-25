@@ -1,6 +1,6 @@
 # Famichat - Product Vision
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 
 ---
 
@@ -427,7 +427,7 @@ Inspired by Animal Crossing - features that foster connection without pressure:
 
 ### Security (Top Priority)
 **Requirements**:
-- End-to-end encryption (Signal Protocol)
+- End-to-end encryption (MLS/OpenMLS, ADR 010)
 - Self-hosted deployment (user controls data)
 - Passcode protection (optional)
 - Secure key management
@@ -615,14 +615,14 @@ Inspired by Animal Crossing - features that foster connection without pressure:
 
 ## Related Documentation
 
-- **Current Status**: [STATUS.md](../STATUS.md) - Implementation progress
-- **Roadmap**: [ROADMAP.md](../ROADMAP.md) - Sprint timeline
+- **Current Status**: [sprints/STATUS.md](sprints/STATUS.md) - Implementation progress
+- **Roadmap**: [sprints/ROADMAP.md](sprints/ROADMAP.md) - Sprint timeline
 - **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md) - Technical design
 - **Encryption**: [ENCRYPTION.md](ENCRYPTION.md) - Security architecture
 - **Design**: [design/](design/) - UI/UX specifications
 
 ---
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 **Version**: 1.4
 **Status**: Living document - updated as vision evolves

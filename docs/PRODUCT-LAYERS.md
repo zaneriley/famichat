@@ -1,6 +1,6 @@
 # Famichat - Product Layers & Incremental Roadmap
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 
 ---
 
@@ -16,15 +16,16 @@
 
 **User**: Solo parent (you)
 **Goal**: Prove technical foundation works
-**Hypothesis**: Self-hosted Phoenix + server-side Signal Protocol encryption is viable
+**Hypothesis**: Self-hosted Phoenix + server-side MLS/OpenMLS encryption is viable
 
 ### Components
 
 ```
 Technical Stack:
 ├── Phoenix LiveView (web UI for dogfooding)
-├── Signal Protocol encryption (server-side via Rustler NIF + libsignal-client)
-│   └── Sprint 9 implementation (3 weeks)
+├── MLS/OpenMLS encryption (server-side via Rustler NIF adapter)
+│   ├── Sprint 9 implementation (3 weeks)
+│   └── Adapter placement: backend/infra/mls_nif (`/native` reserved for future native app clients)
 ├── PostgreSQL (local data)
 └── Self-hosted (Docker on homelab)
 
@@ -54,7 +55,7 @@ Features:
 - [ ] Performance <200ms round-trip
 
 ### Blockers to Next Layer
-- Signal Protocol integration incomplete
+- MLS/OpenMLS integration incomplete
 - Encryption broken
 - Performance unacceptable
 - Self-hosting too complex
@@ -511,7 +512,7 @@ Layer 6: Cozy Differentiation
 
 **Stack:**
 - Phoenix LiveView (web UI for dogfooding)
-- **Server-side** Signal Protocol encryption (backend Rustler NIF + libsignal-client)
+- **Server-side** MLS/OpenMLS encryption (backend Rustler NIF adapter at `backend/infra/mls_nif`)
 - PostgreSQL (local data)
 - Self-hosted (Docker on homelab)
 
@@ -520,13 +521,13 @@ Layer 6: Cozy Differentiation
 - Accessible (web URL, no app install needed)
 - Server-side encryption aligns with LiveView architecture (server renders decrypted content)
 - Self-hosted = you control backend (trust model: server has keys but you own server)
-- Signal Protocol proves E2EE security model for families (2-6 people)
+- MLS/OpenMLS proves E2EE security model for families now and neighborhood-scale groups later
 - Dogfood encrypted experience before committing to native app
 - Validates core messaging hypothesis
 
 **Encryption Approach:**
 - **Sprint 8**: Authentication + LiveView UI (messages stored plaintext)
-- **Sprint 9**: Signal Protocol implementation (3 weeks - Rust NIF, key mgmt, encryption)
+- **Sprint 9**: MLS/OpenMLS implementation (3 weeks - Rust NIF, key mgmt, encryption)
 - **Sprint 10**: Dogfood with encryption enabled (Layer 0 validation)
 
 ### Layer 4: Autonomy & Safety (Location Features)
@@ -572,7 +573,7 @@ Location features (check-ins, safe zones, ETA sharing) likely require native mob
 
 ### Layer 0 → 1
 **Kill if:**
-- Signal Protocol integration takes >5 weeks (too complex)
+- MLS/OpenMLS integration takes >5 weeks (too complex)
 - Self-hosting too difficult (can't deploy to homelab)
 - Performance <200ms unachievable
 - LiveView UX feels clunky or slow
@@ -655,11 +656,11 @@ Location features (check-ins, safe zones, ETA sharing) likely require native mob
 **Sprint**: 7 (transitioning to 8)
 **Next Milestones**:
 - Sprint 8: Authentication + LiveView messaging UI (2 weeks)
-- Sprint 9: Signal Protocol encryption implementation (3 weeks)
+- Sprint 9: MLS/OpenMLS encryption implementation (3 weeks)
 - Sprint 10: Layer 0 dogfooding with encryption enabled (2 weeks)
 
 ---
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25
 **Version**: 1.0
 **Status**: Living document - updated as layers validate or pivot

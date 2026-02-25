@@ -22,8 +22,8 @@
 - ✅ Unit tests for message sending
 
 **Key Files**:
-- [Message schema](backend/lib/famichat/chat/message.ex)
-- [MessageService](backend/lib/famichat/chat/message_service.ex)
+- [Message schema](../../backend/lib/famichat/chat/message.ex)
+- [MessageService](../../backend/lib/famichat/chat/message_service.ex)
 
 ---
 
@@ -44,8 +44,8 @@
 - Business rule: users must share a family
 
 **Key Files**:
-- [Conversation schema](backend/lib/famichat/chat/conversation.ex)
-- [ConversationService](backend/lib/famichat/chat/conversation_service.ex)
+- [Conversation schema](../../backend/lib/famichat/chat/conversation.ex)
+- [ConversationService](../../backend/lib/famichat/chat/conversation_service.ex)
 
 ---
 
@@ -65,8 +65,8 @@
 - Proper error handling
 
 **Key Files**:
-- [MessageService](backend/lib/famichat/chat/message_service.ex) (lines 40-100)
-- [ConversationService](backend/lib/famichat/chat/conversation_service.ex) (lines 263-290)
+- [MessageService](../../backend/lib/famichat/chat/message_service.ex) (lines 40-100)
+- [ConversationService](../../backend/lib/famichat/chat/conversation_service.ex) (lines 263-290)
 
 ---
 
@@ -86,8 +86,8 @@
 - Type-specific validation
 
 **Key Files**:
-- [Conversation schema](backend/lib/famichat/chat/conversation.ex) (type field)
-- [ConversationService](backend/lib/famichat/chat/conversation_service.ex) (self-conversation functions)
+- [Conversation schema](../../backend/lib/famichat/chat/conversation.ex) (type field)
+- [ConversationService](../../backend/lib/famichat/chat/conversation_service.ex) (self-conversation functions)
 
 ---
 
@@ -109,8 +109,8 @@
 - Performance budget violations logged
 
 **Key Files**:
-- [Telemetry Guide](backend/guides/telemetry.md)
-- [MessageService](backend/lib/famichat/chat/message_service.ex) (serialization functions)
+- [Telemetry Guide](../../backend/guides/telemetry.md)
+- [MessageService](../../backend/lib/famichat/chat/message_service.ex) (serialization functions)
 
 ---
 
@@ -152,8 +152,8 @@
 2. Test coverage not measured
 
 **Key Files**:
-- [MessageChannel](backend/lib/famichat_web/channels/message_channel.ex)
-- [Channel Tests](backend/test/famichat_web/channels/message_channel_test.exs)
+- [MessageChannel](../../backend/lib/famichat_web/channels/message_channel.ex)
+- [Channel Tests](../../backend/test/famichat_web/channels/message_channel_test.exs)
 
 ---
 
@@ -185,10 +185,12 @@
 **Goal**: Implement server-side MLS encryption via Rust NIF (OpenMLS)
 **Contract Reference**: [9.0-mls-rust-nif-contract-deep-dive.md](9.0-mls-rust-nif-contract-deep-dive.md)
 **TDD Plan Reference**: [9.1-mls-contract-tdd-plan.md](9.1-mls-contract-tdd-plan.md)
+**Monorepo Placement**: backend infrastructure adapter at `backend/infra/mls_nif` (`/native` reserved for future app clients)
 
 **Key Deliverables**:
 - **Week 1-2**: Rust NIF Setup
   - Add Rustler + OpenMLS dependency set
+  - Create backend-scoped NIF crate at `backend/infra/mls_nif`
   - Multi-stage Docker build (Rust toolchain)
   - Elixir NIF wrapper for MLS operations
   - Basic encryption/decryption tests
@@ -280,7 +282,7 @@
 
 **Dependencies**:
 - Sprint 8 (LiveView UI)
-- Sprint 9 (design system)
+- Sprint 10 (design system)
 
 **Note**: "Phone bump" detection (Nearby Interaction) deferred to native app (Layer 4+)
 
@@ -418,9 +420,9 @@
 
 - **Current Status**: See [STATUS.md](STATUS.md) for comprehensive implementation status
 - **Current Sprint**: See [CURRENT-SPRINT.md](CURRENT-SPRINT.md) for Sprint 7 details
-- **Architecture**: See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design
-- **Encryption Direction**: See [docs/decisions/010-mls-first-for-neighborhood-scale.md](docs/decisions/010-mls-first-for-neighborhood-scale.md)
-- **Vision**: See [docs/VISION.md](docs/VISION.md) for product goals
+- **Architecture**: See [../ARCHITECTURE.md](../ARCHITECTURE.md) for system design
+- **Encryption Direction**: See [../decisions/010-mls-first-for-neighborhood-scale.md](../decisions/010-mls-first-for-neighborhood-scale.md)
+- **Vision**: See [../VISION.md](../VISION.md) for product goals
 
 ---
 

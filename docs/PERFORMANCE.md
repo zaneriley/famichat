@@ -119,7 +119,7 @@ Telemetry output must avoid sensitive key material and ciphertext leakage.
 
 1. Publish one canonical runbook with measurable checkpoints: `auth -> subscribe -> send -> receive`.
 2. Add timing capture to that runbook and lock outcome-focused integration assertions.
-3. Implement MLS Rust NIF skeleton plus performance harness.
+3. Implement MLS Rust NIF skeleton at `backend/infra/mls_nif` plus performance harness.
 4. Add churn and epoch-drift characterization tests before broader rollout.
 
 ---

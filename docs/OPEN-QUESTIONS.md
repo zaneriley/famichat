@@ -158,12 +158,16 @@ Group setup/membership change:
 
 ### Q5: Token Architecture for Device Revocation
 
-**Context**: Current Phoenix.Token expires in 24 hours but cannot be revoked. Need refresh token rotation for device management.
+**Status**: ✅ **RESOLVED (Sprint 7.9 delivered)**
 
-**Question**: Should we implement custom token rotation or use existing library (Guardian, Pow)?
+**Decision**: Keep the custom `Famichat.Auth` token/session architecture (`Auth.Tokens` + `Auth.Sessions`) instead of adopting Guardian/Pow.
 
-**Options**:
+**Outcome**:
+- Refresh rotation and device revocation are implemented in the Auth contexts.
+- Invite/magic/OTP/passkey/recovery tokens are unified under the Auth token model.
+- We avoid extra auth library coupling while keeping domain boundaries explicit.
 
+**Historical Options Considered**:
 1. **Custom Token Rotation**
    - Full control over implementation
    - Simpler (no library dependencies)
@@ -179,9 +183,11 @@ Group setup/membership change:
    - Includes user management (may not want)
    - Heavy dependency
 
-**Decision Needed**: By Sprint 9 (Story 7.9 auth implementation)
+**Decision Date**: Sprint 7.9 implementation window (Oct 2025)
 
-**See**: Status report security vulnerabilities section
+**See**:
+- [auth-ia-ddd-refactor.md](auth-ia-ddd-refactor.md)
+- [sprints/STATUS.md](sprints/STATUS.md)
 
 ---
 
@@ -305,7 +311,7 @@ Group setup/membership change:
 
 1. **Separate Keys** (Current)
    - `direct_key` = SHA256(participant_ids) - for uniqueness
-   - Encryption keys = derived from Signal/Megolm protocol
+   - Encryption keys = derived from MLS/OpenMLS lifecycle material
    - Simpler separation of concerns
 
 2. **Unified Keys**
@@ -335,7 +341,7 @@ Group setup/membership change:
 |----------|----------|----------|--------|-------|
 | Q1: Encryption Protocol | Critical | Sprint 9 | ✅ **MLS-first (ADR 010)** | User |
 | Q2: Encryption Budget | Critical | Sprint 9 | ✅ **Resolved: Meets 200ms budget** | N/A |
-| Q5: Token Architecture | High | Sprint 9 | Developer |
+| Q5: Token Architecture | High | Sprint 9 | ✅ **Resolved (Sprint 7.9 Auth tokens/sessions)** | Developer |
 | Q8: Encryption Metadata Schema | High | Sprint 11 | Developer |
 | Q9: Group Membership Updates | High | Sprint 10 | User + Developer |
 | Q3: Federation Model | Medium | Sprint 15 | User |

@@ -33,25 +33,25 @@
 **Location**: `backend/lib/famichat/chat/message_service.ex`
 
 **Implemented Features**:
-- ✅ **send_message/1** - Pipeline-based message creation ([line 146](backend/lib/famichat/chat/message_service.ex#L146))
+- ✅ **send_message/1** - Pipeline-based message creation ([line 146](../../backend/lib/famichat/chat/message_service.ex#L146))
   - Validates sender/conversation existence
   - Processes encryption metadata
   - Persists to database
   - Emits telemetry events
-  - **Tests**: [message_service_test.exs](backend/test/famichat/chat/message_service_test.exs) ✓ Passing
+  - **Tests**: [message_service_test.exs](../../backend/test/famichat/chat/message_service_test.exs) ✓ Passing
 
-- ✅ **get_conversation_messages/2** - Paginated retrieval ([line 40](backend/lib/famichat/chat/message_service.ex#L40))
+- ✅ **get_conversation_messages/2** - Paginated retrieval ([line 40](../../backend/lib/famichat/chat/message_service.ex#L40))
   - Supports limit (max 100) and offset
   - Ordered by insertion time (chronological)
   - Preloads sender & conversation associations
   - **Tests**: ✓ All scenarios covered (success, empty, not found)
 
 - ✅ **Encryption Metadata Infrastructure** (Ready but NO crypto)
-  - `serialize_message/1` ([line 283](backend/lib/famichat/chat/message_service.ex#L283)) - Stores encryption metadata in message.metadata field
-  - `deserialize_message/1` ([line 408](backend/lib/famichat/chat/message_service.ex#L408)) - Extracts encryption data
-  - `decrypt_message/1` ([line 492](backend/lib/famichat/chat/message_service.ex#L492)) - **PLACEHOLDER STUB** (no actual decryption)
-  - `requires_encryption?/1` ([line 266](backend/lib/famichat/chat/message_service.ex#L266)) - Policy enforcement per conversation type
-  - **Tests**: [decryption_test.exs](backend/test/famichat/messages/decryption_test.exs) - Validates metadata flow, NOT actual crypto
+  - `serialize_message/1` ([line 283](../../backend/lib/famichat/chat/message_service.ex#L283)) - Stores encryption metadata in message.metadata field
+  - `deserialize_message/1` ([line 408](../../backend/lib/famichat/chat/message_service.ex#L408)) - Extracts encryption data
+  - `decrypt_message/1` ([line 492](../../backend/lib/famichat/chat/message_service.ex#L492)) - **PLACEHOLDER STUB** (no actual decryption)
+  - `requires_encryption?/1` ([line 266](../../backend/lib/famichat/chat/message_service.ex#L266)) - Policy enforcement per conversation type
+  - **Tests**: [decryption_test.exs](../../backend/test/famichat/messages/decryption_test.exs) - Validates metadata flow, NOT actual crypto
   - **Status**: ✅ Metadata schema ready, ❌ NO cryptographic implementation yet
   - **⚠️ CRITICAL**: Messages stored in plaintext, encryption planned Sprint 9
 
@@ -72,15 +72,15 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 **Location**: `backend/lib/famichat/chat/conversation_service.ex`
 
 **Direct Conversations** ✅:
-- ✅ **create_direct_conversation/2** ([line 123](backend/lib/famichat/chat/conversation_service.ex#L123))
+- ✅ **create_direct_conversation/2** ([line 123](../../backend/lib/famichat/chat/conversation_service.ex#L123))
   - Validates both users exist and share same family
   - Computes unique `direct_key` using SHA256(sorted_user_ids + family_id + salt)
   - Transaction-based with conflict prevention
   - Returns existing conversation if found (deduplication)
   - Full telemetry instrumentation
-  - **Tests**: [conversation_service_test.exs](backend/test/famichat/chat/conversation_service_test.exs) ✓ 18KB of tests
+  - **Tests**: [conversation_service_test.exs](../../backend/test/famichat/chat/conversation_service_test.exs) ✓ 18KB of tests
 
-- ✅ **list_user_conversations/1** ([line 263](backend/lib/famichat/chat/conversation_service.ex#L263))
+- ✅ **list_user_conversations/1** ([line 263](../../backend/lib/famichat/chat/conversation_service.ex#L263))
   - Returns all direct conversations for a user
   - Preloads participant users
   - Distinct results (no duplicates)
@@ -92,19 +92,19 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - Separate listing function available
 
 **Group Conversations** ✅:
-- ✅ **create_group_conversation/4** ([line 318](backend/lib/famichat/chat/conversation_service.ex#L318))
+- ✅ **create_group_conversation/4** ([line 318](../../backend/lib/famichat/chat/conversation_service.ex#L318))
   - Auto-assigns creator as admin
   - Validates family membership
   - Requires group name in metadata
   - Uses transactions for atomicity
 
 - ✅ **Role Management**:
-  - `assign_admin/3` ([line 397](backend/lib/famichat/chat/conversation_service.ex#L397))
-  - `assign_member/3` ([line 465](backend/lib/famichat/chat/conversation_service.ex#L465)) - Prevents last admin removal
-  - `remove_privilege/3` ([line 631](backend/lib/famichat/chat/conversation_service.ex#L631))
-  - `admin?/2` ([line 570](backend/lib/famichat/chat/conversation_service.ex#L570)) - Check admin status
-  - **Schema**: [group_conversation_privileges.ex](backend/lib/famichat/chat/group_conversation_privileges.ex)
-  - **Tests**: [group_conversation_privileges_test.exs](backend/test/famichat/chat/group_conversation_privileges_test.exs) ✓
+  - `assign_admin/3` ([line 397](../../backend/lib/famichat/chat/conversation_service.ex#L397))
+  - `assign_member/3` ([line 465](../../backend/lib/famichat/chat/conversation_service.ex#L465)) - Prevents last admin removal
+  - `remove_privilege/3` ([line 631](../../backend/lib/famichat/chat/conversation_service.ex#L631))
+  - `admin?/2` ([line 570](../../backend/lib/famichat/chat/conversation_service.ex#L570)) - Check admin status
+  - **Schema**: [group_conversation_privileges.ex](../../backend/lib/famichat/chat/group_conversation_privileges.ex)
+  - **Tests**: [group_conversation_privileges_test.exs](../../backend/test/famichat/chat/group_conversation_privileges_test.exs) ✓
 
 **Family Conversations** ⚠️:
 - ⚠️ Type defined in schema but no creation function
@@ -114,8 +114,8 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ✅ **hide_conversation/2** - Add user to hidden_by_users array
 - ✅ **unhide_conversation/2** - Remove user from hidden_by_users array
 - ✅ **list_visible_conversations/2** - Filter out hidden conversations
-- **Service**: [conversation_visibility_service.ex](backend/lib/famichat/chat/conversation_visibility_service.ex)
-- **Tests**: [conversation_visibility_service_test.exs](backend/test/famichat/chat/conversation_visibility_service_test.exs) ✓
+- **Service**: [conversation_visibility_service.ex](../../backend/lib/famichat/chat/conversation_visibility_service.ex)
+- **Tests**: [conversation_visibility_service_test.exs](../../backend/test/famichat/chat/conversation_visibility_service_test.exs) ✓
 
 ---
 
@@ -136,11 +136,11 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ✅ Sensitive metadata filtering (encryption fields excluded from telemetry)
 
 **Documentation**:
-- ✅ Excellent inline docs with connection examples ([lines 1-90](backend/lib/famichat_web/channels/message_channel.ex#L1-L90))
+- ✅ Excellent inline docs with connection examples ([lines 1-90](../../backend/lib/famichat_web/channels/message_channel.ex#L1-L90))
 - ✅ Mobile background handling notes (iOS ~30s, Android Doze mode)
 
 **Tests**:
-- ✅ Green: [message_channel_test.exs](backend/test/famichat_web/channels/message_channel_test.exs) now mints access tokens via Accounts helpers (join/broadcast/ack telemetry asserted)
+- ✅ Green: [message_channel_test.exs](../../backend/test/famichat_web/channels/message_channel_test.exs) now mints access tokens via Accounts helpers (join/broadcast/ack telemetry asserted)
 
 ---
 
@@ -160,26 +160,26 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 11. ✅ `20251012090000_drop_legacy_user_family_fields.exs` - Removed `users.family_id/role` columns + indexes
 
 **Schemas**:
-- ✅ **Accounts.User** ([accounts/user.ex](backend/lib/famichat/accounts/user.ex)) - Encrypted email, status enum, Cloak-backed email fingerprint
-- ✅ **Accounts.FamilyMembership** ([accounts/family_membership.ex](backend/lib/famichat/accounts/family_membership.ex)) - User ↔ family (role enum)
-- ✅ **Accounts.UserToken** ([accounts/user_token.ex](backend/lib/famichat/accounts/user_token.ex)) - Single hashed-token table (invite/magic/pair/reset)
-- ✅ **Accounts.UserDevice** ([accounts/user_device.ex](backend/lib/famichat/accounts/user_device.ex)) - Refresh rotation, trust window, revocation
-- ✅ **Accounts.Passkey** ([accounts/passkey.ex](backend/lib/famichat/accounts/passkey.ex)) - WebAuthn credential storage, sign_count tracking, enable/disable
-- ✅ **Accounts.Token / RateLimiter** ([accounts/token.ex](backend/lib/famichat/accounts/token.ex)) - Issuance + rate limits
+- ✅ **Accounts.User** ([accounts/user.ex](../../backend/lib/famichat/accounts/user.ex)) - Encrypted email, status enum, Cloak-backed email fingerprint
+- ✅ **Accounts.FamilyMembership** ([accounts/family_membership.ex](../../backend/lib/famichat/accounts/family_membership.ex)) - User ↔ family (role enum)
+- ✅ **Accounts.UserToken** ([accounts/user_token.ex](../../backend/lib/famichat/accounts/user_token.ex)) - Single hashed-token table (invite/magic/pair/reset)
+- ✅ **Accounts.UserDevice** ([accounts/user_device.ex](../../backend/lib/famichat/accounts/user_device.ex)) - Refresh rotation, trust window, revocation
+- ✅ **Accounts.Passkey** ([accounts/passkey.ex](../../backend/lib/famichat/accounts/passkey.ex)) - WebAuthn credential storage, sign_count tracking, enable/disable
+- ✅ **Accounts.Token / RateLimiter** ([accounts/token.ex](../../backend/lib/famichat/accounts/token.ex)) - Issuance + rate limits
 - ✅ **Username normalization** (`backend/priv/repo/migrations/20251014090000_add_username_fingerprint_to_users.exs`) - Case-preserving display with deterministic fingerprint lookups, collision auto-suffixing
 - ✅ **Invite acceptance flow** (`Accounts.accept_invite/1` + `AuthController.accept_invite/2`) - One-use consumption with 10 min registration JWT handshake
-- ✅ **Family** ([chat/family.ex](backend/lib/famichat/chat/family.ex)) - Household grouping
-- ✅ **Conversation** ([chat/conversation.ex](backend/lib/famichat/chat/conversation.ex)):
+- ✅ **Family** ([chat/family.ex](../../backend/lib/famichat/chat/family.ex)) - Household grouping
+- ✅ **Conversation** ([chat/conversation.ex](../../backend/lib/famichat/chat/conversation.ex)):
   - Types: `:direct`, `:self`, `:group`, `:family`
   - Immutable type (enforced via separate create/update changesets)
   - `direct_key` for uniqueness (SHA256 hash)
   - `hidden_by_users` array for per-user soft-delete
-- ✅ **Message** ([chat/message.ex](backend/lib/famichat/chat/message.ex)):
+- ✅ **Message** ([chat/message.ex](../../backend/lib/famichat/chat/message.ex)):
   - Types: 8 types (only :text actively used)
   - Statuses: 3 statuses (only :sent implemented)
   - `metadata` JSONB field for encryption data
-- ✅ **ConversationParticipant** ([chat/conversation_participant.ex](backend/lib/famichat/chat/conversation_participant.ex)) - Join table
-- ✅ **GroupConversationPrivileges** ([chat/group_conversation_privileges.ex](backend/lib/famichat/chat/group_conversation_privileges.ex)):
+- ✅ **ConversationParticipant** ([chat/conversation_participant.ex](../../backend/lib/famichat/chat/conversation_participant.ex)) - Join table
+- ✅ **GroupConversationPrivileges** ([chat/group_conversation_privileges.ex](../../backend/lib/famichat/chat/group_conversation_privileges.ex)):
   - Roles: `:admin`, `:member`
   - Tracks who granted the privilege
   - Prevents last admin removal
@@ -218,7 +218,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
   - `[:famichat, :message_channel, :ack]`
 
 **Guides**:
-- ✅ [telemetry.md](backend/guides/telemetry.md) - Comprehensive documentation
+- ✅ [telemetry.md](../../backend/guides/telemetry.md) - Comprehensive documentation
 - Performance budgets explained
 - Event naming conventions
 - Sensitive data handling
@@ -228,14 +228,14 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ### Testing Infrastructure ✅ STRONG COVERAGE
 
 **Test Files**: 20 test files
-- ✅ [conversation_service_test.exs](backend/test/famichat/chat/conversation_service_test.exs) - 18KB
-- ✅ [message_channel_test.exs](backend/test/famichat_web/channels/message_channel_test.exs) - 42KB (extensive!)
-- ✅ [conversation_visibility_service_test.exs](backend/test/famichat/chat/conversation_visibility_service_test.exs)
-- ✅ [group_conversation_privileges_test.exs](backend/test/famichat/chat/group_conversation_privileges_test.exs)
-- ✅ [message_service_test.exs](backend/test/famichat/chat/message_service_test.exs)
-- ✅ [conversation_changeset_test.exs](backend/test/famichat/chat/conversation_changeset_test.exs)
-- ✅ [conversation_test.exs](backend/test/famichat/chat/conversation_test.exs)
-- ✅ [message_channel_test.exs](backend/test/famichat_web/channels/message_channel_test.exs) - access token + telemetry coverage
+- ✅ [conversation_service_test.exs](../../backend/test/famichat/chat/conversation_service_test.exs) - 18KB
+- ✅ [message_channel_test.exs](../../backend/test/famichat_web/channels/message_channel_test.exs) - 42KB (extensive!)
+- ✅ [conversation_visibility_service_test.exs](../../backend/test/famichat/chat/conversation_visibility_service_test.exs)
+- ✅ [group_conversation_privileges_test.exs](../../backend/test/famichat/chat/group_conversation_privileges_test.exs)
+- ✅ [message_service_test.exs](../../backend/test/famichat/chat/message_service_test.exs)
+- ✅ [conversation_changeset_test.exs](../../backend/test/famichat/chat/conversation_changeset_test.exs)
+- ✅ [conversation_test.exs](../../backend/test/famichat/chat/conversation_test.exs)
+- ✅ [message_channel_test.exs](../../backend/test/famichat_web/channels/message_channel_test.exs) - access token + telemetry coverage
 
 **Test Infrastructure**:
 - ✅ ExMachina for factories
@@ -278,15 +278,15 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ### API Endpoints ✅ BASIC
 
 **REST Endpoints**:
-- ✅ `GET /api/v1/hello` ([hello_controller.ex:4](backend/lib/famichat_web/controllers/hello_controller.ex#L4)) - Health check
+- ✅ `GET /api/v1/hello` ([hello_controller.ex:4](../../backend/lib/famichat_web/controllers/hello_controller.ex#L4)) - Health check
 - ✅ `POST /api/test/broadcast` - Canonical secure CLI broadcast verification endpoint (auth required, membership enforced, canonical payload contract)
 - ✅ `POST /api/test/test_events` - Compatibility alias to canonical endpoint with deprecation/sunset headers
 - ✅ `GET /up` - Health check endpoint
 - ✅ `GET /up/databases` - Database health check
 
 **LiveView** (Dev/Test only):
-- ✅ `/admin/message-test` ([message_test_live.ex](backend/lib/famichat_web/live/message_test_live.ex)) - Message testing UI
-- ✅ `/admin/tailwind-test` ([tailwind_test_live.ex](backend/lib/famichat_web/live/tailwind_test_live.ex)) - UI component testing
+- ✅ `/admin/message-test` ([message_test_live.ex](../../backend/lib/famichat_web/live/message_test_live.ex)) - Message testing UI
+- ✅ `/admin/tailwind-test` ([tailwind_test_live.ex](../../backend/lib/famichat_web/live/tailwind_test_live.ex)) - UI component testing
 - ✅ `/admin/dashboard` - Phoenix LiveDashboard
 
 **WebSocket**:
@@ -299,10 +299,10 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 **Current State**:
 - ✅ LiveView setup and configuration
-- ✅ Test LiveView pages ([message_test_live.ex](backend/lib/famichat_web/live/message_test_live.ex))
-- ✅ LiveView Hooks ([message_channel_hook.js](backend/assets/js/hooks/message_channel_hook.js))
-- ✅ Theme switching components ([theme_switcher.ex](backend/lib/famichat_web/components/theme_switcher.ex))
-- ✅ Core components library ([core_components.ex](backend/lib/famichat_web/components/core_components.ex))
+- ✅ Test LiveView pages ([message_test_live.ex](../../backend/lib/famichat_web/live/message_test_live.ex))
+- ✅ LiveView Hooks ([message_channel_hook.js](../../backend/assets/js/hooks/message_channel_hook.js))
+- ✅ Theme switching components ([theme_switcher.ex](../../backend/lib/famichat_web/components/theme_switcher.ex))
+- ✅ Core components library ([core_components.ex](../../backend/lib/famichat_web/components/core_components.ex))
 
 **In Progress** (Sprint 8):
 - 🔄 Authentication UI (login/registration pages)
@@ -338,8 +338,8 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 #### Story 7.10.5-6: Group Role Management Tests 🔄
 - **Status**: Schema and core behavior are implemented; adversarial edge-case coverage is still incomplete
 - **Files**:
-  - Implementation: [conversation_service.ex](backend/lib/famichat/chat/conversation_service.ex)
-  - Tests: [group_conversation_privileges_test.exs](backend/test/famichat/chat/group_conversation_privileges_test.exs)
+  - Implementation: [conversation_service.ex](../../backend/lib/famichat/chat/conversation_service.ex)
+  - Tests: [group_conversation_privileges_test.exs](../../backend/test/famichat/chat/group_conversation_privileges_test.exs)
 - **Next Step**: Expand tests around concurrent permission changes and last-admin invariants
 
 #### Story 7.2: Broadcast Testing Follow-through 🔄
@@ -375,8 +375,8 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
   - Serialization/deserialization functions exist
   - Telemetry filtering prevents sensitive data leaks
 - **Planned**: Sprint 9-10 (MLS/OpenMLS rollout with group-state and commit lifecycle hardening)
-- **Effort**: ~2 weeks
-- **Dependencies**: ADR 010 accepted; implement OpenMLS integration and ops guardrails
+- **Effort**: ~3 weeks for Sprint 9 core cryptography rollout
+- **Dependencies**: ADR 010 accepted; implement OpenMLS integration and ops guardrails in `backend/infra/mls_nif`
 
 #### 3. Message Status Tracking ❌ PARTIAL
 - **Impact**: Poor UX - users don't know if messages were delivered/read
@@ -550,26 +550,26 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ## 🔗 Related Documentation
 
 ### Implementation Details
-- [Messaging Implementation](backend/guides/messaging-implementation.md) - How messaging works (send, retrieve, types)
-- [Telemetry Guide](backend/guides/telemetry.md) - Performance monitoring strategy
-- [Project Overview](backend/guides/overview.md) - Architecture and conversation types
+- [Messaging Implementation](../../backend/guides/messaging-implementation.md) - How messaging works (send, retrieve, types)
+- [Telemetry Guide](../../backend/guides/telemetry.md) - Performance monitoring strategy
+- [Project Overview](../../backend/guides/overview.md) - Architecture and conversation types
 
 ### Sprint Details
 - [Current Sprint Tasks](CURRENT-SPRINT.md) - Sprint 7 detailed checklist
 - [Sprint History](ROADMAP.md) - What we've completed (Sprints 1-6)
 
 ### Deep Dives
-- [System Architecture](docs/ARCHITECTURE.md) - Overall design and component interactions
-- [Encryption Strategy](docs/ENCRYPTION.md) - Security model and E2EE roadmap
-- [ADR 010](docs/decisions/010-mls-first-for-neighborhood-scale.md) - MLS-first rationale, product implications, and performance guardrails
-- [Sprint 9 MLS/NIF Contract Deep Dive](docs/sprints/9.0-mls-rust-nif-contract-deep-dive.md) - MECE implementation contract and gap closure checklist
-- [Sprint 9 MLS Contract TDD Plan](docs/sprints/9.1-mls-contract-tdd-plan.md) - Failing-test-first sequencing for contract implementation
-- [API Design](docs/API-DESIGN.md) - API principles and response formats
-- [Product Vision](docs/VISION.md) - Goals, users, use cases
+- [System Architecture](../ARCHITECTURE.md) - Overall design and component interactions
+- [Encryption Strategy](../ENCRYPTION.md) - Security model and E2EE roadmap
+- [ADR 010](../decisions/010-mls-first-for-neighborhood-scale.md) - MLS-first rationale, product implications, and performance guardrails
+- [Sprint 9 MLS/NIF Contract Deep Dive](9.0-mls-rust-nif-contract-deep-dive.md) - MECE implementation contract and gap closure checklist
+- [Sprint 9 MLS Contract TDD Plan](9.1-mls-contract-tdd-plan.md) - Failing-test-first sequencing for contract implementation
+- [API Design](../API-DESIGN.md) - API principles and response formats
+- [Product Vision](../VISION.md) - Goals, users, use cases
 
 ### Design & UX
-- [Information Architecture](docs/design/information-architecture.md) - Navigation and screen layouts
-- [Onboarding Flows](docs/design/onboarding-flows.md) - User onboarding experience
+- [Information Architecture](../design/information-architecture.md) - Navigation and screen layouts
+- [Onboarding Flows](../design/onboarding-flows.md) - User onboarding experience
 
 ---
 

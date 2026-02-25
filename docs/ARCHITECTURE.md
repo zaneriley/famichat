@@ -2,7 +2,7 @@
 
 **Last Updated**: 2026-02-25
 
-See [STATUS.md](../STATUS.md) for current implementation details.
+See [sprints/STATUS.md](sprints/STATUS.md) for current implementation details.
 
 ---
 
@@ -69,6 +69,7 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 
 **Components**:
 - Server-side E2EE direction: MLS via OpenMLS (ADR 010)
+- Monorepo placement for MLS adapter: `backend/infra/mls_nif` (top-level `/native` stays reserved for future native app clients)
 - Field-level (Cloak.Ecto for sensitive data)
 - Database encryption at rest
 
@@ -80,7 +81,7 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 
 ### Database Schema
 
-**Current Migrations**: 10 applied (accounts refactor in progress)
+**Current Migrations**: See `backend/priv/repo/migrations` (active schema evolution; avoid fixed-count drift in this doc)
 
 **Core Tables**:
 - `users` - Account records (encrypted email, status, timestamps)
@@ -266,4 +267,4 @@ LiveView captures message (10ms)
 
 ---
 
-**Last Updated**: 2025-10-05
+**Last Updated**: 2026-02-25

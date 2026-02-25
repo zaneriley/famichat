@@ -55,6 +55,7 @@ Authoritative reference:
 ### 🔄 Planned Implementation
 
 **Sprint 9 (3 weeks)**: MLS/OpenMLS via Server-Side Rust NIF
+- Monorepo placement locked: `backend/infra/mls_nif` (top-level `/native` remains reserved for future native app clients)
 - Week 1-2: Rustler + OpenMLS setup, basic encryption tests
 - Week 2-3: MLS key package/group state schema + Cloak.Ecto vault
 - Week 3: Wire up message encryption/decryption, integration tests
@@ -83,6 +84,7 @@ Authoritative reference:
 
 The sections below are preserved for historical context from the 2025 Signal-first analysis.
 They are **not** the authoritative implementation plan anymore.
+If any historical guidance below conflicts with Sprint 9 docs or ADR 010, follow ADR 010 + Sprint 9 planning docs.
 
 ### Components
 

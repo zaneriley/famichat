@@ -59,9 +59,9 @@
 - **Status Report**: See [STATUS.md](STATUS.md) for comprehensive implementation status
 - **Roadmap**: See [ROADMAP.md](ROADMAP.md) for sprint timeline
 - **7.4.2 Plan**: See [7.4.2-cli-broadcast-plan.md](7.4.2-cli-broadcast-plan.md) for delegated implementation tracks
-- **Technical Guides**: See [backend/guides/](backend/guides/) for implementation details
-  - [Messaging Implementation](backend/guides/messaging-implementation.md)
-  - [Telemetry & Performance](backend/guides/telemetry.md)
+- **Technical Guides**: See [../../backend/guides/](../../backend/guides/) for implementation details
+  - [Messaging Implementation](../../backend/guides/messaging-implementation.md)
+  - [Telemetry & Performance](../../backend/guides/telemetry.md)
 
 ---
 
