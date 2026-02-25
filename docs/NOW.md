@@ -29,7 +29,7 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
    - Conversation lifecycle orchestration exists in `ConversationSecurityLifecycle` (stage/merge/clear pending commit with optimistic locking)
    - Send path fails closed when a pending commit is staged (`:pending_proposals`), preventing application-message progression during unresolved lifecycle transitions
    - Replay cache export is bounded (max 256 entries) to cap snapshot growth under high-cardinality reads
-   - Adversarial contract tests now also cover out-of-order merge/clear sequencing, tampered pending-commit metadata rejection, and concurrent stage race outcomes
+   - Adversarial contract tests now also cover out-of-order merge/clear sequencing, tampered pending-commit metadata rejection, stage/merge epoch regression rejection, partial snapshot payload tampering rejection, and concurrent stage/merge race outcomes
    - Messaging contract tests continue to cover malformed ciphertext, cross-group ciphertext rejection, and replay rejection
 
 ## What is still not done

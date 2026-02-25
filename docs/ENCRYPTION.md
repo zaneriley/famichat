@@ -55,7 +55,7 @@ Historical Signal-era analysis is retained only in deprecated ADRs and is not an
 3. Canonical message path stores ciphertext at rest and decrypts on read via the shared backend path.
 4. Durable conversation security state persistence is active in `conversation_security_states` through `Famichat.Chat.ConversationSecurityStateStore` (encrypted state blobs + optimistic locking).
 5. Replay-idempotency cache is bounded (`max 256`) to cap snapshot growth under high replay-cardinality reads.
-6. Adversarial coverage includes malformed ciphertext, cross-group misuse rejection, replay/idempotency behavior, tampered-snapshot fail-closed behavior, and lifecycle misuse checks (out-of-order merge/clear, tampered pending metadata, concurrent stage races).
+6. Adversarial coverage includes malformed ciphertext, cross-group misuse rejection, replay/idempotency behavior, tampered-snapshot fail-closed behavior, and lifecycle misuse checks (out-of-order merge/clear, tampered pending metadata, stage/merge epoch regression attempts, partial snapshot payload tampering, and concurrent stage/merge races).
 7. Transactional send path now fails closed on stale state conflicts (message insert is rolled back if state write cannot commit).
 8. Pending-commit lifecycle orchestration exists at the Chat boundary, and send-path app messages fail closed while pending commits are unresolved.
 

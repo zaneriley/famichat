@@ -67,6 +67,16 @@ defmodule Famichat.TestSupport.MLS.FakeAdapter do
         {:error, code, build_error_details(operation, params)}
 
       _ ->
+        maybe_forced_success(operation, params)
+    end
+  end
+
+  defp maybe_forced_success(operation, params) do
+    case fetch_param(params, :success_payload) do
+      payload when is_map(payload) ->
+        {:ok, payload}
+
+      _ ->
         success(operation, params)
     end
   end

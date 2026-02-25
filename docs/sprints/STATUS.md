@@ -29,7 +29,7 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
    - ✅ Dedicated conversation security state persistence is active in `conversation_security_states` via `Famichat.Chat.ConversationSecurityStateStore`
    - ✅ Legacy metadata envelopes are read for compatibility and migrated into the dedicated store on access
    - ✅ Replay-idempotency cache export is now bounded (max 256 entries)
-   - ✅ Adversarial contract tests now cover malformed ciphertext, cross-group misuse, replay rejection, out-of-order lifecycle sequencing, tampered pending metadata, and concurrent stage race outcomes
+   - ✅ Adversarial contract tests now cover malformed ciphertext, cross-group misuse, replay rejection, out-of-order lifecycle sequencing, tampered pending metadata, epoch regression attempts, partial snapshot payload tampering, and concurrent stage/merge race outcomes
    - ✅ Optimistic lock-version conflict handling is active (`:stale_state` mapped fail-closed to `:storage_inconsistent`)
    - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`: stage/merge/clear pending commit with optimistic locking)
    - ✅ Send path now fails closed while pending commits are unresolved (`:pending_proposals`)
@@ -72,7 +72,7 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
   - MLS conversation security state persists in dedicated `conversation_security_states` storage with optimistic locking
   - Legacy metadata envelope is compatibility-read only and migrates to dedicated storage on access
   - Pending commit lifecycle orchestration is implemented in `ConversationSecurityLifecycle` and enforced on send-path app messages
-  - Merge path now rejects tampered pending metadata (invalid operation or stale/invalid staged epoch) with explicit fail-closed errors
+  - Stage/merge paths now reject tampered lifecycle payloads (invalid operation, stale/regressive epochs, or partial snapshot fragments) with explicit fail-closed errors
   - Replay-idempotency cache is capped to reduce state growth pressure
   - `requires_encryption?/1` ([line 266](../../backend/lib/famichat/chat/message_service.ex#L266)) - Compatibility API for conversation security policy decisions
   - **Tests**:

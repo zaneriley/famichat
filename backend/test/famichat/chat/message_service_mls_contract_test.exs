@@ -406,6 +406,63 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     assert Repo.aggregate(Message, :count, :id) == before_count
   end
 
+  test "send_message fails closed when pending commit is staged",
+       %{conversation: conversation, sender: sender} do
+    assert {:ok, _persisted_state} =
+             Famichat.Chat.ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{
+                 state: snapshot_payload(),
+                 epoch: 2,
+                 protocol: "mls",
+                 pending_commit: %{
+                   "operation" => "mls_commit",
+                   "staged_epoch" => 3
+                 }
+               },
+               nil
+             )
+
+    before_count = Repo.aggregate(Message, :count, :id)
+
+    assert {:error, {:mls_encryption_failed, :pending_proposals, details}} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "must-fail-pending")
+             )
+
+    assert details[:reason] == :pending_proposals
+    assert Repo.aggregate(Message, :count, :id) == before_count
+  end
+
+  test "send_message fails closed when pending commit metadata is empty map",
+       %{conversation: conversation, sender: sender} do
+    assert {:ok, _persisted_state} =
+             Famichat.Chat.ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{
+                 state: snapshot_payload(),
+                 epoch: 2,
+                 protocol: "mls",
+                 pending_commit: %{}
+               },
+               nil
+             )
+
+    before_count = Repo.aggregate(Message, :count, :id)
+
+    assert {:error, {:mls_encryption_failed, :pending_proposals, details}} =
+             MessageService.send_message(
+               message_params(
+                 sender.id,
+                 conversation.id,
+                 "must-fail-empty-pending"
+               )
+             )
+
+    assert details[:reason] == :pending_proposals
+    assert Repo.aggregate(Message, :count, :id) == before_count
+  end
+
   test "send_message rolls back message insert when state lock is stale",
        %{conversation: conversation, sender: sender} do
     Application.put_env(:famichat, :mls_adapter, StaleStateAdapter)

@@ -229,14 +229,14 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 - ✅ Encryption metadata infrastructure exists (serialization, telemetry)
 - ✅ OpenMLS-backed NIF vertical slice is implemented (`create_group`, `create_application_message`, `process_incoming`)
 - ✅ Fail-closed runtime health gating is in place in `MessageService`
-- ✅ Adversarial MLS contract tests cover malformed ciphertext, cross-group misuse, replay rejection, and lifecycle misuse cases (out-of-order merge/clear, tampered pending metadata, concurrent stage races)
+- ✅ Adversarial MLS contract tests cover malformed ciphertext, cross-group misuse, replay rejection, and lifecycle misuse cases (out-of-order merge/clear, tampered pending metadata, epoch regression attempts, partial snapshot payload tampering, concurrent stage/merge races)
 - ✅ Dedicated conversation security state persistence is active in `conversation_security_states` via `Famichat.Chat.ConversationSecurityStateStore`
 - ✅ Legacy metadata-envelope snapshots are compatibility-read and migrated into dedicated storage
 - ✅ Replay-idempotency cache export is bounded to cap snapshot growth
 - ✅ Optimistic lock-version conflict handling is active (`:stale_state` fail-closed behavior covered by tests)
 - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`) with staged/merge/clear pending-commit flows
 - ✅ Send path app messages fail closed while pending commits remain unresolved
-- ✅ Merge path rejects tampered pending metadata (invalid operation/staged epoch) with explicit fail-closed errors
+- ✅ Stage/merge paths reject tampered lifecycle payloads (invalid operation, stale/regressive epochs, partial snapshot fragments) with explicit fail-closed errors
 - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage is still pending (deeper OpenMLS payload/epoch semantics)
 - ⚠️ Key lifecycle hardening (rotation/rejoin persistence/revocation strategy) is still pending
 
