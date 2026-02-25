@@ -29,9 +29,25 @@ defmodule FamichatWeb.TestBroadcastControllerTest do
         user2: partner
       })
 
+    self_conversation =
+      ChatFixtures.conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :self,
+        user1: user
+      })
+
+    partner_self_conversation =
+      ChatFixtures.conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :self,
+        user1: partner
+      })
+
     %{
       authed_conn: authed_conn(conn, user),
       conversation: conversation,
+      self_conversation: self_conversation,
+      partner_self_conversation: partner_self_conversation,
       user: user
     }
   end
@@ -122,6 +138,34 @@ defmodule FamichatWeb.TestBroadcastControllerTest do
       assert_no_broadcast_on_topic(topic)
       assert get_resp_header(conn, "deprecation") == ["true"]
       assert get_resp_header(conn, "sunset") != []
+    end
+
+    test "self ownership checks still apply on legacy alias endpoint", %{
+      authed_conn: authed_conn,
+      self_conversation: self_conversation,
+      partner_self_conversation: partner_self_conversation
+    } do
+      target_topic = topic(:self, partner_self_conversation.id)
+      spoofed_topic = topic(:self, self_conversation.id)
+      @endpoint.subscribe(target_topic)
+      @endpoint.subscribe(spoofed_topic)
+
+      conn =
+        post(authed_conn, ~p"/api/test/test_events", %{
+          "conversation_type" => "self",
+          "conversation_id" => partner_self_conversation.id,
+          "body" => "forbidden self target",
+          "topic" => spoofed_topic
+        })
+
+      assert json_response(conn, 403) == %{
+               "status" => "error",
+               "error" => "forbidden"
+             }
+
+      assert_no_broadcast_on_topic(target_topic)
+      assert_no_broadcast_on_topic(spoofed_topic)
+      assert get_resp_header(conn, "deprecation") == ["true"]
     end
   end
 

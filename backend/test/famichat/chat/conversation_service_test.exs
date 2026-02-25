@@ -42,6 +42,38 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
       # Optionally, you can check a log or telemetry event to know it was re-used.
     end
+
+    test "same-user direct conversation remains :direct with one participant row" do
+      user = user_fixture()
+
+      {:ok, conversation} =
+        ConversationService.create_direct_conversation(user.id, user.id)
+
+      assert conversation.conversation_type == :direct
+
+      assert conversation.direct_key ==
+               Conversation.compute_direct_key(
+                 user.id,
+                 user.id,
+                 conversation.family_id
+               )
+
+      participant_ids =
+        from(p in ConversationParticipant,
+          where: p.conversation_id == ^conversation.id,
+          select: p.user_id
+        )
+        |> Repo.all()
+
+      assert participant_ids == [user.id]
+
+      member_ids =
+        conversation
+        |> ConversationService.list_members()
+        |> Enum.map(& &1.id)
+
+      assert member_ids == [user.id]
+    end
   end
 
   describe "create_direct_conversation/2 distinct conversations" do
@@ -593,10 +625,11 @@ defmodule Famichat.Chat.ConversationServiceTest do
         )
     end
 
-    test "rejects assigning privileges to users outside the conversation family", %{
-      group_conversation: group_conversation,
-      admin_user: admin_user
-    } do
+    test "rejects assigning privileges to users outside the conversation family",
+         %{
+           group_conversation: group_conversation,
+           admin_user: admin_user
+         } do
       outsider_family = family_fixture()
       outsider_user = user_fixture(%{family_id: outsider_family.id})
 
@@ -779,7 +812,10 @@ defmodule Famichat.Chat.ConversationServiceTest do
 
             {:ok, _} =
               grantor_privilege
-              |> Ecto.Changeset.change(role: :member, granted_by_id: second_admin.id)
+              |> Ecto.Changeset.change(
+                role: :member,
+                granted_by_id: second_admin.id
+              )
               |> Repo.update()
 
             send(parent, :grantor_demoted_uncommitted)

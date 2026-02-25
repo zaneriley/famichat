@@ -165,7 +165,8 @@ defmodule FamichatWeb.MessageChannelTest do
       user: user,
       user_session: user_session
     } do
-      {:ok, socket} = connect(UserSocket, %{"token" => user_session.access_token})
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
 
       assert {:ok, _, channel_socket} =
                subscribe_and_join(
@@ -228,6 +229,28 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.conversation_type == "self"
       assert metadata.conversation_id == @self_conversation_id
       assert Map.has_key?(metadata, :timestamp)
+    end
+
+    test "currently allows joins when a malformed self conversation has multiple participants",
+         %{socket: socket, family: family, second_user: second_user} do
+      malformed_self_conversation =
+        insert_conversation(Ecto.UUID.generate(), :self, family.id, [
+          @valid_user_id,
+          @second_user_id
+        ])
+
+      topic = "message:self:#{malformed_self_conversation.id}"
+
+      assert {:ok, _reply, _socket} =
+               subscribe_and_join(socket, MessageChannel, topic)
+
+      second_user_token = token_for_user(second_user)
+
+      {:ok, second_socket} =
+        connect(UserSocket, %{"token" => second_user_token})
+
+      assert {:ok, _reply, _socket} =
+               subscribe_and_join(second_socket, MessageChannel, topic)
     end
 
     test "successfully joins direct conversation channel", %{socket: socket} do
@@ -939,6 +962,15 @@ defmodule FamichatWeb.MessageChannelTest do
       # This should be rejected
       assert {:error, %{reason: "unauthorized"}} =
                subscribe_and_join(socket, MessageChannel, topic)
+
+      assert_receive {:telemetry_event, [:famichat, :message_channel, :join],
+                      _measurements, metadata},
+                     @telemetry_timeout
+
+      assert metadata.status == :error
+      assert metadata.error_reason == :unauthorized
+      assert metadata.conversation_type == "self"
+      assert metadata.conversation_id == other_self_conversation.id
     end
 
     @doc """

@@ -31,6 +31,33 @@ defmodule FamichatWeb.MessageTestControllerTest do
         user2: partner
       })
 
+    self_conversation =
+      ChatFixtures.conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :self,
+        user1: user
+      })
+
+    partner_self_conversation =
+      ChatFixtures.conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :self,
+        user1: partner
+      })
+
+    group_conversation =
+      ChatFixtures.conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :group,
+        user1: user
+      })
+
+    family_conversation =
+      ChatFixtures.conversation_fixture(%{
+        family_id: family.id,
+        conversation_type: :family
+      })
+
     authed_conn = authed_conn(conn, user)
     outsider_conn = authed_conn(conn, outsider)
 
@@ -39,7 +66,11 @@ defmodule FamichatWeb.MessageTestControllerTest do
       authed_conn: authed_conn,
       outsider_conn: outsider_conn,
       user: user,
-      conversation: conversation
+      conversation: conversation,
+      self_conversation: self_conversation,
+      partner_self_conversation: partner_self_conversation,
+      group_conversation: group_conversation,
+      family_conversation: family_conversation
     }
   end
 
@@ -180,6 +211,110 @@ defmodule FamichatWeb.MessageTestControllerTest do
       assert response["details"]["key_id"] == "must match KEY_[A-Z]+_v[0-9]+"
 
       assert_no_broadcast_on_topic(topic)
+    end
+
+    test "broadcasts successfully for the caller's own self conversation", %{
+      authed_conn: authed_conn,
+      user: user,
+      self_conversation: self_conversation
+    } do
+      topic = topic(:self, self_conversation.id)
+      @endpoint.subscribe(topic)
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "conversation_type" => "self",
+          "conversation_id" => self_conversation.id,
+          "body" => "note to self",
+          "topic" => "message:direct:#{Ecto.UUID.generate()}"
+        })
+
+      response = json_response(conn, 200)
+      assert response["status"] == "success"
+      assert response["topic"] == topic
+      assert response["event_name"] == "new_msg"
+      assert response["payload"]["body"] == "note to self"
+      assert response["payload"]["user_id"] == user.id
+
+      assert_single_broadcast(topic, "new_msg", response["payload"])
+    end
+
+    test "returns 403 when trying to target another user's self conversation even with a caller-supplied topic",
+         %{
+           authed_conn: authed_conn,
+           self_conversation: self_conversation,
+           partner_self_conversation: partner_self_conversation
+         } do
+      partner_topic = topic(:self, partner_self_conversation.id)
+      spoofed_topic = topic(:self, self_conversation.id)
+      @endpoint.subscribe(partner_topic)
+      @endpoint.subscribe(spoofed_topic)
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "conversation_type" => "self",
+          "conversation_id" => partner_self_conversation.id,
+          "body" => "should be rejected",
+          "topic" => spoofed_topic
+        })
+
+      assert json_response(conn, 403) == %{
+               "status" => "error",
+               "error" => "forbidden"
+             }
+
+      assert_no_broadcast_on_topic(partner_topic)
+      assert_no_broadcast_on_topic(spoofed_topic)
+    end
+
+    test "broadcasts successfully for group conversations", %{
+      authed_conn: authed_conn,
+      user: user,
+      group_conversation: group_conversation
+    } do
+      topic = topic(:group, group_conversation.id)
+      @endpoint.subscribe(topic)
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "conversation_type" => "group",
+          "conversation_id" => group_conversation.id,
+          "body" => "group message"
+        })
+
+      response = json_response(conn, 200)
+      assert response["status"] == "success"
+      assert response["topic"] == topic
+      assert response["event_name"] == "new_msg"
+      assert response["payload"]["body"] == "group message"
+      assert response["payload"]["user_id"] == user.id
+
+      assert_single_broadcast(topic, "new_msg", response["payload"])
+    end
+
+    test "broadcasts successfully for family conversations", %{
+      authed_conn: authed_conn,
+      user: user,
+      family_conversation: family_conversation
+    } do
+      topic = topic(:family, family_conversation.id)
+      @endpoint.subscribe(topic)
+
+      conn =
+        post(authed_conn, ~p"/api/test/broadcast", %{
+          "conversation_type" => "family",
+          "conversation_id" => family_conversation.id,
+          "body" => "family message"
+        })
+
+      response = json_response(conn, 200)
+      assert response["status"] == "success"
+      assert response["topic"] == topic
+      assert response["event_name"] == "new_msg"
+      assert response["payload"]["body"] == "family message"
+      assert response["payload"]["user_id"] == user.id
+
+      assert_single_broadcast(topic, "new_msg", response["payload"])
     end
   end
 
