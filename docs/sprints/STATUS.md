@@ -1,7 +1,7 @@
 # Famichat - Comprehensive Status Report
 
 **Last Updated**: 2026-02-25
-**Sprint**: 7 (Real-Time Messaging Integration)
+**Sprint**: 9 (MLS E2EE Implementation)
 **Overall Progress**: 40% to MVP
 
 ---
@@ -9,19 +9,29 @@
 ## 📊 Executive Summary
 
 ### Health Indicators
-- 🟢 **Backend Core**: 70% complete - Messaging solid, Accounts passkey/session flows green ✅; username fingerprints + single-use invite JWT shipped
+- 🟢 **Backend Core**: 75% complete - Messaging solid, Accounts passkey/session flows green ✅, and OpenMLS-backed NIF vertical slice now working in tests
 - 🟡 **Frontend (LiveView)**: 40% complete - Messaging UI in progress
 - 🟡 **Infrastructure**: 50% complete - Dev ready, prod missing
 - 🟡 **Documentation**: 80% complete - Architecture/roadmap refreshed for Accounts changes
 
+### Priority Lens (Current)
+- **P0**: Backend MLS/E2EE correctness + fail-closed guarantees + operational gates
+- **P1**: LiveView messaging UX on top of the same backend/channel contracts
+
 ### Critical Blockers
-1. 🚨 **No Actual Encryption** - Metadata infrastructure exists, but no crypto implementation
-   - ✅ Encryption metadata storage/serialization works
-   - ✅ Telemetry tracks encryption status
-   - ❌ No MLS/OpenMLS integration (Sprint 9, 3 weeks)
-   - ✅ Protocol direction locked: MLS-first (ADR 010)
-   - ⚠️ **Messages currently stored in plaintext**
-2. ⚠️ **Client Integration Documentation** - Channel/LiveView integration guidance is still incomplete (Story 7.3)
+1. 🚨 **MLS Not Yet Production-Hard** - crypto vertical slice exists, but durability/lifecycle hardening is incomplete
+   - ✅ OpenMLS-backed NIF integration is active for core `create_group -> encrypt -> process_incoming`
+   - ✅ MessageService fail-closed runtime health gating is implemented
+   - ✅ NIF session snapshot export/restore contract is implemented (runtime state blobs)
+   - ✅ MLS session snapshots are now persisted as encrypted envelopes in conversation metadata (`mls.session_snapshot_encrypted`)
+   - ✅ Replay-idempotency cache export is now bounded (max 256 entries)
+   - ✅ Adversarial contract tests now cover malformed ciphertext, cross-group misuse, and replay rejection
+   - ⚠️ Dedicated MLS state store (group/epoch/pending commit model with optimistic locking) is not complete
+   - ❌ Key lifecycle hardening (rotation/rejoin persistence/revocation strategy) is not complete
+2. ⚠️ **Operational Confidence Gaps** - quality visibility is incomplete
+   - Test coverage snapshot is not yet captured
+   - Repo-wide lint/static baseline debt is still unresolved
+   - Canonical flow timing drift capture is not yet automated
 
 ---
 
@@ -46,14 +56,20 @@
   - Preloads sender & conversation associations
   - **Tests**: ✓ All scenarios covered (success, empty, not found)
 
-- ✅ **Encryption Metadata Infrastructure** (Ready but NO crypto)
+- ✅ **Encryption + MLS Integration** (Vertical Slice Working, Hardening Ongoing)
   - `serialize_message/1` ([line 283](../../backend/lib/famichat/chat/message_service.ex#L283)) - Stores encryption metadata in message.metadata field
   - `deserialize_message/1` ([line 408](../../backend/lib/famichat/chat/message_service.ex#L408)) - Extracts encryption data
-  - `decrypt_message/1` ([line 492](../../backend/lib/famichat/chat/message_service.ex#L492)) - **PLACEHOLDER STUB** (no actual decryption)
+  - `encrypt_with_mls_if_required/1` ([line 546](../../backend/lib/famichat/chat/message_service.ex#L546)) - Calls MLS adapter and stores ciphertext when required
+  - `decrypt_messages_if_required/1` ([line 596](../../backend/lib/famichat/chat/message_service.ex#L596)) - Decrypts via MLS adapter when required
+  - `ensure_mls_runtime_ready/0` ([line 733](../../backend/lib/famichat/chat/message_service.ex#L733)) - Fail-closed runtime health gate
+  - MLS session snapshot persistence now uses encrypted envelope metadata (`mls.session_snapshot_encrypted`) with restore-path request wiring after runtime state reset
+  - Replay-idempotency cache is capped to reduce state growth pressure
   - `requires_encryption?/1` ([line 266](../../backend/lib/famichat/chat/message_service.ex#L266)) - Policy enforcement per conversation type
-  - **Tests**: [decryption_test.exs](../../backend/test/famichat/messages/decryption_test.exs) - Validates metadata flow, NOT actual crypto
-  - **Status**: ✅ Metadata schema ready, ❌ NO cryptographic implementation yet
-  - **⚠️ CRITICAL**: Messages stored in plaintext, encryption planned Sprint 9
+  - **Tests**:
+    - [message_service_mls_contract_test.exs](../../backend/test/famichat/chat/message_service_mls_contract_test.exs)
+    - [nif_adapter_test.exs](../../backend/test/famichat/crypto/mls/nif_adapter_test.exs)
+    - [telemetry_contract_test.exs](../../backend/test/famichat/crypto/mls/telemetry_contract_test.exs)
+  - **Status**: ✅ Real OpenMLS vertical slice implemented, ⚠️ production durability/lifecycle work still pending
 
 **Evidence**:
 ```bash
@@ -368,20 +384,19 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ### Critical Missing Features
 
-#### 1. End-to-End Encryption ❌ INFRASTRUCTURE READY
-- **Impact**: Security risk, cannot market as "secure family chat"
+#### 1. End-to-End Encryption ⚠️ VERTICAL SLICE LANDED, HARDENING REMAINS
+- **Impact**: Trust posture risk remains until durability/key lifecycle are complete.
+- **What Exists Now**:
+  - OpenMLS Rust NIF integration is wired for core `create_group -> create_application_message -> process_incoming`.
+  - MessageService send/read paths enforce fail-closed runtime gating through `nif_health`.
+  - Adversarial tests cover malformed ciphertext, cross-group misuse, replay rejection, and telemetry redaction behavior.
 - **What's Missing**:
-  - No OpenMLS Rust NIF integration (actual cryptography not wired)
-  - No MLS key package / credential lifecycle implementation
-  - No MLS group state + epoch/commit lifecycle implementation
-  - Metadata hooks exist, but message content remains plaintext
-- **Infrastructure Ready**:
-  - Schema has `metadata` JSONB field for encryption data
-  - Serialization/deserialization functions exist
-  - Telemetry filtering prevents sensitive data leaks
-- **Planned**: Sprint 9-10 (MLS/OpenMLS rollout with group-state and commit lifecycle hardening)
-- **Effort**: ~3 weeks for Sprint 9 core cryptography rollout
-- **Dependencies**: ADR 010 accepted; implement OpenMLS integration and ops guardrails in `backend/infra/mls_nif`
+  - Durable MLS group/epoch/pending-commit persistence and crash/restart recovery.
+  - Full key lifecycle hardening (rotation/rejoin persistence/revocation strategy).
+  - End-to-end client-facing flows beyond the current backend vertical slice.
+- **Planned**: Sprint 9 hardening + operational rollout gates.
+- **Effort**: ~2-3 weeks for durability/lifecycle hardening and adversarial matrix expansion.
+- **Dependencies**: ADR 010 accepted; continue hardening in `backend/infra/mls_nif` and canonical MessageService path.
 
 #### 3. Message Status Tracking ❌ PARTIAL
 - **Impact**: Poor UX - users don't know if messages were delivered/read
@@ -501,25 +516,25 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
    - Don't know which code is untested
    - **Action**: Run `mix coveralls` and set 80% target
 
-2. **Missing Integration Tests** 🚨
-   - No end-to-end auth flow tests
-   - No complete messaging flow tests (channel → service → database → broadcast)
-   - **Action**: Write integration test suite
+2. **MLS Durability + Lifecycle Hardening Not Complete** 🚨
+   - ✅ OpenMLS + Rustler NIF vertical slice is implemented and tested
+   - ✅ Fail-closed runtime gating and adversarial baseline tests are in place
+   - ❌ Durable state persistence/recovery across restarts is not complete
+   - ❌ Key lifecycle hardening (rotation/rejoin persistence/revocation) is not complete
+   - **Action**: Sprint 9 hardening track (state persistence + lifecycle + adversarial expansion)
 
-3. **LiveView Messaging UI Incomplete** 🚨
-   - Core infrastructure exists but messaging UI not built yet
-   - **Action**: Sprint 8 priority (build full messaging interface)
+3. **Repo-wide Lint/Static Baseline Debt** 🚨
+   - Credo and Dialyzer baseline failures obscure signal for new work
+   - **Action**: Triage and isolate baseline debt so new regressions are obvious
 
 4. **No Production Deployment Config** ⚠️
    - Cannot deploy or test at scale
    - **Action**: Create prod Docker config
 
 #### Medium Priority
-1. **Encryption Metadata Ready but No Crypto Implementation**
-   - ✅ Metadata infrastructure complete
-   - ❌ No OpenMLS integration, no Rustler NIF bridge, no actual encryption
-   - ⚠️ Security risk: Messages stored in plaintext
-   - **Action**: Sprint 9 (MLS/OpenMLS via Rust NIF, 3 weeks)
+1. **Integration Test Matrix Expansion**
+   - Canonical auth->subscribe->send->receive flow exists, but MLS/adversarial matrix is still expanding
+   - **Action**: Extend characterization tests as Sprint 9 lands
 
 2. **Message Status Only Supports :sent**
    - UX gap
@@ -536,6 +551,10 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 5. **Database Indexing Needs Verification**
    - May have performance issues at scale
    - **Action**: Review query plans, add indexes
+
+6. **LiveView Messaging UI Incomplete**
+   - Core infrastructure exists but full messaging UX is still being built
+   - **Action**: Sprint 8 scope (P1, non-blocking for Sprint 9 backend MLS)
 
 #### Low Priority
 1. **No Monitoring in Production**
@@ -582,23 +601,21 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ### Immediate (This Week)
 1. ✅ Canonical runbook + integration lock landed for `auth -> subscribe -> send -> receive`.
-2. ⚠️ Add routine timing capture around the canonical flow command for drift tracking.
-3. ⚠️ Triage repo-wide `elixir:lint` / `elixir:static-analysis` baseline debt separately so completed story behavior stays trackable.
-4. ⚠️ Measure test coverage snapshot (`cd backend && ./run mix coveralls`).
+2. 🚨 Sprint 9 hardening follow-through: move encrypted metadata envelope to dedicated MLS state model with versioned writes.
+3. ⚠️ Add routine timing capture around the canonical flow command for drift tracking.
+4. ⚠️ Triage repo-wide `elixir:lint` / `elixir:static-analysis` baseline debt separately so completed story behavior stays trackable.
+5. ⚠️ Measure test coverage snapshot (`cd backend && ./run mix coveralls`).
 
-### Short-term (Next Sprint - Sprint 8)
-1. Build LiveView messaging UI (conversation list, message thread) on the same backend/channel contracts already validated by CLI flows.
-2. Integrate LiveView hooks with Phoenix Channels using the same auth and authorization boundaries (no alternate UI-only path).
-3. Consolidate client integration documentation for token acquisition, channel subscribe, and canonical broadcast verification.
-4. Add a repeatable latency baseline capture in CI for canonical flow drift detection.
+### Short-term (Current P0 Track - Sprint 9)
+1. Replace conversation-metadata snapshot persistence with dedicated MLS state storage and optimistic locking semantics.
+2. Harden commit/update/add/remove lifecycle handling with explicit epoch/pending-commit invariants.
+3. Lock telemetry/metrics gates for app-message and group lifecycle operations.
+4. Expand adversarial/characterization tests for protocol invariants and storage/recovery semantics.
 
-### Medium-term (Sprint 9-11)
-1. **Sprint 9 (3 weeks)**: MLS/OpenMLS E2EE implementation
-   - Rust NIF + OpenMLS integration
-   - MLS key package, group state, epoch/commit lifecycle
-   - Server-side encryption/decryption
-2. **Sprint 10 (2 weeks)**: Layer 0 dogfooding with encryption + Design System
-3. **Sprint 11**: Code quality, media upload support, message status tracking
+### Medium-term (Sprint 8 + Sprint 10-11)
+1. **Sprint 8 (P1)**: LiveView messaging UI + auth UX on top of the same backend/channel contracts.
+2. **Sprint 10 (2 weeks)**: Layer 0 dogfooding with encryption + Design System.
+3. **Sprint 11**: Code quality, media upload support, message status tracking.
 
 ### Long-term (Sprint 11-13)
 1. Code quality improvements

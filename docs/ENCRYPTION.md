@@ -32,18 +32,20 @@ Historical Signal-era analysis is retained only in deprecated ADRs and is not an
 
 ### Implemented
 
-1. Encryption metadata plumbing in message/domain paths.
-2. Telemetry filtering to prevent sensitive encryption metadata leakage.
-3. Channel/API auth foundations and canonical verification runbook path.
+1. Real OpenMLS cryptography is integrated via Rustler NIF for `create_group -> create_application_message -> process_incoming`.
+2. MessageService enforces fail-closed runtime health gating (`nif_health`) before MLS encrypt/decrypt paths.
+3. Canonical message path stores ciphertext at rest and decrypts on read via the shared backend path.
+4. MLS session state persistence is active through an encrypted envelope in `conversation.metadata` (`mls.session_snapshot_encrypted`).
+5. Replay-idempotency cache is bounded (`max 256`) to cap snapshot growth under high replay-cardinality reads.
+6. Adversarial coverage includes malformed ciphertext, cross-group misuse rejection, replay/idempotency behavior, and tampered-snapshot fail-closed behavior.
 
 ### Not Implemented Yet
 
-1. No production OpenMLS cryptography integrated.
-2. No Rustler NIF bridge wired into production messaging path.
-3. No MLS key package lifecycle persisted end-to-end.
-4. No MLS group epoch/commit lifecycle persisted end-to-end.
+1. Dedicated durable MLS state model (group/epoch/pending commit lifecycle) with explicit versioning/optimistic locking.
+2. Full key package and credential lifecycle hardening (rotation, rejoin durability, revocation strategy).
+3. Multi-node/state-distribution strategy for deterministic MLS state recovery across instances.
 
-**Current risk**: messages are effectively plaintext from a product-trust perspective until Sprint 9 MLS work lands.
+**Current risk**: encryption is active, but production trust still depends on finishing state lifecycle hardening and key lifecycle controls.
 
 ---
 

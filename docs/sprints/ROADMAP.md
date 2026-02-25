@@ -159,6 +159,11 @@
 
 ## 📅 Upcoming Sprints
 
+**Execution Priority Override (2026-02-25)**:
+1. **P0**: Sprint 9 backend MLS/E2EE correctness and rollout gates.
+2. **P1**: Sprint 8 LiveView UX work on the same backend contracts.
+3. Sprint 8 delivery should not block Sprint 9 backend cryptography implementation.
+
 ### Sprint 8: LiveView Messaging UI & Authentication (Planned)
 **Goal**: Build functional LiveView messaging interface with authentication
 
@@ -173,9 +178,10 @@
 **Dependencies**:
 - Sprint 7 closeout (runbook/docs consolidation + role edge-case test follow-through)
 - Story 7.9 follow-up HTTP/LiveView surfacing work (core Accounts context already shipped)
+- Consume canonical backend/channel contracts; no UI-only alternate path.
 
 **Estimated Duration**: 2 weeks
-**Priority**: **HIGH** - needed to demonstrate product value and enable dogfooding
+**Priority**: **P1 / HIGH** - valuable for product UX and dogfooding, but not a blocker for backend MLS implementation
 
 **Outcome**: End-to-end messaging demo via web browser with authentication (login → send message → see real-time updates)
 
@@ -202,21 +208,28 @@
 - **Week 3**: Message Encryption Integration
   - Wire `send_message/1` to encrypt via NIF before storing
   - Wire `get_conversation_messages/2` to decrypt after retrieval
-  - Update LiveView to render decrypted content
+  - Publish stable decrypted-content contracts for LiveView/API consumers
   - Integration tests (encrypted message flow)
 
 **Dependencies**:
-- Sprint 8 (LiveView UI + authentication must exist)
+- Sprint 7 closeout and canonical messaging path readiness
+- Sprint 9 contract + TDD plan lock (`9.0` and `9.1` docs)
 - Crypto library: OpenMLS (Rust) via Rustler NIF (ADR 010)
 
 **Estimated Duration**: 3 weeks
-**Priority**: **CRITICAL** - Must dogfood with encryption from day 1
+**Priority**: **P0 / CRITICAL** - plaintext-risk removal and trust posture blocker
 
 **Outcome**: Messages encrypted/decrypted server-side using MLS. Ready for Layer 0 dogfooding.
 
 **Current State**:
 - ✅ Encryption metadata infrastructure exists (serialization, telemetry)
-- ❌ No actual cryptographic implementation yet (messages stored in plaintext)
+- ✅ OpenMLS-backed NIF vertical slice is implemented (`create_group`, `create_application_message`, `process_incoming`)
+- ✅ Fail-closed runtime health gating is in place in `MessageService`
+- ✅ Adversarial MLS contract tests cover malformed ciphertext, cross-group misuse, and replay rejection
+- ✅ Encrypted MLS snapshot envelope persistence is active in `conversation.metadata` (restart recovery path for current backend flow)
+- ✅ Replay-idempotency cache export is bounded to cap snapshot growth
+- ⚠️ Dedicated durable MLS group/epoch/pending-commit state model with versioned writes is still pending
+- ⚠️ Key lifecycle hardening (rotation/rejoin persistence/revocation strategy) is still pending
 
 ---
 
@@ -402,7 +415,7 @@
 2. **Encryption Complexity**
    - **Impact**: May take longer than 3 weeks (moved to Sprint 9, extended from 2 to 3 weeks)
    - **Mitigation**: MLS-first direction accepted (ADR 010) with performance guardrails + dependency update discipline
-   - **Current State**: Encryption metadata infrastructure ready, but no crypto implementation yet
+   - **Current State**: Real OpenMLS vertical slice is working in tests; production durability and key-lifecycle hardening remain
 
 3. **Native App Decision Point**
    - **Impact**: Layer 4 (Autonomy & Safety) may require native mobile app
@@ -410,7 +423,7 @@
 
 ### Dependencies
 - **Sprint 8 depends on**: Sprint 7 closeout (operator runbook + docs + targeted role-edge coverage)
-- **Sprint 9 depends on**: Sprint 8 completion (authentication + LiveView UI)
+- **Sprint 9 depends on**: Sprint 7 closeout + Sprint 9 contract/TDD lock (does not depend on Sprint 8 completion)
 - **Sprint 10 depends on**: Sprint 9 completion (E2EE must work for dogfooding)
 - **Sprint 13 depends on**: All previous sprints (production readiness)
 
@@ -432,6 +445,7 @@
 - Updated E2EE direction from Signal-first to MLS-first (ADR 010)
 - Reframed Sprint 9 deliverables around OpenMLS integration and MLS state lifecycle
 - Updated Sprint 10 dependency wording to require MLS readiness
+- Clarified execution priority: Sprint 9 backend MLS is P0; Sprint 8 LiveView is P1 and non-blocking for Sprint 9 core backend work
 
 ### 2025-10-05
 - Updated Sprint 7 status (30% complete)
