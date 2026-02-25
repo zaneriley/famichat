@@ -40,6 +40,12 @@ pub struct MlsError {
 
 pub type MlsResult = Result<Payload, MlsError>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CreateGroupParams {
+    group_id: String,
+    ciphersuite: String,
+}
+
 impl MlsError {
     #[must_use]
     pub fn unsupported(operation: &str) -> Self {
@@ -82,7 +88,7 @@ pub fn create_key_package(_params: &Payload) -> MlsResult {
 }
 
 pub fn create_group(params: &Payload) -> MlsResult {
-    require_keys("create_group", params, &["group_id", "ciphersuite"])?;
+    let _params = CreateGroupParams::try_from(params)?;
     placeholder("create_group")
 }
 
@@ -122,18 +128,36 @@ fn placeholder(operation: &str) -> MlsResult {
     Err(MlsError::unsupported(operation))
 }
 
-fn require_keys(operation: &str, params: &Payload, required: &[&str]) -> Result<(), MlsError> {
-    let mut details = Payload::new();
-
-    for key in required {
-        if !params.contains_key(*key) {
-            details.insert((*key).to_owned(), "is required".to_owned());
+fn required_non_empty(params: &Payload, key: &str, details: &mut Payload) -> Option<String> {
+    match params.get(key) {
+        Some(value) if !value.trim().is_empty() => Some(value.to_owned()),
+        Some(_) => {
+            details.insert(key.to_owned(), "must not be empty".to_owned());
+            None
+        }
+        None => {
+            details.insert(key.to_owned(), "is required".to_owned());
+            None
         }
     }
+}
 
-    if details.is_empty() {
-        Ok(())
-    } else {
+impl TryFrom<&Payload> for CreateGroupParams {
+    type Error = MlsError;
+
+    fn try_from(params: &Payload) -> Result<Self, Self::Error> {
+        let operation = "create_group";
+        let mut details = Payload::new();
+        let group_id = required_non_empty(params, "group_id", &mut details);
+        let ciphersuite = required_non_empty(params, "ciphersuite", &mut details);
+
+        if let (Some(group_id), Some(ciphersuite)) = (group_id, ciphersuite) {
+            return Ok(Self {
+                group_id,
+                ciphersuite,
+            });
+        }
+
         details.insert("operation".to_owned(), operation.to_owned());
         Err(MlsError::invalid_input(details))
     }
@@ -187,6 +211,25 @@ mod tests {
         assert_eq!(
             error.details.get("ciphersuite"),
             Some(&"is required".to_owned())
+        );
+        assert_eq!(
+            error.details.get("operation"),
+            Some(&"create_group".to_owned())
+        );
+    }
+
+    #[test]
+    fn create_group_rejects_empty_required_fields() {
+        let error = create_group(&payload(&[("group_id", " "), ("ciphersuite", "")]))
+            .expect_err("invalid empty fields");
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+        assert_eq!(
+            error.details.get("group_id"),
+            Some(&"must not be empty".to_owned())
+        );
+        assert_eq!(
+            error.details.get("ciphersuite"),
+            Some(&"must not be empty".to_owned())
         );
         assert_eq!(
             error.details.get("operation"),

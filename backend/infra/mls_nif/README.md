@@ -14,19 +14,34 @@ This crate is intentionally minimal and currently provides:
 Run from `backend/`:
 
 ```bash
+./run rust:doctor
 ./run rust:fmt
 ./run rust:clippy
 ./run rust:test
 ```
 
-Or run all three:
+Fast path (single container exec for tighter iteration):
 
 ```bash
 ./run rust:check
+```
+
+Lint-only path (used by CI lint stage):
+
+```bash
+./run rust:lint
 ```
 
 Optional unsafe-boundary validation (nightly + Miri):
 
 ```bash
 ./run rust:miri
+```
+
+First `rust:miri` run installs nightly components (`miri`, `rust-src`) and will be slower.
+
+If you need a different crate/workspace, override manifest resolution:
+
+```bash
+RUST_MANIFEST_PATH=path/to/Cargo.toml ./run rust:check
 ```

@@ -58,7 +58,7 @@ function mix:install {
 
 function mix:clean {
   # Clean mix dependencies
-  _build_run_down web mix deps.clean ${@}
+  _build_run_down web mix deps.clean "$@"
 }
 
 function mix:outdated {
@@ -88,6 +88,23 @@ function lint:dockerfile {
   # Lint Dockerfile
   docker container run --rm -i \
     hadolint/hadolint hadolint --ignore DL3008 -t style "${@}" - < Dockerfile
+}
+
+function shell:lint {
+  # Lint shell scripts, preferring local shellcheck for speed.
+  local files=(run bin/*)
+
+  if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck "${files[@]}"
+    return
+  fi
+
+  echo "shellcheck not found locally; using koalaman/shellcheck:stable (slower)." >&2
+  docker container run --rm \
+    -v "$(pwd)":/workdir \
+    -w /workdir \
+    koalaman/shellcheck:stable \
+    "${files[@]}"
 }
 
 function elixir:lint {
@@ -239,6 +256,22 @@ function rust:clippy {
   cmd cargo clippy --manifest-path "${manifest_path}" --all-targets --all-features "${@}" -- -D warnings
 }
 
+function rust:lint {
+  # Run Rust format and lint checks in a single container exec
+  local manifest_path
+  manifest_path="$(_ensure_rust_manifest)" || return $?
+  _ensure_rust_toolchain || return $?
+
+  # shellcheck disable=SC2016
+  cmd bash -lc '
+    set -o errexit
+    set -o pipefail
+    manifest_path="$1"
+    cargo fmt --manifest-path "$manifest_path" --all --check
+    cargo clippy --manifest-path "$manifest_path" --all-targets --all-features -- -D warnings
+  ' _ "${manifest_path}"
+}
+
 function rust:test {
   # Run Rust tests
   local manifest_path
@@ -254,15 +287,26 @@ function rust:miri {
   manifest_path="$(_ensure_rust_manifest)" || return $?
   _ensure_rust_toolchain || return $?
 
-  cmd rustup +nightly component add miri
+  cmd rustup +nightly component add miri rust-src
   cmd cargo +nightly miri test --manifest-path "${manifest_path}" --all-features "${@}"
 }
 
 function rust:check {
-  # Rust oracle loop for LLM/code review workflows
-  rust:fmt
-  rust:clippy
-  rust:test "${@}"
+  # Rust oracle loop for LLM/code review workflows in one container exec
+  local manifest_path
+  manifest_path="$(_ensure_rust_manifest)" || return $?
+  _ensure_rust_toolchain || return $?
+
+  # shellcheck disable=SC2016
+  cmd bash -lc '
+    set -o errexit
+    set -o pipefail
+    manifest_path="$1"
+    shift
+    cargo fmt --manifest-path "$manifest_path" --all --check
+    cargo clippy --manifest-path "$manifest_path" --all-targets --all-features -- -D warnings
+    cargo test --manifest-path "$manifest_path" --all-features "$@"
+  ' _ "${manifest_path}" "${@}"
 }
 
 # -----------------------------------------------------------------------------
@@ -495,12 +539,12 @@ function ci:setup-env {
 }
 
 function ci:lint {
-    shellcheck run bin/*
+    shell:lint
     lint:dockerfile "${@}"
     elixir:lint
-    rust:check
+    rust:lint
     elixir:format
-    js:fix
+    js:fix "${@}"
     css:lint
 }
 
@@ -513,7 +557,8 @@ function ci:setup-db {
 }
 
 function ci:test {
-    test:coverage "${@}"
+    rust:test "${@}"
+    elixir:test:coverage "${@}"
 }
 
 function ci:static-analysis {
@@ -536,19 +581,20 @@ function ci:run-all {
 
 function lint:all {
     elixir:lint
-    rust:check
+    rust:lint
     js:lint
     css:lint
 }
 
 function format:all {
     elixir:format
-    js:fix
+    js:fix "${@}"
     css:lint
 }
 
 function test:all {
-    elixir:test
+    elixir:test "${@}"
+    rust:test
     js:test
 }
 

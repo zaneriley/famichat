@@ -98,6 +98,8 @@ For Rust work, run this loop before claiming completion:
 3. `./run rust:test`
 
 Use small diffs and iterate on real tool feedback. Do not jump to large rewrites.
+Equivalent fast path: `./run rust:check` (single container exec).
+Use `./run rust:lint` when only formatting/lint validation is needed.
 
 ### 9.3. Read-Before-Write and Type Awareness
 *   Find and reuse existing patterns before adding new abstractions.
