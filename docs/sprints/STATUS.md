@@ -34,11 +34,12 @@ Sprint 9 P0 done-state checklist: [9.3-mls-definition-of-done.md](9.3-mls-defini
    - ✅ Optimistic lock-version conflict handling is active (`:stale_state` mapped fail-closed to `:storage_inconsistent`)
    - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`: stage/merge/clear pending commit with optimistic locking)
    - ✅ Send path now fails closed while pending commits are unresolved (`:pending_proposals`)
-   - ✅ Durable client inventory policy is active in `conversation_security_client_inventories` via `Famichat.Chat.ConversationSecurityClientInventoryStore` + `Famichat.Chat.ConversationSecurityClientInventoryPolicy` (create/consume/replenish threshold; canonical boundary naming is in use during implementation rename)
+   - ✅ Durable client inventory policy is active in `conversation_security_client_inventories` via `Famichat.Chat.ConversationSecurityClientInventoryStore` + `Famichat.Chat.ConversationSecurityKeyPackagePolicy` (create/consume/replenish threshold; planned rename target: `Famichat.Chat.ConversationSecurityClientInventoryPolicy`)
    - ✅ Client inventory rotation policy is active (trigger-based stale rotation + scheduled batch rotation API)
    - ✅ Key-lifecycle telemetry for client inventory operations is active with aggregate-only metadata
+   - ✅ Rejoin/state-loss recovery durability is active via `ConversationSecurityRecoveryLifecycle` + `conversation_security_recoveries` (idempotent recovery refs and fail-closed recovery semantics)
    - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage remains incomplete (deeper payload/epoch semantics)
-   - ⚠️ Remaining key lifecycle hardening (rejoin persistence + revocation strategy) is not complete
+   - ⚠️ Remaining key lifecycle hardening (revocation strategy + device/user removal semantics) is not complete
 2. ⚠️ **Operational Confidence Gaps** - quality visibility is incomplete
    - Live messaging QA is now productized with first-class commands and artifacted matrix output:
      - `cd backend && ./run qa:messaging:preflight`
@@ -412,7 +413,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
   - Adversarial tests cover malformed ciphertext, cross-group misuse, replay rejection, and telemetry redaction behavior.
 - **What's Missing**:
   - Durable MLS group/epoch/pending-commit persistence and crash/restart recovery.
-  - Remaining key lifecycle hardening (rejoin persistence + revocation strategy).
+  - Remaining key lifecycle hardening (revocation strategy + device/user removal semantics).
   - End-to-end client-facing flows beyond the current backend vertical slice.
 - **Planned**: Sprint 9 hardening + operational rollout gates.
 - **Effort**: ~2-3 weeks for durability/lifecycle hardening and adversarial matrix expansion.
@@ -541,7 +542,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
    - ✅ Fail-closed runtime gating and adversarial baseline tests are in place
    - ✅ Durable client inventory persistence policy is implemented (create/consume/replenish threshold)
    - ❌ Durable state persistence/recovery across restarts is not complete
-   - ❌ Remaining key lifecycle hardening (rejoin persistence + revocation strategy) is not complete
+   - ❌ Remaining key lifecycle hardening (revocation strategy + device/user removal semantics) is not complete
    - **Action**: Sprint 9 hardening track (state persistence + lifecycle + adversarial expansion)
 
 3. **Repo-wide Lint/Static Baseline Debt** 🚨
@@ -630,7 +631,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ### Short-term (Current P0 Track - Sprint 9)
 1. Expand adversarial lifecycle matrix (out-of-order merge/clear, staged payload tampering, and epoch-race stress) on top of `ConversationSecurityLifecycle`.
 2. Lock telemetry/metrics gates for app-message and group lifecycle operations.
-3. Complete key lifecycle hardening (rejoin durability/revocation strategy).
+3. Complete key lifecycle hardening (revocation strategy + device/user removal semantics).
 4. Define multi-node/state-distribution strategy for deterministic restart and cross-node recovery.
 
 ### Medium-term (Sprint 8 + Sprint 10-11)

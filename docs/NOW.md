@@ -32,9 +32,10 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
    - Replay cache export is bounded (max 256 entries) to cap snapshot growth under high-cardinality reads
    - Adversarial contract tests now also cover out-of-order merge/clear sequencing, tampered pending-commit metadata rejection, stage/merge epoch regression rejection, partial snapshot payload tampering rejection, and concurrent stage/merge race outcomes
    - Messaging contract tests continue to cover malformed ciphertext, cross-group ciphertext rejection, and replay rejection
-   - Durable client inventory policy is implemented via `ConversationSecurityClientInventoryStore` + `ConversationSecurityClientInventoryPolicy` (`create`, `consume`, `replenish threshold` behavior with optimistic locking; canonical boundary naming is active while implementation rename is in progress)
+   - Durable client inventory policy is implemented via `ConversationSecurityClientInventoryStore` + `ConversationSecurityKeyPackagePolicy` (`create`, `consume`, `replenish threshold` behavior with optimistic locking; planned rename target remains `ConversationSecurityClientInventoryPolicy`)
    - Client inventory rotation policy is active with trigger-based stale rotation on canonical paths and scheduled batch rotation APIs (`rotate_stale_inventory/2`, `rotate_stale_inventories/1`)
    - Client-inventory lifecycle telemetry events are emitted for ensure/consume/rotation with aggregate counts only (no inventory payload leakage)
+   - Rejoin/state-loss recovery durability is implemented via `ConversationSecurityRecoveryLifecycle` + `conversation_security_recoveries` (idempotent recovery refs, fail-closed `:recovery_required` semantics, deterministic recovery tests)
 6. Messaging QA is now productized behind first-class run commands:
    - `cd backend && ./run qa:messaging:preflight` (includes migration preflight gate)
    - `cd backend && ./run qa:messaging:fast` (live matrix + WS/HTTP parity + timing artifacts)
@@ -43,7 +44,7 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 
 ## What is still not done
 
-1. Key lifecycle and identity binding are still incomplete for production trust posture (rejoin recovery durability and revocation strategy remain open), although client-inventory durability, rotation policy, and lifecycle telemetry are now in place.
+1. Key lifecycle and identity binding are still incomplete for production trust posture (revocation strategy remains open), while client-inventory durability/rotation/telemetry and rejoin recovery durability are now in place.
 2. Commit/update/add/remove lifecycle handling needs deeper OpenMLS-backed semantics (pending-commit payload integrity and epoch transition assertions under churn).
 3. Multi-node/state-distribution strategy is still undefined for strict cross-node consistency and restart behavior.
 4. Client integration documentation is still fragmented (the canonical operator workflow is now published).
@@ -64,7 +65,7 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 ## Top 3 next tasks (highest ROI)
 
 1. Complete deeper OpenMLS lifecycle semantics for commit/update/add/remove (payload integrity constraints and epoch transition assertions under churn).
-2. Complete remaining key lifecycle hardening (rejoin persistence and revocation strategy).
+2. Complete remaining key lifecycle hardening (revocation strategy and device/user removal semantics).
 3. Wire the new QA fast/deep command path into CI required checks (PR fast + nightly deep) and keep lint/static baseline triage separate.
 
 ## Deferred TODO (Do Not Lose)

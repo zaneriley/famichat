@@ -76,6 +76,16 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
     assert fetch(merge_payload, "merged") == "true"
   end
 
+  test "create_application_message fails closed when group state is missing" do
+    assert {:error, :storage_inconsistent, details} =
+             MLS.create_application_message(%{
+               group_id: "group-nif-missing-state",
+               body: "hello"
+             })
+
+    assert fetch(details, "reason") == "missing_group_state"
+  end
+
   test "lifecycle operation aliases return ok and include operation labels" do
     for operation <- [
           &MLS.mls_commit/1,

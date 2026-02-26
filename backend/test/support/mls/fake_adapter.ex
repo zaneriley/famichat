@@ -104,11 +104,24 @@ defmodule Famichat.TestSupport.MLS.FakeAdapter do
 
   defp success(:join_from_welcome, params) do
     token = fetch_param(params, :rejoin_token) || "welcome-token"
+    group_id = fetch_param(params, :group_id) || "group:#{token}"
+
+    sender_storage = Base.encode64("sender-storage:#{token}")
+    recipient_storage = Base.encode64("recipient-storage:#{token}")
+    sender_signer = Base.encode64("sender-signer:#{token}")
+    recipient_signer = Base.encode64("recipient-signer:#{token}")
 
     {:ok,
      %{
+       group_id: group_id,
        group_state_ref: "state:#{token}",
-       audit_id: "audit:#{token}"
+       audit_id: "audit:#{token}",
+       epoch: 1,
+       session_sender_storage: sender_storage,
+       session_recipient_storage: recipient_storage,
+       session_sender_signer: sender_signer,
+       session_recipient_signer: recipient_signer,
+       session_cache: ""
      }}
   end
 

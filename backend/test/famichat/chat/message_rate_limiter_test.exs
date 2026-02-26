@@ -31,18 +31,38 @@ defmodule Famichat.Chat.MessageRateLimiterTest do
     assert retry_in > 0
 
     assert {:error, {:rate_limited, retry_in}} =
-             MessageRateLimiter.check(%{"sender_id" => "", "conversation_id" => "c1"}, "device-1")
+             MessageRateLimiter.check(
+               %{"sender_id" => "", "conversation_id" => "c1"},
+               "device-1"
+             )
 
     assert retry_in > 0
-    assert {:error, {:rate_limited, _retry_in}} = MessageRateLimiter.check(:not_a_map, "device-1")
+
+    assert {:error, {:rate_limited, _retry_in}} =
+             MessageRateLimiter.check(:not_a_map, "device-1")
   end
 
   test "applies sustained limits across devices for the same sender" do
     Application.put_env(:famichat, MessageRateLimiter,
       windows: [
-        %{bucket: :msg_device_burst, key: [:device_id], limit: 100, interval: 60},
-        %{bucket: :msg_device_sustained, key: [:device_id], limit: 100, interval: 60},
-        %{bucket: :msg_user_sustained, key: [:sender_id], limit: 3, interval: 60}
+        %{
+          bucket: :msg_device_burst,
+          key: [:device_id],
+          limit: 100,
+          interval: 60
+        },
+        %{
+          bucket: :msg_device_sustained,
+          key: [:device_id],
+          limit: 100,
+          interval: 60
+        },
+        %{
+          bucket: :msg_user_sustained,
+          key: [:sender_id],
+          limit: 3,
+          interval: 60
+        }
       ]
     )
 

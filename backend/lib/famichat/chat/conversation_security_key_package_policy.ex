@@ -3,7 +3,7 @@ defmodule Famichat.Chat.ConversationSecurityKeyPackagePolicy do
   Chat-domain policy for key-package inventory creation, consumption, and replenishment.
   """
   alias Famichat.Chat.ConversationSecurityClientInventoryStore
-  alias Famichat.Crypto.MLS
+  alias Famichat.Chat.ConversationSecurityKeyPackagePolicy.KeyPackageFactory
 
   @max_client_id_length 128
   @default_protocol "mls"
@@ -29,6 +29,8 @@ defmodule Famichat.Chat.ConversationSecurityKeyPackagePolicy do
           target_count: pos_integer(),
           rotation_interval_seconds: pos_integer()
         ]
+
+  # Public API
 
   @spec ensure_inventory(String.t(), policy_options()) ::
           {:ok, map()} | {:error, atom(), map()}
@@ -114,6 +116,8 @@ defmodule Famichat.Chat.ConversationSecurityKeyPackagePolicy do
        operation: :rotate_stale_inventories
      }}
   end
+
+  # Policy Input Normalization and Validation
 
   defp normalize_policy(client_id, opts)
        when is_binary(client_id) and byte_size(client_id) > 0 and is_list(opts) do
@@ -243,6 +247,8 @@ defmodule Famichat.Chat.ConversationSecurityKeyPackagePolicy do
          %{reason: :invalid_batch_limit, operation: :rotate_stale_inventories}}
     end
   end
+
+  # Inventory Lifecycle
 
   defp ensure_inventory_once(policy) do
     case ConversationSecurityClientInventoryStore.load(policy.client_id) do
@@ -501,6 +507,8 @@ defmodule Famichat.Chat.ConversationSecurityKeyPackagePolicy do
     end
   end
 
+  # Batch Rotation
+
   defp rotate_client_ids(client_ids, opts) when is_list(client_ids) do
     summary =
       Enum.reduce(client_ids, initial_rotation_summary(), fn client_id, acc ->
@@ -576,6 +584,8 @@ defmodule Famichat.Chat.ConversationSecurityKeyPackagePolicy do
     %{summary | errors: [summarized_error | summary.errors]}
   end
 
+  # Inventory Persistence Helpers
+
   defp persist_remaining_inventory(
          inventory,
          remaining_key_packages,
@@ -613,96 +623,13 @@ defmodule Famichat.Chat.ConversationSecurityKeyPackagePolicy do
     end
   end
 
-  defp generate_key_packages(_client_id, count) when count <= 0, do: {:ok, []}
+  # Key Package Generation
 
   defp generate_key_packages(client_id, count) do
-    1..count
-    |> Enum.reduce_while({:ok, [], MapSet.new()}, fn _index, {:ok, acc, refs} ->
-      params = %{client_id: client_id}
-
-      reduce_generated_key_package(
-        MLS.create_key_package(params),
-        client_id,
-        acc,
-        refs
-      )
-    end)
-    |> case do
-      {:ok, generated, _refs} -> {:ok, Enum.reverse(generated)}
-      other -> other
-    end
+    KeyPackageFactory.generate_key_packages(client_id, count)
   end
 
-  defp reduce_generated_key_package(
-         {:ok, key_package_payload},
-         client_id,
-         acc,
-         refs
-       )
-       when is_map(key_package_payload) do
-    with {:ok, normalized_payload, key_package_ref} <-
-           normalize_generated_key_package(key_package_payload, client_id),
-         :ok <- ensure_unique_key_package_ref(refs, key_package_ref) do
-      {:cont,
-       {:ok, [normalized_payload | acc], MapSet.put(refs, key_package_ref)}}
-    else
-      {:error, code, details} ->
-        {:halt, {:error, code, details}}
-    end
-  end
-
-  defp reduce_generated_key_package(
-         {:ok, _invalid_payload},
-         _client_id,
-         _acc,
-         _refs
-       ) do
-    {:halt,
-     {:error, :storage_inconsistent,
-      %{
-        reason: :invalid_key_package_payload,
-        operation: :create_key_package
-      }}}
-  end
-
-  defp reduce_generated_key_package(
-         {:error, code, details},
-         _client_id,
-         _acc,
-         _refs
-       ) do
-    {:halt, {:error, code, details}}
-  end
-
-  defp ensure_unique_key_package_ref(refs, key_package_ref) do
-    if MapSet.member?(refs, key_package_ref) do
-      {:error, :storage_inconsistent,
-       %{
-         reason: :duplicate_key_package_ref,
-         operation: :create_key_package
-       }}
-    else
-      :ok
-    end
-  end
-
-  defp normalize_generated_key_package(key_package_payload, client_id) do
-    key_package_ref =
-      Map.get(key_package_payload, "key_package_ref") ||
-        Map.get(key_package_payload, :key_package_ref)
-
-    if is_binary(key_package_ref) and byte_size(key_package_ref) > 0 do
-      normalized_payload =
-        key_package_payload
-        |> Map.put("client_id", client_id)
-        |> Map.put("key_package_ref", key_package_ref)
-
-      {:ok, normalized_payload, key_package_ref}
-    else
-      {:error, :storage_inconsistent,
-       %{reason: :invalid_key_package_payload, operation: :create_key_package}}
-    end
-  end
+  # Telemetry
 
   defp capture_policy_result(event, client_id, fun) when is_function(fun, 0) do
     start_time = System.monotonic_time()
@@ -783,6 +710,8 @@ defmodule Famichat.Chat.ConversationSecurityKeyPackagePolicy do
   end
 
   defp telemetry_client_ref(_client_id), do: nil
+
+  # Retry
 
   defp with_stale_retry(fun, retries_left, attempt \\ 0)
 

@@ -1,219 +1,367 @@
-# IA coding styleguide
+
+
+
+Here is a critique of your current `AGENTS.md`, followed by a refactored version that strips out the bureaucratic determinism and injects the "investigator" philosophy.
+
+### The Critique: Where the Current Doc Traps the LLM
+
+Your current `AGENTS.md` starts with excellent, standard software engineering principles (Sections 1–7). However, starting around Section 8, it begins to slip into the exact "bureaucratic/deterministic" trap we discussed:
+
+1. **Section 10.4 (Agent Bug-Bash Deliverables):** *“Agents must output: Invariant checklist, Scenario matrix executed, Failing/expected visibility table.”* 
+   * **The Trap:** You are forcing the LLM to generate paperwork. Instead of actually fixing or verifying a bug, the LLM will spend all its compute trying to format a Markdown table to please this rule. It prioritizes the *document* over the *reality*.
+2. **Section 11.3 (Decision heuristic):** *“Score each proposed change on three axes (0-3 each)... Interpretation: 0-3 total: normal PR, 4-5 total: require explicit rollback test...”*
+   * **The Trap:** This is peak premature formalization. An LLM is terrible at arbitrary numerical scoring; it will just hallucinate the numbers (e.g., give it a "3") to justify whatever it already decided to do. It turns engineering judgment into a fake math equation.
+3. **Overuse of "Non-Negotiable" / "Prohibited":** While good for humans, yelling at an LLM with absolute constraints often makes it defensive, causing it to over-index on edge cases and write bloated, defensive code just to ensure it didn't violate a "prohibited" rule.
+
+### The Fix: From Bureaucrat to Investigator
+
+We need to rewrite the agent-specific sections (8-11) to focus on **evidence over paperwork**. 
+* Instead of asking for a "scenario matrix," ask for "raw log output proving the invariant holds."
+* Instead of a "0-3 scoring system," give it a qualitative heuristic: "Does this change the public contract? If yes, stop and ask."
+
+---
+
+Here is the refactored, evergreen `AGENTS.md`:
+
+# IA Coding Styleguide & Agent Operating Principles
+
 Our code must read like a description of the business domain, not just a series of technical operations. We optimize for the developer reading the code six months from now who needs to understand *why* something is happening, not just *what* is happening.
 
-## 2. Naming Conventions
-### 2.1. Semantic Precision
-Names must accurately reflect the entity's role, state, or intent within the business domain.
-*   **Avoid Mechanism-Coupled Names:** Do not name states after the mechanism used to resolve them.
-    *   *Bad:* `passkey_due_at` (couples state to a specific solution).
-    *   *Good:* `enrollment_required_since` (describes the account state).
-*   **Subject-Verb Agreement:** Function names must accurately reflect their subject.
-    *   *Bad:* `can_trust_device?(user)` (asks if a device can be trusted, takes a user).
-    *   *Good:* `policy_allows_remembering?(user)` (asks if the user policy allows remembering).
+## 1. Agent Operating Principles: Navigating Ambiguity
+When an LLM or agent interacts with this codebase, it must adhere to the following empirical philosophy:
+* **Resist Premature Formalization:** Never invent formal methodologies, new acronyms, rigid checklists, or fake scoring systems (e.g., "calculating risk scores"). Tolerate unstructured messes.
+* **Observe Before You Organize:** Start by looking at raw, unparsed reality (raw test output, plain logs, rustc errors). Read the system's behavior like a narrative. Do not generate a table or matrix until you have pointed to the raw evidence.
+* **Earn Your Abstractions:** Abstraction is a last resort. Do not build frameworks, design taxonomies, or propose structural schemas until you have manually observed a recurring pattern in the raw codebase.
+* **Focus on the "Why", Ignore the Wrapper:** When tracing a system, bypass the boilerplate. Find the exact, specific moment a decision is actually made. Care about the causal logic, not the envelope it was delivered in.
+* **Describe, Don't Prescribe:** Describe what is actually happening in the current state using plain English before you prescribe what the future state should look like.
 
-### 2.2. Intent vs. Outcome
-Distinguish between what a caller *wants* and what the system *decides*.
-*   **Intent Parameters:** Use names indicating a request, not a command, when policy might intervene (e.g., `want_remember?`, `opts[:remember]`).
-*   **Outcome Variables:** Use names reflecting the final decision (e.g., `should_remember?`, `is_trusted`).
+## 2. Naming Conventions
+* **Semantic Precision:** Names must accurately reflect the entity's role, state, or intent. Avoid mechanism-coupled names (e.g., prefer `enrollment_required_since` over `passkey_due_at`).
+* **Subject-Verb Agreement:** Function names must accurately reflect their subject (e.g., prefer `policy_allows_remembering?(user)` over `can_trust_device?(user)`).
+* **Intent vs. Outcome:** Distinguish between what a caller *wants* (e.g., `opts[:remember]`) and what the system *decides* (e.g., `should_remember?`).
 
 ## 3. Organization & Structure
-### 3.1. The Context Boundary
-*   **Public vs. Private:** Context modules (e.g., `Famichat.Accounts`) are the *only* public API for their domain.
-*   **Cross-Context Communication:** Contexts must not directly query another context's schemas. They must use the other context's public API.
-*   **Policy vs. Mechanism:**
-    *   **Policy** (rules deciding *if* something can happen) belongs at the top level of the Context function.
-    *   **Mechanism** (db writes, hashing) belongs in private helpers or dedicated internal modules.
-
-### 3.2. Function Signatures & Composition
-*   **"Mystery Meat" Arguments:** Avoid functions taking multiple bare boolean arguments. Use keyword lists or options maps.
-    *   *Bad:* `start_session(user, device_id, ua, ip, true, false)`
-    *   *Good:* `start_session(user, device_info, remember_device?: true, force: false)`
-*   **Pipeline Clarity:** Use pipelines (`|>`) for data transformations. Use `with` blocks for sequences of operations that might fail. Do not mix them arbitrarily.
+* **The Context Boundary:** Context modules (e.g., `Famichat.Accounts`) are the *only* public API for their domain. Do not bypass them to query schemas directly.
+* **Policy vs. Mechanism:** Policy (rules deciding *if* something can happen) belongs at the top level. Mechanism (DB writes, hashing) belongs in private helpers.
+* **Function Signatures:** Avoid "mystery meat" boolean arguments. Use keyword lists or option maps.
 
 ## 4. Error Handling & Data Flow
-### 4.1. Context API Contracts
-*   **Standard Returns:** Public context functions must return standard tagged tuples: `{:ok, result}` or `{:error, reason}`.
-*   **Error Reasons:**
-    *   Use **atoms** for expected business failures (e.g., `{:error, :insufficient_privileges}`).
-    *   Use **Ecto.Changeset** for data validation failures.
-*   **Exceptions:** Only raise exceptions for truly exceptional, unrecoverable system states (e.g., missing configuration, database connection loss).
-
-### 4.2. Data Boundaries
-*   **Structs In, Structs Out:** Prefer passing full structs to context functions rather than raw IDs when the entity is already known. This reduces redundant DB lookups and clarifies intent.
-*   **Schema vs. Structs:** Use Ecto Schemas only when data is persisted to the DB. For complex ephemeral state, use `embedded_schema` or typed structs.
+* **Standard Returns:** Public context functions must return standard tagged tuples: `{:ok, result}` or `{:error, reason}`.
+* **Fail Loud:** Only raise exceptions for truly exceptional, unrecoverable system states. Do not swallow errors behind broad rescue paths. If it fails, let the developer/agent see the real error.
+* **Data Boundaries:** Prefer passing full structs to context functions rather than raw IDs to reduce redundant DB lookups. Use Ecto Schemas only for DB persistence.
 
 ## 5. Explicit State Management
-*   **State Transitions:** Significant state changes must be explicit, named operations, not inline side-effects.
-    *   *Good:* `{:ok, user} <- enter_enrollment_required_state(user)`
-*   **Auditable Side-Effects:** Major side-effects (revoking devices, wiping credentials) must be their own clearly named functions, called explicitly in the transaction.
+* **State Transitions:** Significant state changes must be explicit, named operations (e.g., `{:ok, user} <- enter_enrollment_required_state(user)`).
+* **Auditable Side-Effects:** Major side-effects (revoking devices) must be explicitly named functions called within the transaction.
 
-## 6. Developer Experience (DX)
-*   **Greppable Code:** Favor full names over abbreviations. Ensure unique domain concepts have unique names.
-*   **Guardrails:** APIs should be hard to misuse. Enforce pre-conditions with guards or pattern matching.
-*   **Telemetry:** Business-critical operations must emit telemetry. The event name and metadata are part of that function's public API.
+## 6. Developer & Agent Experience (DX)
+* **Greppable Code:** Favor full names over abbreviations.
+* **Single Path Principle:** There are no "LLM-only" or "Test-only" execution paths. Agents, frontends, and CLIs must exercise the exact same domain services and authorization boundaries. No silent fallbacks or agent-targeted mocks.
 
-## 7. Documentation
-*   **Domain Intent:** `@doc` should explain *what* a function does in business terms first, then technical details.
-    *   *Good:* "Starts a new session. Checks organizational policy before honoring the `:remember` option."
-*   **Doctests for Pure Logic:** Use doctests for complex, pure functions (parsers, policy checkers) as live documentation.
+## 7. Rust Toolchain: The Oracle Loop
+Rust changes must be proposed and validated in a tight loop where the compiler is the absolute source of truth.
+* **Lean on the Compiler:** Do not guess why Rust is failing. Run the tests/compiler and read the raw output. 
+* **The Verification Loop:** Iteration must rely on `./run rust:fmt`, `./run rust:clippy`, and `./run rust:test`. Use small diffs based entirely on the compiler's feedback.
+* **Safety Gates:** No new crates and no `unsafe` blocks without explicit rationale based on raw performance or FFI necessities. If `unsafe` is used, it must be accompanied by boundary tests.
 
-## 8. LLM Operability and Path Discipline
-We treat LLM-driven validation as a first-class engineering workflow. Agent-accessible paths must be clear, deterministic, fast, and aligned with production behavior.
+## 8. Messaging Invariants (Evidence Over Checklists)
+Messaging logic (chat/channels/controllers) is a high-risk surface. 
+* **Core Invariants:** `self` routing is actor-owned only. Message visibility must be strictly keyed by `(conversation, user, device)`.
+* **Proving the Invariant:** Do not generate abstract "scenario matrices" or "visibility tables" to prove your work. Instead, execute the tests for cross-user isolation and device-delivery, and provide the **raw execution trace** as your evidence. 
+* **Completion Standard:** A messaging change is done when the raw test output confirms that no client-controlled field can violate ownership boundaries.
 
-### 8.1. Single Path Principle (Non-Negotiable)
-*   **No LLM-Only Runtime Paths:** Do not introduce separate LLM execution paths, alternate logic branches, or agent-only code flows.
-*   **Shared Product Surface:** Frontend, API, CLI, and agent workflows must exercise the same domain services and authorization boundaries.
-*   **No Divergent Contracts:** Do not maintain parallel payload schemas or behavior for "test mode" vs. normal product mode unless explicitly required by environment safety.
+## 9. Ash Migration Playbook (Strangler Fig)
+We are migrating to Ash to improve domain clarity. The risk is partial migration with drifting contracts.
+* **The Core Strategy:** Keep external contracts stable, move ownership behind existing seams, cut over with parity evidence, and remove the legacy path only after soaking.
+* **Primary Seams:** Respect `Famichat.Auth`, `Famichat.Auth.Households`, and `backend/lib/famichat/accounts.ex`.
+* **Heuristic for Change:** Before making an Ash change, ask yourself: *Does this change the external HTTP/channel contract? Does it create a dual-write scenario? Is it easily reversible?* If the contract changes or it cannot be cleanly rolled back via a feature flag, stop and gather more evidence.
+* **What Good Looks Like:** You keep facade signatures stable (`{:ok, _}`), swap implementations behind an adapter boundary, and provide parity tests between the old and new paths. Don't touch the router unless you are building a net-new "island" of functionality.
 
-### 8.2. Explicit Anti-Patterns (Prohibited)
-*   **No LLM-Specific Mocks/Fixtures/Fallbacks:** Do not add agent-targeted mocks, fixtures, or silent fallback behavior that bypasses real system rules.
-*   **No Error Swallowing:** Do not hide failures behind broad rescue/default paths. Fail loud with actionable errors.
-*   **No Complexity Inflation:** Reject feature flags, branches, and helper layers whose primary effect is increasing error vectors or cyclomatic complexity without clear product value.
-
-### 8.3. Testability Requirements
-*   **Deterministic Playbooks:** Provide documented, repeatable runbooks for key flows (auth, subscribe, send, receive, authorization failures).
-*   **Toolable Interfaces:** Prefer stable CLI/API entry points that agents can execute directly for combinatorial state exploration.
-*   **Outcome-Focused Assertions:** Tests must validate externally observable outcomes and side effects, not implementation trivia.
-
-### 8.4. Review Standard
-Before merging, ask:
-1. Does this change preserve one shared production path?
-2. Can an agent execute and verify this through documented playbooks?
-3. Did we reduce or increase hidden branches, silent behavior, and vector count?
-
-## 9. Rust + LLM Toolchain Feedback Loop
-Rust changes must be proposed and validated in a tight loop where compiler, lints, and tests are the source of truth.
-
-### 9.1. Required Context for Rust Tasks
-Every Rust task must include:
-*   Target crate/workspace and relevant `Cargo.toml` section(s) (edition, features, dependencies).
-*   Rust toolchain constraints (MSRV/edition if set by the repo).
-*   Exact failing diagnostics or failing test output (not paraphrased).
-*   Explicit constraints (for example: no new crates, no `unsafe`, no API breakage).
-
-### 9.2. Oracle Loop (Default)
-For Rust work, run this loop before claiming completion:
-1. `./run rust:fmt`
-2. `./run rust:clippy`
-3. `./run rust:test`
-
-Use small diffs and iterate on real tool feedback. Do not jump to large rewrites.
-Equivalent fast path: `./run rust:check` (single container exec).
-Use `./run rust:lint` when only formatting/lint validation is needed.
-
-### 9.3. Read-Before-Write and Type Awareness
-*   Find and reuse existing patterns before adding new abstractions.
-*   Prefer type-aware navigation (rust-analyzer/LSP) when available over string matching.
-*   Explain ownership/lifetime tradeoffs explicitly when changing borrow behavior.
-
-### 9.4. Safety and Dependency Gates
-*   **No new crates without explicit approval** and rationale.
-*   **No `unsafe` without explicit approval**.
-*   Any `unsafe` introduction must include:
-    1. a written safety contract (invariants/assumptions),
-    2. focused boundary tests,
-    3. Miri validation (`./run rust:miri`) when supported.
-
-### 9.5. Completion Standard for Rust PRs
-Rust-related changes are not complete unless:
-1. `fmt`, `clippy`, and `test` loop is green.
-2. Failure modes are explicit (no silent fallback).
-3. Docs/playbooks are updated if commands, contracts, or behavior changed.
-
-## 10. Messaging Invariants and Bug-Bash Gates (Non-Negotiable)
-
-### 10.1 Product Invariants
-*   `self` routing is actor-owned only. Clients must not be able to target another user's `self`.
-*   Message visibility must be keyed by `(conversation, user, device)` semantics where applicable.
-*   Same-user different-tab/device behavior must be explicitly defined and tested.
-
-### 10.2 Required Test Matrix for Messaging Changes
-Any PR touching chat/channel/controller/live messaging logic must include or pass:
-*   Same user, same device/tab echo behavior.
-*   Same user, different tab/device delivery behavior.
-*   Different user isolation behavior for `self`.
-*   Unauthorized target/spoof attempts (topic-only and conversation-id paths).
-
-### 10.3 No Throwaway-Surface Confidence
-*   Manual test LiveViews are probes, not proof.
-*   Acceptance requires domain-level characterization tests and channel/controller assertions.
-
-### 10.4 Agent Bug-Bash Deliverables
-For messaging PRs, agents must output:
-*   Invariant checklist.
-*   Scenario matrix executed.
-*   Failing/expected visibility table.
-*   Exact commands run and results.
-
-### 10.5 Definition of Done for Messaging
-A messaging change is not complete unless:
-1. Invariants are asserted in tests.
-2. Multi-actor/multi-device scenarios are covered.
-3. No client-controlled field can violate ownership boundaries.
-
-## 11. Ash Migration Playbook (How/Why/Examples)
-
-### 11.1 Why this exists
-We are introducing Ash to improve domain clarity and delivery speed, but this codebase has security-critical auth/chat flows and active MLS hardening work.
-The failure mode is not "Ash is bad"; it is partial migration with unclear ownership, drifting contracts, and no fast rollback.
-This playbook exists to prevent that.
-
-### 11.2 Core strategy (non-discrete, but disciplined)
-1. Keep external contracts stable first.
-2. Move ownership behind existing seams second.
-3. Cut over gradually with parity evidence.
-4. Remove legacy path only after soak and explicit sign-off.
-
-In this repo, the primary seams are:
-- `Famichat.Auth` facade: `backend/lib/famichat/auth/auth.ex`
-- `Famichat.Auth.Households`: `backend/lib/famichat/auth/households.ex`
-- Legacy compatibility facade: `backend/lib/famichat/accounts.ex`
-
-### 11.3 Decision heuristic before any Ash change
-Score each proposed change on three axes (0-3 each):
-1. Contract risk: chance of changing HTTP/channel/facade behavior.
-2. State ownership risk: chance of two writers or split invariants.
-3. Reversibility risk: time/complexity to rollback.
-
-Interpretation:
-- 0-3 total: normal PR.
-- 4-5 total: require explicit rollback test and parity test.
-- 6-9 total: require ADR/RFC and staged rollout plan before coding.
-
-### 11.4 What good strangler looks like here
-A good strangler change in Famichat does all of this:
-1. Keeps facade signatures and tuple contracts stable (`{:ok, _}` / `{:error, _}`).
-2. Introduces an internal adapter boundary and swaps implementation behind it.
-3. Preserves one writer per invariant.
-4. Ships with a feature flag and rollback switch.
-5. Includes parity tests between old and new paths.
-
-A bad strangler change:
-1. Starts at router/controller/channel and leaks contract differences.
-2. Dual-writes indefinitely.
-3. Changes contract and ownership in one PR.
-4. Has no remove-by date for legacy path.
-
-### 11.5 Gray-zone rule (reality is not discrete)
-Cross-boundary edits are allowed when needed, but must satisfy all conditions:
-1. The boundary change is mechanical/plumbing, not behavior expansion.
-2. External contract is unchanged and pinned by tests.
-3. Rollback remains one-step (flag/config).
-4. PR description explains why this cross-boundary touch was necessary.
-
-If any one condition is false, stop and request design review.
+----
 
 
-### 11.7 Concrete example B (good): net-new Ash island
-Goal: build Layer-2 logistics features in Ash without destabilizing auth/chat core.
+#### 2.4. The three-layer token architecture (CRITICAL)
 
-Path:
-1. Add a new capability domain only for net-new endpoints.
-2. Add new authenticated routes in `backend/lib/famichat_web/router.ex` under `/api/v1/logistics/*`.
-3. Reuse existing bearer auth and membership checks via public auth APIs, not internal chat/session rewrites.
-4. Use additive-only DB tables/migrations for logistics.
-5. Keep auth/chat/channel paths untouched.
+**Critical:** All tokens exist in exactly one of three layers. Understanding which layer you're operating in prevents synonym pollution, generic naming, and maintains system integrity.
 
-Why this works:
-- No contract churn in critical existing paths.
-- Ash value is proven on isolated scope first.
+##### Layer 1: Reference Scale (Foundation Tokens)
+
+**Purpose:** Provide consistent, harmonious measurement values that serve as the foundation for all other tokens.
+
+**Creation Paths:**
+- **Generated from DNA:** Math-derived scales when mathematical relationships exist (spacing ratios, type scales, OKLCH parameters)
+- **Hand-authored in CSS:** Discrete choices without mathematical relationships (easing curves, pixel-perfect borders)
+
+**Naming Rules:**
+- Ordinal prefixes for scales: `--space-{n}xs/md/{n}xl`, `--fs-{n}xs/md/{n}xl`
+- Closed vocabulary (finite set from DNA or intentional authoring)
+- **NEVER used directly in component styles**
+- **NO synonyms tolerated:** Cannot create `--space-small` when `--space-1xs` exists
+
+**Examples:**
+```css
+/* Generated from DNA (spacing ratio, chroma curves) */
+--space-2xs: ...;           /* Generated: baseSize * ratio^-2 */
+--space-1xs: ...;           /* Generated: baseSize * ratio^-1 */
+--space-md: ...;            /* Generated: baseSize */
+--space-1xl: ...;           /* Generated: baseSize * ratio^1 */
+--space-2xl: ...;           /* Generated: baseSize * ratio^2 */
+
+--canvas-base-l: ...;       /* Generated: from chroma curve interpolation */
+--canvas-base-c: ...;       /* Generated: via color-engine.ts */
+--canvas-base-h: ...;       /* Generated: from hue anchors */
+
+/* Hand-authored in CSS (discrete choices, no math relationship) */
+--border-thin: 1px;         /* Hair stroke (always 1px) */
+--border-medium: 2px;       /* Standard border */
+--border-thick: 4px;        /* Emphasized border */
+
+--easing-standard: cubic-bezier(...);      /* Material standard */
+--easing-expressive: cubic-bezier(...);    /* Back easing */
+--easing-sharp: cubic-bezier(...);         /* Sharp acceleration */
+```
+
+**Why Two Creation Paths:**
+- Generate when values follow mathematical relationship (enables computation, maintains harmonic ratios)
+- Hand-author when values are discrete design choices (simpler to maintain than generating)
+- Both approaches produce Layer 1 tokens—the distinction is implementation detail, not architecture
+
+**Anti-Pattern: Creating Synonyms**
+```css
+/* ❌ WRONG: Synonym for existing reference scale */
+--space-small: ...;     /* Duplicates --space-1xs */
+--space-medium: ...;    /* Duplicates --space-md */
+--space-large: ...;     /* Duplicates --space-1xl */
+
+/* ✅ CORRECT: Use existing ordinal scale */
+--space-1xs: ...;
+--space-md: ...;
+--space-1xl: ...;
+```
+
+---
+
+##### Layer 2: Global Semantic (System-Wide Patterns)
+
+**Purpose:** Describe reusable system-wide usage patterns with clear semantic meaning tied to hierarchical context or usage domain.
+
+**Naming Mandate:** Must describe **hierarchical context** or **usage domain**, never aesthetic feelings or generic intensities.
+
+**Consumption Rule:** Must consume Layer 1 reference scale values.
+
+**Usage:** Can be used directly in component styles OR consumed by Layer 3 component tokens.
+
+**Examples:**
+```css
+/* ✅ CORRECT: Hierarchical scale of separation (semantic) */
+--gap-section: var(--space-2xl);     /* Major page sections: hero→features, features→footer */
+--gap-layout: var(--space-1xl);      /* Grid column gaps, structural divisions within sections */
+--gap-content: var(--space-md);      /* Paragraphs, prose blocks, content-level spacing */
+--gap-component: var(--space-1xs);   /* Inside components: card internals, tight vertical stacking */
+--gap-element: var(--space-2xs);     /* Inline pairs: icon+text, badge+label, avatar+name */
+--gap-outer: var(--gap-content);     /* Container edge padding (alias) */
+
+/* ✅ CORRECT: Intent System tokens (Canvas/Signal/Agency) */
+--canvas-base: oklch(var(--canvas-base-l) var(--canvas-base-c) var(--canvas-base-h));
+--signal-primary: oklch(...);        /* Primary content hierarchy */
+--agency-actionable: oklch(...);     /* Interactive, can receive input */
+
+/* ❌ WRONG: Vague aesthetic feelings (not semantic) */
+--gap-spacious: var(--space-...);    /* "Spacious" is perceptual, not hierarchical */
+--gap-comfortable: var(--space-...); /* "Comfortable" is a feeling, not semantic */
+--gap-tight: var(--space-...);       /* "Tight" is relative, not hierarchical */
+--padding-normal: var(--space-...);  /* "Normal" is meaningless without context */
+
+/* ❌ WRONG: Generic intensity scale */
+--spacing-base: var(--space-...);    /* "Base" spacing of what? For what use? */
+--spacing-subtle: var(--space-...);  /* "Subtle" doesn't describe usage */
+--spacing-emphasis: var(--space-...); /* "Emphasis" spacing? Makes no sense */
+```
+
+**The Semantic Test:** Can you point to the hierarchical context or usage domain in the UI without referencing the value?
+
+- ✅ `--gap-section` → Points to boundaries between major page regions (hero, features, footer)
+- ✅ `--gap-layout` → Points to grid columns, structural divisions within a section
+- ✅ `--gap-content` → Points to spacing between paragraphs, content blocks
+- ✅ `--gap-component` → Points to spacing inside buttons, cards, form elements
+- ✅ `--gap-element` → Points to icon+text pairs, badge+label combinations
+- ❌ `--gap-comfortable` → Cannot point to "comfortable"—it's a feeling, not a place
+- ❌ `--padding-normal` → "Normal" for what element? In what context? Unclear.
+
+**Real-World Example:**
+```css
+/* From _grid.css - Hierarchical scale of separation (largest to smallest) */
+:root {
+  /* Major page sections: hero→features, features→footer */
+  --gap-section: var(--space-2xl);
+
+  /* Grid column gaps, structural divisions within sections */
+  --gap-layout: var(--space-1xl);
+
+  /* Paragraphs, prose blocks, content-level spacing */
+  --gap-content: var(--space-md);
+
+  /* Inside components: card internals, tight vertical stacking */
+  --gap-component: var(--space-1xs);
+
+  /* Inline pairs: icon+text, badge+label, avatar+name */
+  --gap-element: var(--space-2xs);
+
+  /* Container edge padding (alias for semantic clarity) */
+  --gap-outer: var(--gap-content);
+}
+```
+
+**When to Extend Layer 2:**
+Layer 2 is extensible but requires governance:
+1. Survey existing patterns first (does `--gap-content` already cover this?)
+2. Identify genuine new pattern (not component-specific)
+3. Name with hierarchical/domain context (not aesthetic adjective)
+4. Document usage guidance (what it's for, when to use, what NOT to use it for)
+
+---
+
+##### Layer 3: Component Tokens (Component-Local DRY)
+
+**Purpose:** Component-scoped abstractions that enable variant overrides without knowing the source token.
+
+**Scope:** Component-local ONLY. Defined in `.component` selector, **NEVER** in `:root`.
+
+**Naming:** Must have component prefix: `--{component}-{property}`
+
+**Consumption:** Must consume Layer 2 (preferred) or Layer 1 (if no Layer 2 pattern exists).
+
+**Benefits:**
+- DRYs values within component definition
+- Enables variant overrides without touching base styles
+- Prevents global namespace pollution
+
+**Examples:**
+```css
+/* ✅ CORRECT: Component-scoped tokens */
+.composer {
+  /* Define component tokens (consuming Layer 2) */
+  --composer-button-padding: var(--gap-content);   /* Button padding */
+  --composer-gap: var(--gap-component);            /* Internal spacing */
+  --composer-border-radius: var(--rounded-md);     /* Corner radius */
+
+  /* Use component tokens in styles */
+  padding: var(--composer-button-padding);
+  gap: var(--composer-gap);
+  border-radius: var(--composer-border-radius);
+}
+
+/* Variant overrides */
+.composer--compact {
+  --composer-button-padding: var(--gap-component);  /* Override with different Layer 2 */
+  --composer-gap: var(--space-2xs);                 /* Direct Layer 1 if no pattern */
+}
+
+.composer--spacious {
+  --composer-button-padding: var(--gap-layout);     /* Override with different Layer 2 */
+}
+
+/* ❌ WRONG: Component token in global scope */
+:root {
+  --button-padding: var(--gap-content);   /* Pollutes global namespace */
+  --card-spacing: var(--gap-layout);      /* Conflicts with other components */
+}
+
+/* ❌ WRONG: No component prefix */
+.button {
+  --padding: var(--gap-content);   /* Generic name, could collide */
+  --gap: var(--space-1xs);         /* Too generic, unclear ownership */
+}
+
+/* ❌ WRONG: Using Layer 1 directly without Layer 3 abstraction */
+.button {
+  padding: var(--space-md);   /* What if button padding needs to change? */
+  gap: var(--space-1xs);      /* Have to find all usages to change */
+}
+```
+
+**Why Component Tokens Matter:**
+
+Without Layer 3:
+```css
+.button {
+  padding: var(--gap-content);
+  border-radius: var(--rounded-md);
+  gap: var(--space-1xs);
+}
+
+.button--small {
+  padding: var(--gap-component);      /* Have to know original was --gap-content */
+  border-radius: var(--rounded-sm);   /* Have to know original was --rounded-md */
+  gap: var(--space-2xs);              /* Have to know original was --space-1xs */
+}
+```
+
+With Layer 3:
+```css
+.button {
+  --button-padding: var(--gap-content);
+  --button-radius: var(--rounded-md);
+  --button-gap: var(--space-1xs);
+
+  padding: var(--button-padding);
+  border-radius: var(--button-radius);
+  gap: var(--button-gap);
+}
+
+.button--small {
+  --button-padding: var(--gap-component);   /* Just override the token */
+  /* Other properties inherited automatically */
+}
+```
+
+**When to Skip Layer 2:**
+
+Sometimes Layer 3 can consume Layer 1 directly if no Layer 2 pattern exists yet:
+
+```css
+.button {
+  --button-padding: var(--gap-content);    /* Preferred: via Layer 2 */
+  --button-icon-gap: var(--space-...);     /* Acceptable: direct Layer 1 */
+}
+```
+
+Direct Layer 1 usage is acceptable when:
+- No Layer 2 pattern exists for this specific use case
+- Pattern is component-specific (icon gap in buttons)
+- You document it with TODO if pattern might be reusable later
+
+---
+
+##### Layer Relationships Summary
+
+```
+LAYER 1: Reference Scale           LAYER 2: Global Semantic           LAYER 3: Component Tokens
+(Foundation)                       (System Patterns)                  (Local DRY)
+═════════════════════             ═════════════════════              ═════════════════════
+--space-1xs             →         --gap-component          →         .button {
+--space-md              →         --gap-content            →           --button-padding: gap-content
+--space-1xl             →         --gap-layout             →         }
+                                                           →
+--canvas-base-l         →         --canvas-base            →         Component styles
+--canvas-base-c         →         (reconstructed token)              use Layer 3
+--canvas-base-h         →
+
+Created: DNA or authored           Created: In _grid.css              Created: In .component
+Used by: Layer 2 only              Used by: Layer 3 or components     Used by: Component styles
+Never: Direct in components        Never: Component-specific          Never: In :root
+```
+
+**The Flow:**
+1. Layer 1 provides harmonious foundation values
+2. Layer 2 describes system-wide patterns (hierarchical contexts)
+3. Layer 3 creates component-local abstractions (enables variants)
+4. Components use Layer 3 tokens only
+
+**The Rules:**
+- Layer 1 → Layer 2 → Layer 3 → Component Styles
+- Cannot skip Layer 1 (all tokens must have foundation)
+- Can skip Layer 2 if no pattern exists (Layer 1 → Layer 3)
+- Cannot skip Layer 3 (components must use tokens, not direct values)
+
+---

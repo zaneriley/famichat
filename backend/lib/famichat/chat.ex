@@ -218,6 +218,7 @@ defmodule Famichat.Chat do
 
   alias Famichat.Chat.Conversation
   alias Famichat.Chat.ConversationSecurityKeyPackagePolicy
+  alias Famichat.Chat.ConversationSecurityRecoveryLifecycle
   alias Famichat.Chat.ConversationVisibilityService
 
   @doc """
@@ -313,5 +314,27 @@ defmodule Famichat.Chat do
           {:ok, map()} | {:error, atom(), map()}
   def rotate_stale_conversation_security_key_package_inventories(opts \\ []) do
     ConversationSecurityKeyPackagePolicy.rotate_stale_inventories(opts)
+  end
+
+  @doc """
+  Recovers durable conversation security state using rejoin material.
+
+  Recovery is idempotent per `{conversation_id, recovery_ref}`.
+  """
+  @spec recover_conversation_security_state(
+          Ecto.UUID.t(),
+          String.t(),
+          map()
+        ) :: {:ok, map()} | {:error, atom(), map()}
+  def recover_conversation_security_state(
+        conversation_id,
+        recovery_ref,
+        attrs \\ %{}
+      ) do
+    ConversationSecurityRecoveryLifecycle.recover_conversation_security_state(
+      conversation_id,
+      recovery_ref,
+      attrs
+    )
   end
 end

@@ -109,11 +109,6 @@ function docs:boundary-check {
     "\\bmessage security state\\b"
     "\\bMLSStateStore\\b"
     "\\bencryption policy\\b"
-    "\\bConversationSecurityKeyPackagePolicy\\b"
-    "\\bensure_conversation_security_key_packages\\b"
-    "\\bconsume_conversation_security_key_package\\b"
-    "\\brotate_stale_conversation_security_key_package_inventory\\b"
-    "\\brotate_stale_conversation_security_key_package_inventories\\b"
     "\\bkey[- ]package inventory policy\\b"
   )
 
@@ -123,11 +118,6 @@ function docs:boundary-check {
     "Use conversation security state for durable conversation-scoped security state."
     "Use Famichat.Chat.ConversationSecurityStateStore and keep protocol as data."
     "Use conversation security policy for chat-domain policy wording."
-    "Use Famichat.Chat.ConversationSecurityClientInventoryPolicy for client inventory lifecycle policy naming."
-    "Use ensure_conversation_security_client_inventory/2 at the Chat facade boundary."
-    "Use consume_conversation_security_client_inventory_entry/2 at the Chat facade boundary."
-    "Use rotate_stale_conversation_security_client_inventory/2 at the Chat facade boundary."
-    "Use rotate_stale_conversation_security_client_inventories/1 at the Chat facade boundary."
     "Use client inventory policy wording at Chat boundary docs; keep key_package terms scoped to MLS adapter/internal payload context."
   )
 

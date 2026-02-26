@@ -35,6 +35,13 @@ defmodule Famichat.Chat.MessageService do
   @mls_snapshot_envelope_format_key "session_snapshot_format"
   @mls_snapshot_envelope_format "vault_term_v1"
   @mls_state_protocol "mls"
+  @mls_recovery_required_reasons [
+    "missing_group_state",
+    "incomplete_session_snapshot",
+    "group_load_failed",
+    "deleted_key_material",
+    "state_decode_failed"
+  ]
 
   @doc """
   Pipeline-based message retrieval with structured error handling:
@@ -679,8 +686,21 @@ defmodule Famichat.Chat.MessageService do
               end
 
             {:error, code, details} ->
-              emit_mls_failure(:encrypt, code, details, state)
-              Map.put(state, :error, {:mls_encryption_failed, code, details})
+              {normalized_code, normalized_details} =
+                normalize_mls_error(code, details)
+
+              emit_mls_failure(
+                :encrypt,
+                normalized_code,
+                normalized_details,
+                state
+              )
+
+              Map.put(
+                state,
+                :error,
+                {:mls_encryption_failed, normalized_code, normalized_details}
+              )
           end
 
         {:error, code, details} ->
@@ -769,7 +789,12 @@ defmodule Famichat.Chat.MessageService do
                            end
 
                          {:error, code, details} ->
-                           {:halt, {:error, code, details, message}}
+                           {normalized_code, normalized_details} =
+                             normalize_mls_error(code, details)
+
+                           {:halt,
+                            {:error, normalized_code, normalized_details,
+                             message}}
                        end
                      end
                    ) do
@@ -964,6 +989,28 @@ defmodule Famichat.Chat.MessageService do
 
   defp map_state_store_error_code(:invalid_input), do: :storage_inconsistent
   defp map_state_store_error_code(code), do: code
+
+  defp normalize_mls_error(code, details) when is_map(details) do
+    reason = Map.get(details, :reason) || Map.get(details, "reason")
+
+    if code == :storage_inconsistent and recovery_required_reason?(reason) do
+      {:recovery_required, details}
+    else
+      {code, details}
+    end
+  end
+
+  defp normalize_mls_error(code, details), do: {code, details}
+
+  defp recovery_required_reason?(reason) when is_atom(reason) do
+    Atom.to_string(reason) in @mls_recovery_required_reasons
+  end
+
+  defp recovery_required_reason?(reason) when is_binary(reason) do
+    reason in @mls_recovery_required_reasons
+  end
+
+  defp recovery_required_reason?(_reason), do: false
 
   defp legacy_mls_snapshot_from_conversation_metadata(%Conversation{
          metadata: metadata

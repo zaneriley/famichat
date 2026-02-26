@@ -1,6 +1,6 @@
 # IA/DDD Boundary Guardrails
 
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-02-26
 **Authority Inputs**: [ia-lexicon.md](ia-lexicon.md), [ENCRYPTION.md](ENCRYPTION.md), [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Goal
@@ -12,6 +12,7 @@ Keep naming and ownership boundaries stable so implementation work does not drif
 1. `conversation`, `message`, `family` remain locked core entities.
 2. Durable messaging crypto state term: `conversation security state`.
 3. Chat-domain policy term: `conversation security policy`.
+4. Chat-domain client inventory term: `conversation security client inventory`.
 
 ## Ownership Boundary
 
@@ -25,12 +26,16 @@ Use:
 1. `Famichat.Chat.ConversationSecurityState`
 2. `Famichat.Chat.ConversationSecurityStateStore`
 3. `Famichat.Chat.ConversationSecurityPolicy`
+4. `conversation security client inventory policy` (domain wording)
+5. `Famichat.Chat.ConversationSecurityKeyPackagePolicy` as the current implementation name (planned rename target: `Famichat.Chat.ConversationSecurityClientInventoryPolicy`)
 
 Avoid in active docs/code:
 1. `ConversationEncryptionPolicy`
 2. `ConversationTypePolicy` for security-only behavior
 3. `message security state` for durable conversation state naming
 4. `MLSStateStore`
+5. introducing additional `key_package`-based Chat boundary names beyond the current legacy implementation module
+6. `key_package` in new Chat-facing module/function names (allowed in `Famichat.Crypto.MLS` and internal inventory payload terminology)
 
 ## Automated Drift Check
 

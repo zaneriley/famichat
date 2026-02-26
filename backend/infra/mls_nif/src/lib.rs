@@ -208,10 +208,42 @@ pub fn join_from_welcome(params: &Payload) -> MlsResult {
 
     match token {
         Some(token) => {
+            let group_id =
+                non_empty(params, "group_id").unwrap_or_else(|| format!("rejoin:{}", token));
+
+            let mut guard = group_sessions().lock().map_err(|_| {
+                MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
+            })?;
+
+            if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
+                if let Some(restored) =
+                    restore_group_session_from_snapshot(&group_id, params, operation)?
+                {
+                    guard.insert(group_id.clone(), restored);
+                } else if !guard.contains_key(&group_id) {
+                    let session = create_group_session(&group_id, DEFAULT_CIPHERSUITE)?;
+                    guard.insert(group_id.clone(), session);
+                }
+            }
+
+            let session = guard.get(&group_id).ok_or_else(|| {
+                MlsError::with_code(
+                    ErrorCode::StorageInconsistent,
+                    operation,
+                    "missing_group_state",
+                )
+            })?;
+
             let mut payload = Payload::new();
+            payload.insert("group_id".to_owned(), group_id);
             payload.insert("group_state_ref".to_owned(), format!("state:{}", token));
             payload.insert("audit_id".to_owned(), format!("audit:{}", token));
             payload.insert("status".to_owned(), "joined".to_owned());
+            payload.insert(
+                "epoch".to_owned(),
+                session.sender.group.epoch().as_u64().to_string(),
+            );
+            payload.extend(build_group_session_snapshot(session, operation)?);
             Ok(payload)
         }
         None => {
@@ -461,20 +493,11 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
             MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
         })?;
 
-        if has_complete_session_snapshot(params) {
+        if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
                 guard.insert(group_id.clone(), restored);
-            }
-        } else if !guard.contains_key(&group_id) {
-            if let Some(restored) =
-                restore_group_session_from_snapshot(&group_id, params, operation)?
-            {
-                guard.insert(group_id.clone(), restored);
-            } else {
-                let session = create_group_session(&group_id, DEFAULT_CIPHERSUITE)?;
-                guard.insert(group_id.clone(), session);
             }
         }
 
@@ -1490,6 +1513,15 @@ mod tests {
     fn application_message_round_trip_is_stable() {
         let group_id = unique_group_id("group-roundtrip");
 
+        let _group = create_group(&payload(&[
+            ("group_id", &group_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect("group must be created");
+
         let encrypted =
             create_application_message(&payload(&[("group_id", &group_id), ("body", "hello")]))
                 .expect("encryption success");
@@ -1527,6 +1559,25 @@ mod tests {
         assert_eq!(
             merge_error.details.get("reason"),
             Some(&"staged_commit_not_validated".to_owned())
+        );
+    }
+
+    #[test]
+    fn create_application_message_requires_existing_group_state() {
+        let group_id = unique_group_id("group-recovery-required");
+
+        let error =
+            create_application_message(&payload(&[("group_id", &group_id), ("body", "hello")]))
+                .expect_err("missing group state must fail closed");
+
+        assert_eq!(error.code, ErrorCode::StorageInconsistent);
+        assert_eq!(
+            error.details.get("reason"),
+            Some(&"missing_group_state".to_owned())
+        );
+        assert_eq!(
+            error.details.get("operation"),
+            Some(&"create_application_message".to_owned())
         );
     }
 

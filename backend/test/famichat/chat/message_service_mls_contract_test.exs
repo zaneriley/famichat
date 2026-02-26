@@ -3,6 +3,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
 
   alias Famichat.Chat.{
     ConversationSecurityState,
+    ConversationSecurityStateStore,
     ConversationService,
     Message,
     MessageService
@@ -57,6 +58,31 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     def export_ratchet_tree(_params), do: {:ok, %{}}
 
     def create_application_message(_params), do: {:ok, %{epoch: 1}}
+  end
+
+  defmodule MissingGroupStateAdapter do
+    @behaviour Famichat.Crypto.MLS.Adapter
+
+    def nif_version, do: {:ok, %{}}
+    def nif_health, do: {:ok, %{status: "ok"}}
+    def create_key_package(_params), do: {:ok, %{}}
+    def create_group(_params), do: {:ok, %{}}
+    def join_from_welcome(_params), do: {:ok, %{}}
+    def process_incoming(_params), do: {:ok, %{plaintext: "ok"}}
+    def commit_to_pending(_params), do: {:ok, %{}}
+    def mls_commit(_params), do: {:ok, %{}}
+    def mls_update(_params), do: {:ok, %{}}
+    def mls_add(_params), do: {:ok, %{}}
+    def mls_remove(_params), do: {:ok, %{}}
+    def merge_staged_commit(_params), do: {:ok, %{}}
+    def clear_pending_commit(_params), do: {:ok, %{}}
+    def export_group_info(_params), do: {:ok, %{}}
+    def export_ratchet_tree(_params), do: {:ok, %{}}
+
+    def create_application_message(_params) do
+      {:error, :storage_inconsistent,
+       %{reason: :missing_group_state, operation: :create_application_message}}
+    end
   end
 
   defmodule DecryptionFailAdapter do
@@ -272,6 +298,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
   test "real NIF adapter encrypts at rest and keeps read path idempotent",
        %{conversation: conversation, sender: sender} do
     Application.put_env(:famichat, :mls_adapter, Nif)
+    seed_real_nif_state!(conversation.id)
     plaintext = "roundtrip via openmls nif"
 
     assert {:ok, message} =
@@ -303,6 +330,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
   test "real NIF adapter persists encrypted snapshot in conversation_security_states",
        %{conversation: conversation, sender: sender} do
     Application.put_env(:famichat, :mls_adapter, Nif)
+    seed_real_nif_state!(conversation.id)
 
     assert {:ok, _message} =
              MessageService.send_message(
@@ -321,6 +349,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
   test "read path restores from persisted snapshot after runtime state reset",
        %{conversation: conversation, sender: sender} do
     Application.put_env(:famichat, :mls_adapter, Nif)
+    seed_real_nif_state!(conversation.id)
     plaintext = "restore-after-reset"
 
     assert {:ok, message} =
@@ -353,6 +382,7 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
   test "read path fails closed when persisted state ciphertext is tampered",
        %{conversation: conversation, sender: sender} do
     Application.put_env(:famichat, :mls_adapter, Nif)
+    seed_real_nif_state!(conversation.id)
 
     assert {:ok, message} =
              MessageService.send_message(
@@ -403,6 +433,20 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
              )
 
     assert details[:reason] == :missing_ciphertext
+    assert Repo.aggregate(Message, :count, :id) == before_count
+  end
+
+  test "send_message fails closed with recovery_required when MLS state is missing",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(:famichat, :mls_adapter, MissingGroupStateAdapter)
+    before_count = Repo.aggregate(Message, :count, :id)
+
+    assert {:error, {:mls_encryption_failed, :recovery_required, details}} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "requires-recovery")
+             )
+
+    assert details[:reason] == :missing_group_state
     assert Repo.aggregate(Message, :count, :id) == before_count
   end
 
@@ -599,6 +643,72 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
       "session_recipient_signer" => Base.encode64("recipient-signer"),
       "session_cache" => Base.encode64("cache")
     }
+  end
+
+  defp seed_real_nif_state!(conversation_id) do
+    {:ok, payload} =
+      Famichat.Crypto.MLS.create_group(%{
+        group_id: conversation_id,
+        ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"
+      })
+
+    {:ok, _state} =
+      ConversationSecurityStateStore.upsert(
+        conversation_id,
+        %{
+          protocol: "mls",
+          state: mls_snapshot_from_payload!(payload),
+          epoch: mls_epoch_from_payload(payload)
+        },
+        nil
+      )
+
+    :ok
+  end
+
+  defp mls_snapshot_from_payload!(payload) do
+    [
+      "session_sender_storage",
+      "session_recipient_storage",
+      "session_sender_signer",
+      "session_recipient_signer",
+      "session_cache"
+    ]
+    |> Enum.reduce(%{}, fn key, acc ->
+      value =
+        Map.get(payload, key) ||
+          Map.get(payload, String.to_atom(key))
+
+      case value do
+        binary when is_binary(binary) ->
+          if key == "session_cache" or binary != "" do
+            Map.put(acc, key, binary)
+          else
+            raise "missing MLS snapshot key: #{key}"
+          end
+
+        _ ->
+          raise "missing MLS snapshot key: #{key}"
+      end
+    end)
+  end
+
+  defp mls_epoch_from_payload(payload) do
+    value = Map.get(payload, "epoch") || Map.get(payload, :epoch)
+
+    cond do
+      is_integer(value) and value >= 0 ->
+        value
+
+      is_binary(value) ->
+        case Integer.parse(value) do
+          {parsed, ""} when parsed >= 0 -> parsed
+          _ -> 0
+        end
+
+      true ->
+        0
+    end
   end
 
   defp restore_env(key, nil), do: Application.delete_env(:famichat, key)

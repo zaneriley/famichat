@@ -1,6 +1,6 @@
 # Famichat - Encryption & Security Architecture
 
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-02-26
 
 ---
 
@@ -39,10 +39,11 @@ Historical Signal-era analysis is retained only in deprecated ADRs and is not an
 2. Engineering default term: `conversation security state record`.
 3. Protocol-qualified implementation term: `MLS protocol state` (when needed).
 4. Chat-domain policy term: `conversation security policy`.
-5. Canonical policy module boundary: `Famichat.Chat.ConversationSecurityPolicy` (`requires_encryption?/1` wording can remain as compatibility API surface).
-6. Durable state write ownership belongs to `Famichat.Chat`.
-7. `Famichat.Crypto.MLS` and Rust NIF (`backend/infra/mls_nif`) are adapter-only and do not own DB persistence tables.
-8. `Famichat.Chat.MessageService` remains the orchestrator that loads/persists through Chat-owned state boundaries.
+5. Canonical requirement-decision policy boundary: `Famichat.Chat.ConversationSecurityPolicy` (`requires_encryption?/1` wording can remain as compatibility API surface).
+6. Client-inventory lifecycle policy boundary (current implementation): `Famichat.Chat.ConversationSecurityKeyPackagePolicy` (planned rename target: `Famichat.Chat.ConversationSecurityClientInventoryPolicy`).
+7. Durable state write ownership belongs to `Famichat.Chat`.
+8. `Famichat.Crypto.MLS` and Rust NIF (`backend/infra/mls_nif`) are adapter-only and do not own DB persistence tables.
+9. `Famichat.Chat.MessageService` remains the orchestrator that loads/persists through Chat-owned state boundaries.
 
 ---
 

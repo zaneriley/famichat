@@ -449,7 +449,9 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.error_reason == :invalid_topic_format
     end
 
-    test "conceals malformed conversation id behind not_found", %{socket: socket} do
+    test "conceals malformed conversation id behind not_found", %{
+      socket: socket
+    } do
       topic = "message:direct:not-a-uuid"
 
       assert {:error, %{reason: "not_found"}} =
