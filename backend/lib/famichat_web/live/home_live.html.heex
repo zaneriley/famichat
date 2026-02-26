@@ -1,0 +1,166 @@
+<div
+  id="kitchen-table-chat"
+  class="ac-canvas flex flex-col h-[100dvh] w-full md:max-w-xl mx-auto relative overflow-hidden md:border-x-2 md:border-[var(--color-brown-200)] md:shadow-2xl"
+  phx-hook="MessageChannel"
+  data-conversation-type={@conversation_type}
+  data-conversation-id={@conversation_id}
+  data-user-id={@user_id}
+  data-auth-token={@auth_token || "guest-token"}
+>
+  <!-- Header -->
+  <header class="ac-header flex items-center justify-between p-md pb-lg z-10 shrink-0">
+    <div class="flex items-center gap-sm">
+      <button class="ac-icon-button" aria-label="Back">
+        <Heroicons.chevron_left solid class="h-6 w-6 text-[var(--text-base)]" />
+      </button>
+      <div class="flex flex-col">
+        <h1 class="text-lg font-bold text-[var(--text-base)] leading-none">
+          The Kitchen
+        </h1>
+        <span class="text-[var(--text-muted)] text-xs">(The Riley's)</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-sm">
+      <button
+        phx-click="connect-channel"
+        class={[
+          "ac-status-dot",
+          if(@channel_joined,
+            do: "bg-[var(--signal-success)] ac-pulse",
+            else: "bg-[var(--signal-error)]"
+          )
+        ]}
+        aria-label={
+          if @channel_joined,
+            do: "Connected. Click to disconnect.",
+            else: "Disconnected. Click to connect."
+        }
+      >
+      </button>
+    </div>
+  </header>
+  <!-- Messages Area -->
+  <div
+    id="messages-scroll-container"
+    class="flex-grow overflow-y-auto p-md flex flex-col gap-md pb-xl"
+    phx-update="stream"
+  >
+    <div id="messages-date-separator" class="text-center my-md">
+      <span class="ac-date-badge text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+        Today
+      </span>
+    </div>
+
+    <%= for {dom_id, message} <- @streams.messages do %>
+      <div
+        id={dom_id}
+        class={[
+          "flex flex-col max-w-[85%]",
+          if(message.outgoing,
+            do: "self-end items-end",
+            else: "self-start items-start"
+          )
+        ]}
+      >
+        <div class="flex items-baseline gap-2 mb-1">
+          <span class="text-[var(--text-base)] font-bold text-sm">
+            <%= message.sender_name %>
+          </span>
+          <span class="text-[var(--text-muted)] text-xs">
+            <%= Calendar.strftime(message.timestamp, "%H:%M") %>
+          </span>
+        </div>
+        <div class={[
+          "ac-chat-bubble",
+          if(message.outgoing,
+            do: "ac-chat-bubble-outgoing",
+            else: "ac-chat-bubble-incoming"
+          )
+        ]}>
+          <p class="text-[var(--text-base)] leading-relaxed">
+            <%= message.body %>
+          </p>
+        </div>
+      </div>
+    <% end %>
+  </div>
+  <!-- Input Area -->
+  <div class="ac-input-area p-md shrink-0 z-10 pb-xl">
+    <div class="flex items-center gap-sm relative">
+      <input
+        type="text"
+        id="message-input"
+        class="ac-text-input flex-grow"
+        placeholder="Type a message... (No rush)"
+        value={@current_message}
+        phx-keyup="update-message"
+        phx-debounce="100"
+        disabled={!@channel_joined}
+        onkeyup="if(event.key === 'Enter') { document.getElementById('send-message-button').click(); }"
+      />
+      <button
+        id="send-message-button"
+        class="ac-primary-button shrink-0"
+        phx-click="send-message"
+        disabled={!@channel_joined or String.trim(@current_message || "") == ""}
+      >
+        <Heroicons.paper_airplane solid class="h-5 w-5" />
+      </button>
+    </div>
+
+    <div class="flex items-center justify-between mt-sm px-1">
+      <div class="flex items-center gap-md">
+        <button class="ac-icon-button text-[var(--text-muted)] hover:text-[var(--signal-primary)] transition-colors">
+          <Heroicons.paper_clip solid class="h-6 w-6" />
+        </button>
+        <button class="ac-icon-button text-[var(--text-muted)] hover:text-[var(--signal-primary)] transition-colors">
+          <Heroicons.camera solid class="h-6 w-6" />
+        </button>
+        <button class="ac-icon-button text-[var(--text-muted)] hover:text-[var(--signal-primary)] transition-colors">
+          <Heroicons.microphone solid class="h-6 w-6" />
+        </button>
+      </div>
+      <button class="ac-icon-button text-[var(--signal-primary)] hover:scale-110 transition-transform">
+        <Heroicons.envelope_open solid class="h-6 w-6" />
+      </button>
+    </div>
+  </div>
+  <!-- Bottom Navigation Shell (Visual Only) -->
+  <nav class="ac-bottom-nav absolute bottom-0 left-0 right-0 h-16 flex items-center justify-around z-20 pb-[env(safe-area-inset-bottom,0)]">
+    <button class="flex flex-col items-center gap-1 text-[var(--text-muted)]">
+      <Heroicons.home solid class="h-6 w-6" />
+      <span class="text-[10px] font-bold">
+        Home
+      </span>
+    </button>
+    <button class="flex flex-col items-center gap-1 text-[var(--signal-primary)]">
+      <Heroicons.chat_bubble_left_right solid class="h-6 w-6" />
+      <span class="text-[10px] font-bold">
+        Chat
+      </span>
+    </button>
+    <button class="flex flex-col items-center gap-1 text-[var(--text-muted)]">
+      <Heroicons.calendar solid class="h-6 w-6" />
+      <span class="text-[10px] font-bold">
+        Cal
+      </span>
+    </button>
+    <button class="flex flex-col items-center gap-1 text-[var(--text-muted)]">
+      <Heroicons.cog_8_tooth solid class="h-6 w-6" />
+      <span class="text-[10px] font-bold">
+        Set
+      </span>
+    </button>
+  </nav>
+
+  <script>
+    const scrollToBottom = () => {
+      const container = document.getElementById('messages-scroll-container');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    };
+    window.addEventListener('phx:update', scrollToBottom);
+    document.addEventListener('DOMContentLoaded', scrollToBottom);
+  </script>
+</div>

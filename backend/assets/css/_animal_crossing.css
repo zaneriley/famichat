@@ -1,0 +1,157 @@
+/* Animal Crossing Aesthetic - Layer 1 & 2 Tokens */
+:root {
+  /* Layer 1: DNA */
+  --color-cream-50: #fdf6e3;
+  --color-cream-100: #f9e8b3;
+  --color-mint-400: #94c561;
+  --color-mint-500: #45bd7f;
+  --color-brown-100: rgba(130, 93, 41, 0.12);
+  --color-brown-200: #cea569;
+  --color-brown-500: #ae8c59;
+  --color-brown-700: #825d29;
+  --color-brown-900: #5c5c3d;
+  
+  --radius-xl: 24px;
+  --radius-pill: 9999px;
+  --border-thick: 3px;
+  
+  --easing-bouncy: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  
+  /* Existing spacing tokens mapped if needed, or direct values for MVP */
+  --gap-sm: 0.5rem;
+  --gap-md: 1rem;
+  --gap-xl: 2rem;
+
+  /* Layer 2: Semantic */
+  --canvas-base: var(--color-cream-50);
+  --surface-primary: #ffffff;
+  --signal-primary: var(--color-mint-500);
+  --signal-success: var(--color-mint-400);
+  --signal-error: #ff6b6b;
+  --text-base: var(--color-brown-900);
+  --text-muted: var(--color-brown-500);
+  --border-tactile: var(--border-thick) solid var(--color-brown-200);
+}
+
+/* Layer 3: Component Tokens (The Kitchen Table UI) */
+
+.ac-canvas {
+  background-color: var(--canvas-base);
+  color: var(--text-base);
+  font-family: 'Varela Round', 'Quicksand', system-ui, sans-serif;
+}
+
+.ac-header {
+  background-color: var(--color-cream-100);
+  border-bottom: var(--border-tactile);
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+  box-shadow: 0 4px 0 0 var(--color-brown-100);
+}
+
+.ac-icon-button {
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ac-primary-button {
+  background-color: var(--signal-primary);
+  color: white;
+  border-radius: var(--radius-pill);
+  padding: 0.75rem;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: transform 0.15s var(--easing-bouncy), box-shadow 0.15s ease;
+}
+
+.ac-primary-button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.ac-primary-button:disabled {
+  background-color: #e0dbc8;
+  color: #aba994;
+  box-shadow: none;
+}
+
+.ac-text-input {
+  background-color: var(--color-cream-50);
+  border: var(--border-tactile);
+  border-radius: var(--radius-pill);
+  padding: 0.75rem 1rem;
+  color: var(--text-base);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.ac-text-input:focus {
+  outline: none;
+  border-color: var(--signal-primary);
+}
+
+.ac-text-input::placeholder {
+  color: var(--text-muted);
+}
+
+.ac-chat-bubble {
+  padding: var(--gap-md);
+  border-radius: var(--radius-xl);
+  border: var(--border-tactile);
+  box-shadow: 0 4px 0 0 var(--color-brown-100);
+  animation: bounce-in 0.4s var(--easing-bouncy);
+}
+
+.ac-chat-bubble-incoming {
+  background-color: var(--surface-primary);
+  border-bottom-left-radius: 4px; /* classic chat tail */
+}
+
+.ac-chat-bubble-outgoing {
+  background-color: var(--color-cream-100);
+  border-bottom-right-radius: 4px;
+}
+
+.ac-date-badge {
+  background-color: var(--color-cream-100);
+  border: var(--border-tactile);
+  border-radius: var(--radius-pill);
+  padding: 0.25rem 0.75rem;
+  display: inline-block;
+}
+
+.ac-status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.ac-pulse {
+  animation: pulse-glow 2s infinite;
+}
+
+.ac-bottom-nav {
+  background-color: var(--color-cream-100);
+  border-top: var(--border-tactile);
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+  box-shadow: 0 -4px 0 0 var(--color-brown-100);
+}
+
+.ac-input-area {
+  background-color: var(--canvas-base);
+}
+
+@keyframes bounce-in {
+  0% { transform: scale(0.95); opacity: 0; }
+  50% { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(69, 189, 127, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(69, 189, 127, 0); }
+}

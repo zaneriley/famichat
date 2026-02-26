@@ -119,15 +119,6 @@ defmodule FamichatWeb.Router do
     get "/up/databases", UpController, :databases
   end
 
-  scope "/", FamichatWeb do
-    pipe_through [:browser, :locale]
-
-    # Temporarily point root to HelloController
-    get "/", HelloController, :index
-    # And locale route as well
-    get "/:locale", HelloController, :index
-  end
-
   scope "/:locale", FamichatWeb do
     pipe_through [:browser, :locale]
 
