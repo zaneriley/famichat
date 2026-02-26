@@ -13,6 +13,12 @@ defmodule Famichat.Chat.MessageRateLimiter do
       key: [:device_id],
       limit: 120,
       interval: 60
+    },
+    %{
+      bucket: :msg_user_sustained,
+      key: [:sender_id],
+      limit: 180,
+      interval: 60
     }
   ]
 
@@ -50,11 +56,11 @@ defmodule Famichat.Chat.MessageRateLimiter do
       ensure_table!()
       do_check(subject)
     else
-      :ok
+      deny_invalid_subject(subject)
     end
   end
 
-  def check(_message_params, _device_id), do: :ok
+  def check(_message_params, _device_id), do: deny_invalid_subject(%{})
 
   @doc false
   @spec window_limit(atom()) :: pos_integer() | nil
@@ -151,6 +157,26 @@ defmodule Famichat.Chat.MessageRateLimiter do
     end
   end
 
+  defp deny_invalid_subject(subject) do
+    :telemetry.execute(
+      [:famichat, :rate_limiter, :invalid_subject],
+      %{count: 1},
+      %{missing_fields: missing_subject_fields(subject)}
+    )
+
+    {:error, {:rate_limited, 1}}
+  end
+
+  defp missing_subject_fields(subject) do
+    [:sender_id, :conversation_id, :device_id]
+    |> Enum.reject(fn field ->
+      case Map.get(subject, field) do
+        value when is_binary(value) and value != "" -> true
+        _ -> false
+      end
+    end)
+  end
+
   @spec build_subject_key([atom()], map()) :: term()
   defp build_subject_key(key_fields, subject) do
     values =
@@ -169,9 +195,11 @@ defmodule Famichat.Chat.MessageRateLimiter do
          device_id: device_id,
          conversation_id: conversation_id
        }) do
-    is_binary(sender_id) and is_binary(device_id) and
-      is_binary(conversation_id)
+    present_identifier?(sender_id) and present_identifier?(device_id) and
+      present_identifier?(conversation_id)
   end
+
+  defp present_identifier?(value), do: is_binary(value) and value != ""
 
   @spec configured_windows() :: [window()]
   defp configured_windows do

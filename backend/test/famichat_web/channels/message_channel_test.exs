@@ -375,7 +375,7 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.error_reason == :unauthorized
     end
 
-    test "returns indistinguishable not_found for inaccessible existing, missing, and wrong-type topics",
+    test "returns indistinguishable not_found for inaccessible existing, missing, wrong-type, and malformed topics",
          %{family: family} do
       outsider = insert_user_with_id(Ecto.UUID.generate(), family.id)
       token = token_for_user(outsider)
@@ -402,11 +402,17 @@ defmodule FamichatWeb.MessageChannelTest do
           "message:group:#{@direct_conversation_id}"
         )
 
+      malformed_response =
+        outsider_socket
+        |> subscribe_and_join(MessageChannel, "message:direct:not-a-uuid")
+
       assert existing_response == {:error, %{reason: "not_found"}}
       assert unknown_response == {:error, %{reason: "not_found"}}
       assert wrong_type_response == {:error, %{reason: "not_found"}}
+      assert malformed_response == {:error, %{reason: "not_found"}}
       assert existing_response == unknown_response
       assert existing_response == wrong_type_response
+      assert existing_response == malformed_response
     end
 
     test "rejects join with invalid topic format", %{socket: socket} do
@@ -443,10 +449,10 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.error_reason == :invalid_topic_format
     end
 
-    test "rejects join when conversation id is invalid", %{socket: socket} do
+    test "conceals malformed conversation id behind not_found", %{socket: socket} do
       topic = "message:direct:not-a-uuid"
 
-      assert {:error, %{reason: "invalid_conversation_id"}} =
+      assert {:error, %{reason: "not_found"}} =
                subscribe_and_join(socket, MessageChannel, topic)
 
       assert_receive {:telemetry_event, [:famichat, :message_channel, :join],

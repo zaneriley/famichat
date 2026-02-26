@@ -620,8 +620,7 @@ defmodule FamichatWeb.MessageChannel do
   defp reason_to_string(:invalid_topic_format), do: "invalid_topic_format"
   defp reason_to_string(other), do: to_string(other)
 
-  defp public_join_reason(:invalid_conversation_id),
-    do: :invalid_conversation_id
+  defp public_join_reason(:invalid_conversation_id), do: :not_found
 
   defp public_join_reason(:conversation_not_found), do: :not_found
   defp public_join_reason(:invalid_conversation_type), do: :not_found
