@@ -291,4 +291,27 @@ defmodule Famichat.Chat do
   def consume_conversation_security_key_package(client_id, opts \\ []) do
     ConversationSecurityKeyPackagePolicy.consume_key_package(client_id, opts)
   end
+
+  @doc """
+  Rotates stale key packages for one client identity.
+  """
+  @spec rotate_stale_conversation_security_key_package_inventory(
+          String.t(),
+          keyword()
+        ) :: {:ok, map()} | {:error, atom(), map()}
+  def rotate_stale_conversation_security_key_package_inventory(
+        client_id,
+        opts \\ []
+      ) do
+    ConversationSecurityKeyPackagePolicy.rotate_stale_inventory(client_id, opts)
+  end
+
+  @doc """
+  Rotates stale key packages across client identities using policy defaults.
+  """
+  @spec rotate_stale_conversation_security_key_package_inventories(keyword()) ::
+          {:ok, map()} | {:error, atom(), map()}
+  def rotate_stale_conversation_security_key_package_inventories(opts \\ []) do
+    ConversationSecurityKeyPackagePolicy.rotate_stale_inventories(opts)
+  end
 end

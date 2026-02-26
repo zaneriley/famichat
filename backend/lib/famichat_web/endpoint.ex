@@ -20,7 +20,12 @@ defmodule FamichatWeb.Endpoint do
     action: {FamichatWeb.ContentWebhookController, :handle_webhook}
 
   socket "/socket", FamichatWeb.UserSocket,
-    websocket: true,
+    websocket: [
+      serializer: [
+        {Phoenix.Socket.V1.JSONSerializer, "~> 1.0.0"},
+        {FamichatWeb.Socket.SafeV2JSONSerializer, "~> 2.0.0"}
+      ]
+    ],
     longpoll: false
 
   socket "/live", Phoenix.LiveView.Socket,

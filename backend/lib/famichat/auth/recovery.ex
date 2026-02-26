@@ -40,7 +40,12 @@ defmodule Famichat.Auth.Recovery do
          {:ok, {resolved_scope, household_id}} <-
            resolve_scope(scope, admin, target),
          {:ok, %IssuedToken{raw: token, record: %UserToken{} = record}} <-
-           issue_recovery_token(admin.id, target.id, resolved_scope, household_id),
+           issue_recovery_token(
+             admin.id,
+             target.id,
+             resolved_scope,
+             household_id
+           ),
          :ok <-
            telemetry_issue(admin.id, target.id, resolved_scope, household_id),
          :ok <-
@@ -171,7 +176,8 @@ defmodule Famichat.Auth.Recovery do
     {:ok, users}
   end
 
-  defp enforce_scope(:global, _user, _household_id), do: {:error, :unsupported_scope}
+  defp enforce_scope(:global, _user, _household_id),
+    do: {:error, :unsupported_scope}
 
   defp decode_scope(payload) do
     scope =
@@ -215,6 +221,7 @@ defmodule Famichat.Auth.Recovery do
   defp resolve_scope(_other, _admin, _target), do: {:error, :invalid_scope}
 
   defp normalize_scope(scope) when is_atom(scope), do: scope
+
   defp normalize_scope(scope) when is_binary(scope) do
     scope
     |> String.trim()
@@ -225,7 +232,9 @@ defmodule Famichat.Auth.Recovery do
   end
 
   defp maybe_put_household(payload, nil), do: payload
-  defp maybe_put_household(payload, household_id), do: Map.put(payload, "household_id", household_id)
+
+  defp maybe_put_household(payload, household_id),
+    do: Map.put(payload, "household_id", household_id)
 
   defp household_admin?(admin_id, target_user_id) do
     query =
@@ -245,7 +254,9 @@ defmodule Famichat.Auth.Recovery do
     from(admin in HouseholdMembership,
       where: admin.user_id == ^admin_id and admin.role == :admin,
       join: target in HouseholdMembership,
-      on: target.family_id == admin.family_id and target.user_id == ^target_user_id,
+      on:
+        target.family_id == admin.family_id and
+          target.user_id == ^target_user_id,
       select: admin.family_id,
       distinct: true
     )

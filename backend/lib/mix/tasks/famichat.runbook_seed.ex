@@ -139,7 +139,9 @@ defmodule Mix.Tasks.Famichat.RunbookSeed do
     value
   end
 
-  defp format_invalid_option({option, _value}) when is_binary(option), do: option
+  defp format_invalid_option({option, _value}) when is_binary(option),
+    do: option
+
   defp format_invalid_option({option, _value}), do: inspect(option)
   defp format_invalid_option(option) when is_binary(option), do: option
   defp format_invalid_option(option), do: inspect(option)

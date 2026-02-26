@@ -10,7 +10,8 @@ This is the shared proof path for humans and LLMs.
 It validates:
 1. Bearer-authenticated sender can call `POST /api/test/broadcast`.
 2. A real channel subscriber receives `new_msg`.
-3. Non-happy paths (`401/403/422`) emit no channel message side effects.
+3. Sent messages are persisted and visible via `GET /api/v1/conversations/:id/messages`.
+4. Non-happy paths (`401/403/422`) emit no channel message side effects.
 
 ## Preconditions
 
@@ -31,6 +32,7 @@ This command executes:
 - channel subscribe
 - canonical broadcast send
 - message receive assertion
+- message history persistence assertion
 - non-happy no-broadcast assertions
 
 ## Seed data for manual drills
@@ -82,3 +84,7 @@ cd backend && /usr/bin/time -f "elapsed=%e s" ./run elixir:test:canonical-flow
 2. Contract tests (`200/401/403/422` + no-broadcast): `backend/test/famichat_web/controllers/message_test_controller_test.exs`
 3. End-to-end runbook integration test: `backend/test/famichat_web/integration/canonical_messaging_flow_test.exs`
 4. Seed task: `backend/lib/mix/tasks/famichat.runbook_seed.ex`
+
+## Related Runbook
+
+1. Messaging red-team + RCA + solution triage loop: `docs/runbooks/messaging-redteam-rca-solution-loop.md`

@@ -1,11 +1,12 @@
 # Famichat - Comprehensive Status Report
 
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-02-26
 **Sprint**: 9 (MLS E2EE Implementation)
 **Overall Progress**: 40% to MVP
 
 Terminology authority: [../ia-lexicon.md](../ia-lexicon.md)
 Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md)
+Sprint 9 P0 done-state checklist: [9.3-mls-definition-of-done.md](9.3-mls-definition-of-done.md)
 
 ---
 
@@ -33,8 +34,11 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
    - ✅ Optimistic lock-version conflict handling is active (`:stale_state` mapped fail-closed to `:storage_inconsistent`)
    - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`: stage/merge/clear pending commit with optimistic locking)
    - ✅ Send path now fails closed while pending commits are unresolved (`:pending_proposals`)
+   - ✅ Durable client key-package inventory policy is active in `conversation_security_client_inventories` via `Famichat.Chat.ConversationSecurityClientInventoryStore` + `Famichat.Chat.ConversationSecurityKeyPackagePolicy` (create/consume/replenish threshold)
+   - ✅ Key-package rotation policy is active (trigger-based stale rotation + scheduled batch rotation API)
+   - ✅ Key-lifecycle telemetry for key-package inventory operations is active with aggregate-only metadata
    - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage remains incomplete (deeper payload/epoch semantics)
-   - ❌ Key lifecycle hardening (rotation/rejoin persistence/revocation strategy) is not complete
+   - ⚠️ Remaining key lifecycle hardening (rejoin persistence + revocation strategy) is not complete
 2. ⚠️ **Operational Confidence Gaps** - quality visibility is incomplete
    - Test coverage snapshot is not yet captured
    - Repo-wide lint/static baseline debt is still unresolved
@@ -402,7 +406,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
   - Adversarial tests cover malformed ciphertext, cross-group misuse, replay rejection, and telemetry redaction behavior.
 - **What's Missing**:
   - Durable MLS group/epoch/pending-commit persistence and crash/restart recovery.
-  - Full key lifecycle hardening (rotation/rejoin persistence/revocation strategy).
+  - Remaining key lifecycle hardening (rejoin persistence + revocation strategy).
   - End-to-end client-facing flows beyond the current backend vertical slice.
 - **Planned**: Sprint 9 hardening + operational rollout gates.
 - **Effort**: ~2-3 weeks for durability/lifecycle hardening and adversarial matrix expansion.
@@ -529,8 +533,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 2. **MLS Durability + Lifecycle Hardening Not Complete** 🚨
    - ✅ OpenMLS + Rustler NIF vertical slice is implemented and tested
    - ✅ Fail-closed runtime gating and adversarial baseline tests are in place
+   - ✅ Durable key-package inventory persistence policy is implemented (create/consume/replenish threshold)
    - ❌ Durable state persistence/recovery across restarts is not complete
-   - ❌ Key lifecycle hardening (rotation/rejoin persistence/revocation) is not complete
+   - ❌ Remaining key lifecycle hardening (rejoin persistence + revocation strategy) is not complete
    - **Action**: Sprint 9 hardening track (state persistence + lifecycle + adversarial expansion)
 
 3. **Repo-wide Lint/Static Baseline Debt** 🚨
@@ -619,7 +624,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ### Short-term (Current P0 Track - Sprint 9)
 1. Expand adversarial lifecycle matrix (out-of-order merge/clear, staged payload tampering, and epoch-race stress) on top of `ConversationSecurityLifecycle`.
 2. Lock telemetry/metrics gates for app-message and group lifecycle operations.
-3. Complete key lifecycle hardening (rotation/rejoin durability/revocation strategy).
+3. Complete key lifecycle hardening (rejoin durability/revocation strategy).
 4. Define multi-node/state-distribution strategy for deterministic restart and cross-node recovery.
 
 ### Medium-term (Sprint 8 + Sprint 10-11)

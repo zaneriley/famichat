@@ -19,7 +19,8 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
 
     session = start_session(member)
 
-    {:ok, recovery_token, _record} = Recovery.issue_recovery(admin.id, member.id)
+    {:ok, recovery_token, _record} =
+      Recovery.issue_recovery(admin.id, member.id)
 
     events =
       TelemetryHelpers.capture([@redeem_event], fn ->
@@ -96,8 +97,12 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
           )
 
         refute is_nil(device.revoked_at)
+
         assert {:error, :revoked} =
-                 Sessions.refresh_session(session.device_id, session.refresh_token)
+                 Sessions.refresh_session(
+                   session.device_id,
+                   session.refresh_token
+                 )
 
         refreshed_user = Repo.get!(User, member.id)
         refute is_nil(refreshed_user.enrollment_required_since)
@@ -114,7 +119,8 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
           order_by: a.subject_id
       )
 
-    assert Enum.map(redeem_audits, & &1.subject_id) |> Enum.sort() == expected_ids
+    assert Enum.map(redeem_audits, & &1.subject_id) |> Enum.sort() ==
+             expected_ids
 
     Enum.each(redeem_audits, fn audit ->
       assert audit.household_id == family.id

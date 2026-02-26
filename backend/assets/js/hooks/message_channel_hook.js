@@ -113,6 +113,7 @@ const MessageChannelHook = {
           timestamp: new Date().toISOString(),
           outgoing: false,
           user_id: payload.user_id || "unknown",
+          device_id: payload.device_id || null,
           encrypted: payload.encryption_flag || false,
           message_id: messageId,
         });

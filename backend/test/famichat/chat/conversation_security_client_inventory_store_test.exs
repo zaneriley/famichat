@@ -177,6 +177,76 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStoreTest do
     assert details[:reason] == :invalid_key_packages_payload
   end
 
+  test "list_stale_client_ids returns only stale client inventories" do
+    assert {:ok, _} =
+             ConversationSecurityClientInventoryStore.upsert(
+               "client-stale-list",
+               %{
+                 key_packages: [
+                   %{"key_package_ref" => "kp:client-stale-list:1"}
+                 ],
+                 replenish_threshold: 1,
+                 target_count: 2
+               },
+               nil
+             )
+
+    assert {:ok, _} =
+             ConversationSecurityClientInventoryStore.upsert(
+               "client-fresh-list",
+               %{
+                 key_packages: [
+                   %{"key_package_ref" => "kp:client-fresh-list:1"}
+                 ],
+                 replenish_threshold: 1,
+                 target_count: 2
+               },
+               nil
+             )
+
+    stale_time = DateTime.add(DateTime.utc_now(:microsecond), -120, :second)
+    fresh_time = DateTime.utc_now(:microsecond)
+
+    {stale_count, _rows} =
+      Repo.update_all(
+        from(i in ConversationSecurityClientInventory,
+          where: i.client_id == "client-stale-list"
+        ),
+        set: [updated_at: stale_time]
+      )
+
+    {fresh_count, _rows} =
+      Repo.update_all(
+        from(i in ConversationSecurityClientInventory,
+          where: i.client_id == "client-fresh-list"
+        ),
+        set: [updated_at: fresh_time]
+      )
+
+    assert stale_count == 1
+    assert fresh_count == 1
+
+    cutoff = DateTime.add(DateTime.utc_now(:microsecond), -60, :second)
+
+    assert {:ok, stale_client_ids} =
+             ConversationSecurityClientInventoryStore.list_stale_client_ids(
+               cutoff,
+               10
+             )
+
+    assert stale_client_ids == ["client-stale-list"]
+  end
+
+  test "list_stale_client_ids rejects invalid input" do
+    assert {:error, :invalid_input, details} =
+             ConversationSecurityClientInventoryStore.list_stale_client_ids(
+               "not-a-datetime",
+               10
+             )
+
+    assert details[:reason] == :invalid_list_stale_client_ids_input
+  end
+
   test "load rejects oversized client_id input" do
     oversized_client_id = String.duplicate("a", 129)
 

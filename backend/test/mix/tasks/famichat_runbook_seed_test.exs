@@ -53,11 +53,13 @@ defmodule Mix.Tasks.Famichat.RunbookSeedTest do
   end
 
   test "rejects blank sender username" do
-    assert_raise Mix.Error, ~r/sender_username must be a non-empty string/, fn ->
-      capture_io(fn ->
-        RunbookSeed.run(["--sender-username", "   "])
-      end)
-    end
+    assert_raise Mix.Error,
+                 ~r/sender_username must be a non-empty string/,
+                 fn ->
+                   capture_io(fn ->
+                     RunbookSeed.run(["--sender-username", "   "])
+                   end)
+                 end
   end
 
   test "rejects blank family name" do
@@ -69,16 +71,18 @@ defmodule Mix.Tasks.Famichat.RunbookSeedTest do
   end
 
   test "rejects identical sender and receiver usernames" do
-    assert_raise Mix.Error, ~r/sender_username and receiver_username must differ/, fn ->
-      capture_io(fn ->
-        RunbookSeed.run([
-          "--sender_username",
-          "same_user",
-          "--receiver-username",
-          "same_user"
-        ])
-      end)
-    end
+    assert_raise Mix.Error,
+                 ~r/sender_username and receiver_username must differ/,
+                 fn ->
+                   capture_io(fn ->
+                     RunbookSeed.run([
+                       "--sender_username",
+                       "same_user",
+                       "--receiver-username",
+                       "same_user"
+                     ])
+                   end)
+                 end
   end
 
   test "rejects non-dev/test environments" do

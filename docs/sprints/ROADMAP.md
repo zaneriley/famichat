@@ -237,8 +237,11 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`) with staged/merge/clear pending-commit flows
 - ✅ Send path app messages fail closed while pending commits remain unresolved
 - ✅ Stage/merge paths reject tampered lifecycle payloads (invalid operation, stale/regressive epochs, partial snapshot fragments) with explicit fail-closed errors
+- ✅ Durable client key-package inventory policy is active in `conversation_security_client_inventories` via `Famichat.Chat.ConversationSecurityClientInventoryStore` + `Famichat.Chat.ConversationSecurityKeyPackagePolicy` (`create`, `consume`, replenish-threshold behavior)
+- ✅ Key-package rotation policy is active (trigger-based stale rotation on canonical ensure/consume paths + scheduled batch rotation APIs)
+- ✅ Key-lifecycle telemetry for key-package inventory operations is active with redaction-safe aggregate metadata
 - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage is still pending (deeper OpenMLS payload/epoch semantics)
-- ⚠️ Key lifecycle hardening (rotation/rejoin persistence/revocation strategy) is still pending
+- ⚠️ Remaining key lifecycle hardening (rejoin persistence + revocation strategy) is still pending
 
 ---
 

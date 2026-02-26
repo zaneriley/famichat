@@ -29,6 +29,7 @@ defmodule FamichatWeb.MessageTestLive do
       {:ok,
        %{
          access_token: access_token,
+         device_id: device_id,
          user: user,
          conversation_id: conversation_id
        }} ->
@@ -43,6 +44,7 @@ defmodule FamichatWeb.MessageTestLive do
            key_id: "KEY_TEST_v1",
            version_tag: "v1.0.0",
            user_id: user.id,
+           device_id: device_id,
            test_username: test_username,
            error_message: nil,
            show_options: false,
@@ -64,6 +66,7 @@ defmodule FamichatWeb.MessageTestLive do
            key_id: "KEY_TEST_v1",
            version_tag: "v1.0.0",
            user_id: nil,
+           device_id: nil,
            test_username: test_username,
            error_message:
              "Failed to initialize test session: #{inspect(reason)}",
@@ -125,8 +128,8 @@ defmodule FamichatWeb.MessageTestLive do
            device_info,
            remember_device?: false
          ) do
-      {:ok, %{access_token: access_token}} ->
-        %{access_token: access_token, user: user}
+      {:ok, %{access_token: access_token, device_id: device_id}} ->
+        %{access_token: access_token, device_id: device_id, user: user}
 
       {:error, reason} ->
         Repo.rollback(reason)
@@ -313,8 +316,10 @@ defmodule FamichatWeb.MessageTestLive do
   # Handle message received event from the hook
   @impl true
   def handle_event("message_received", payload, socket) do
-    # Skip messages sent by ourselves (they're already in the list)
-    if payload["user_id"] != socket.assigns.user_id do
+    # Skip local echo on the same device; still show same-user messages from other tabs/devices.
+    if local_echo_on_same_device?(payload, socket.assigns) do
+      {:noreply, socket}
+    else
       received_message = %{
         body: payload["body"],
         timestamp:
@@ -329,8 +334,6 @@ defmodule FamichatWeb.MessageTestLive do
       messages = socket.assigns.messages ++ [received_message]
 
       {:noreply, assign(socket, messages: messages)}
-    else
-      {:noreply, socket}
     end
   end
 
@@ -390,6 +393,15 @@ defmodule FamichatWeb.MessageTestLive do
   defp unique_test_username do
     "#{@default_test_username_prefix}-#{System.unique_integer([:positive])}"
   end
+
+  defp local_echo_on_same_device?(
+         %{"user_id" => user_id, "device_id" => device_id},
+         %{user_id: local_user_id, device_id: local_device_id}
+       ) do
+    user_id == local_user_id and device_id == local_device_id
+  end
+
+  defp local_echo_on_same_device?(_payload, _assigns), do: false
 
   # Helper to generate a stable message ID based on timestamp and body
   defp message_id(message) do

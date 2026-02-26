@@ -11,6 +11,9 @@ defmodule Famichat.Chat.Message do
   @type message_type ::
           :text | :voice | :video | :image | :file | :poke | :reaction | :gif
   @type status :: :sent | :delivered | :read
+  # Hard cap for inline text body payloads to prevent oversized echo/broadcast amplification.
+  # Large media/doc content should be sent via attachment/upload flows, not `content`.
+  @max_content_bytes 8_192
 
   @type t :: %__MODULE__{
           id: Ecto.UUID.t() | nil,
@@ -74,8 +77,12 @@ defmodule Famichat.Chat.Message do
       :timestamp
     ])
     |> validate_required([:sender_id, :conversation_id, :message_type, :status])
+    |> validate_length(:content, max: @max_content_bytes, count: :bytes)
     |> validate_by_type()
   end
+
+  @spec max_content_bytes() :: pos_integer()
+  def max_content_bytes, do: @max_content_bytes
 
   defp validate_by_type(changeset) do
     case get_field(changeset, :message_type) do

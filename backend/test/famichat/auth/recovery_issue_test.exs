@@ -17,7 +17,9 @@ defmodule Famichat.Auth.Recovery.IssueTest do
 
       events =
         TelemetryHelpers.capture([@issue_event], fn ->
-          assert {:ok, token, record} = Recovery.issue_recovery(admin.id, member.id)
+          assert {:ok, token, record} =
+                   Recovery.issue_recovery(admin.id, member.id)
+
           assert is_binary(token)
           assert record.user_id == admin.id
           assert record.payload["scope"] == "target_user"
@@ -47,7 +49,9 @@ defmodule Famichat.Auth.Recovery.IssueTest do
       events =
         TelemetryHelpers.capture([@issue_event], fn ->
           assert {:ok, _token, record} =
-                   Recovery.issue_recovery(admin.id, member.id, scope: :household)
+                   Recovery.issue_recovery(admin.id, member.id,
+                     scope: :household
+                   )
 
           assert record.payload["scope"] == "household"
           assert record.payload["household_id"] == family.id
@@ -67,8 +71,11 @@ defmodule Famichat.Auth.Recovery.IssueTest do
       family_one = ChatFixtures.family_fixture()
       family_two = ChatFixtures.family_fixture()
 
-      admin = ChatFixtures.user_fixture(%{family_id: family_one.id, role: :admin})
-      member = ChatFixtures.user_fixture(%{family_id: family_one.id, role: :member})
+      admin =
+        ChatFixtures.user_fixture(%{family_id: family_one.id, role: :admin})
+
+      member =
+        ChatFixtures.user_fixture(%{family_id: family_one.id, role: :member})
 
       ChatFixtures.membership_fixture(admin, family_two, :admin)
       ChatFixtures.membership_fixture(member, family_two, :member)
@@ -82,7 +89,9 @@ defmodule Famichat.Auth.Recovery.IssueTest do
       other_family = ChatFixtures.family_fixture()
 
       admin = ChatFixtures.user_fixture(%{family_id: family.id, role: :admin})
-      outsider = ChatFixtures.user_fixture(%{family_id: other_family.id, role: :member})
+
+      outsider =
+        ChatFixtures.user_fixture(%{family_id: other_family.id, role: :member})
 
       assert {:error, :forbidden} =
                Recovery.issue_recovery(admin.id, outsider.id, scope: :household)

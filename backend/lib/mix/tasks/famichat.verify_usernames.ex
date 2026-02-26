@@ -10,6 +10,7 @@ defmodule Mix.Tasks.Famichat.VerifyUsernames do
       Famichat.Auth.Identity
     ],
     exports: []
+
   use Mix.Task
 
   alias Famichat.Auth.Identity

@@ -19,7 +19,14 @@ defmodule Famichat.Auth.Runtime.AuditLog do
     timestamps(updated_at: false, type: :utc_datetime_usec)
   end
 
-  @cast_fields [:event, :actor_id, :subject_id, :household_id, :scope, :metadata]
+  @cast_fields [
+    :event,
+    :actor_id,
+    :subject_id,
+    :household_id,
+    :scope,
+    :metadata
+  ]
   @required_fields [:event, :scope]
 
   @doc false

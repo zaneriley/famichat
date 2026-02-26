@@ -2,7 +2,9 @@ defmodule FamichatWeb.TestBroadcastControllerTest do
   use FamichatWeb.ConnCase, async: true
 
   alias Famichat.Auth.Sessions
+  alias Famichat.Chat.Message
   alias Famichat.ChatFixtures
+  alias Famichat.Repo
 
   @endpoint FamichatWeb.Endpoint
 
@@ -79,6 +81,15 @@ defmodule FamichatWeb.TestBroadcastControllerTest do
       assert get_resp_header(conn, "deprecation") == ["true"]
       assert get_resp_header(conn, "sunset") != []
       assert get_resp_header(conn, "link") != []
+
+      persisted =
+        Repo.get_by(Message,
+          conversation_id: conversation.id,
+          sender_id: user.id,
+          content: "alias canonical payload"
+        )
+
+      assert persisted
     end
 
     test "accepts legacy topic/content payload and emits canonical new_msg", %{

@@ -1,9 +1,10 @@
 # Famichat NOW
 
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-02-26
 
 Use [ia-lexicon.md](ia-lexicon.md) for canonical naming (`conversation security state`, `conversation security policy`) and ownership language.
 Enforcement guardrail: [ia-boundary-guardrails.md](ia-boundary-guardrails.md) (`cd backend && ./run docs:boundary-check`).
+Execution checklist: [sprints/9.3-mls-definition-of-done.md](sprints/9.3-mls-definition-of-done.md).
 
 ## One-line reality
 
@@ -31,10 +32,13 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
    - Replay cache export is bounded (max 256 entries) to cap snapshot growth under high-cardinality reads
    - Adversarial contract tests now also cover out-of-order merge/clear sequencing, tampered pending-commit metadata rejection, stage/merge epoch regression rejection, partial snapshot payload tampering rejection, and concurrent stage/merge race outcomes
    - Messaging contract tests continue to cover malformed ciphertext, cross-group ciphertext rejection, and replay rejection
+   - Durable key-package inventory policy is implemented via `ConversationSecurityClientInventoryStore` + `ConversationSecurityKeyPackagePolicy` (`create`, `consume`, `replenish threshold` behavior with optimistic locking)
+   - Key-package rotation policy is active with trigger-based stale rotation on canonical paths and scheduled batch rotation APIs (`rotate_stale_inventory/2`, `rotate_stale_inventories/1`)
+   - Key-lifecycle telemetry events are emitted for ensure/consume/rotation with aggregate counts only (no key-package payload leakage)
 
 ## What is still not done
 
-1. Key lifecycle and identity binding are incomplete for production trust posture (key package persistence/rotation, rejoin recovery durability, revocation strategy).
+1. Key lifecycle and identity binding are still incomplete for production trust posture (rejoin recovery durability and revocation strategy remain open), although key-package durability, rotation policy, and lifecycle telemetry are now in place.
 2. Commit/update/add/remove lifecycle handling needs deeper OpenMLS-backed semantics (pending-commit payload integrity and epoch transition assertions under churn).
 3. Multi-node/state-distribution strategy is still undefined for strict cross-node consistency and restart behavior.
 4. Client integration documentation is still fragmented (the canonical operator workflow is now published).
@@ -54,7 +58,7 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 ## Top 3 next tasks (highest ROI)
 
 1. Complete deeper OpenMLS lifecycle semantics for commit/update/add/remove (payload integrity constraints and epoch transition assertions under churn).
-2. Complete key lifecycle hardening (key package durability, rotation/rejoin persistence, revocation strategy).
+2. Complete remaining key lifecycle hardening (rejoin persistence and revocation strategy).
 3. Lock operational feedback loops for backend confidence: canonical-flow timing capture, coverage snapshot, and lint/static baseline triage.
 
 ## Deferred TODO (Do Not Lose)

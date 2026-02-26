@@ -21,7 +21,9 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStore do
           available_count: non_neg_integer(),
           replenish_threshold: pos_integer(),
           target_count: pos_integer(),
-          lock_version: pos_integer()
+          lock_version: pos_integer(),
+          inserted_at: DateTime.t(),
+          updated_at: DateTime.t()
         }
 
   @spec load(String.t()) :: {:ok, record_payload()} | {:error, atom(), map()}
@@ -74,6 +76,39 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStore do
 
   def delete(_client_id) do
     {:error, :invalid_input, %{reason: :invalid_client_id, operation: :delete}}
+  end
+
+  @spec list_stale_client_ids(DateTime.t(), pos_integer()) ::
+          {:ok, [String.t()]} | {:error, atom(), map()}
+  def list_stale_client_ids(cutoff, limit \\ 100)
+
+  def list_stale_client_ids(cutoff, limit)
+      when is_struct(cutoff, DateTime) and is_integer(limit) and limit >= 1 do
+    client_ids =
+      from(i in ConversationSecurityClientInventory,
+        where: i.updated_at <= ^cutoff,
+        order_by: [asc: i.updated_at, asc: i.client_id],
+        limit: ^limit,
+        select: i.client_id
+      )
+      |> Repo.all()
+
+    {:ok, client_ids}
+  rescue
+    _ ->
+      {:error, :storage_inconsistent,
+       %{
+         reason: :list_stale_clients_failed,
+         operation: :list_stale_client_ids
+       }}
+  end
+
+  def list_stale_client_ids(_cutoff, _limit) do
+    {:error, :invalid_input,
+     %{
+       reason: :invalid_list_stale_client_ids_input,
+       operation: :list_stale_client_ids
+     }}
   end
 
   defp validate_expected_lock_version(nil), do: :ok
@@ -233,7 +268,9 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStore do
          available_count: record.available_count,
          replenish_threshold: record.replenish_threshold,
          target_count: record.target_count,
-         lock_version: record.lock_version
+         lock_version: record.lock_version,
+         inserted_at: record.inserted_at,
+         updated_at: record.updated_at
        }}
     end
   end

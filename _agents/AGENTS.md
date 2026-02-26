@@ -150,3 +150,70 @@ A messaging change is not complete unless:
 1. Invariants are asserted in tests.
 2. Multi-actor/multi-device scenarios are covered.
 3. No client-controlled field can violate ownership boundaries.
+
+## 11. Ash Migration Playbook (How/Why/Examples)
+
+### 11.1 Why this exists
+We are introducing Ash to improve domain clarity and delivery speed, but this codebase has security-critical auth/chat flows and active MLS hardening work.
+The failure mode is not "Ash is bad"; it is partial migration with unclear ownership, drifting contracts, and no fast rollback.
+This playbook exists to prevent that.
+
+### 11.2 Core strategy (non-discrete, but disciplined)
+1. Keep external contracts stable first.
+2. Move ownership behind existing seams second.
+3. Cut over gradually with parity evidence.
+4. Remove legacy path only after soak and explicit sign-off.
+
+In this repo, the primary seams are:
+- `Famichat.Auth` facade: `backend/lib/famichat/auth/auth.ex`
+- `Famichat.Auth.Households`: `backend/lib/famichat/auth/households.ex`
+- Legacy compatibility facade: `backend/lib/famichat/accounts.ex`
+
+### 11.3 Decision heuristic before any Ash change
+Score each proposed change on three axes (0-3 each):
+1. Contract risk: chance of changing HTTP/channel/facade behavior.
+2. State ownership risk: chance of two writers or split invariants.
+3. Reversibility risk: time/complexity to rollback.
+
+Interpretation:
+- 0-3 total: normal PR.
+- 4-5 total: require explicit rollback test and parity test.
+- 6-9 total: require ADR/RFC and staged rollout plan before coding.
+
+### 11.4 What good strangler looks like here
+A good strangler change in Famichat does all of this:
+1. Keeps facade signatures and tuple contracts stable (`{:ok, _}` / `{:error, _}`).
+2. Introduces an internal adapter boundary and swaps implementation behind it.
+3. Preserves one writer per invariant.
+4. Ships with a feature flag and rollback switch.
+5. Includes parity tests between old and new paths.
+
+A bad strangler change:
+1. Starts at router/controller/channel and leaks contract differences.
+2. Dual-writes indefinitely.
+3. Changes contract and ownership in one PR.
+4. Has no remove-by date for legacy path.
+
+### 11.5 Gray-zone rule (reality is not discrete)
+Cross-boundary edits are allowed when needed, but must satisfy all conditions:
+1. The boundary change is mechanical/plumbing, not behavior expansion.
+2. External contract is unchanged and pinned by tests.
+3. Rollback remains one-step (flag/config).
+4. PR description explains why this cross-boundary touch was necessary.
+
+If any one condition is false, stop and request design review.
+
+
+### 11.7 Concrete example B (good): net-new Ash island
+Goal: build Layer-2 logistics features in Ash without destabilizing auth/chat core.
+
+Path:
+1. Add a new capability domain only for net-new endpoints.
+2. Add new authenticated routes in `backend/lib/famichat_web/router.ex` under `/api/v1/logistics/*`.
+3. Reuse existing bearer auth and membership checks via public auth APIs, not internal chat/session rewrites.
+4. Use additive-only DB tables/migrations for logistics.
+5. Keep auth/chat/channel paths untouched.
+
+Why this works:
+- No contract churn in critical existing paths.
+- Ash value is proven on isolated scope first.

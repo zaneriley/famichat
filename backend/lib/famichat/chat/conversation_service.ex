@@ -460,7 +460,8 @@ defmodule Famichat.Chat.ConversationService do
       fn ->
         result =
           with_group_privileges_lock(conversation_id, fn ->
-            with {:ok, conversation} <- fetch_group_conversation(conversation_id),
+            with {:ok, conversation} <-
+                   fetch_group_conversation(conversation_id),
                  :ok <-
                    ensure_target_user_assignable(conversation, target_user_id),
                  {:ok, true} <-
@@ -546,7 +547,8 @@ defmodule Famichat.Chat.ConversationService do
       fn ->
         result =
           with_group_privileges_lock(conversation_id, fn ->
-            with {:ok, conversation} <- fetch_group_conversation(conversation_id),
+            with {:ok, conversation} <-
+                   fetch_group_conversation(conversation_id),
                  :ok <-
                    ensure_target_user_assignable(conversation, target_user_id),
                  {:ok, true} <-

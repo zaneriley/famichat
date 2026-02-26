@@ -39,6 +39,7 @@ Secure, Self-Hosted Family Communication Platform
 - **[docs/ENCRYPTION.md](docs/ENCRYPTION.md)** - Security architecture
 - **[docs/PERFORMANCE.md](docs/PERFORMANCE.md)** - Performance budgets & optimization
 - **[docs/API-DESIGN.md](docs/API-DESIGN.md)** - API principles & patterns
+- **[docs/ASH.md](docs/ASH.md)** - What Ash is, why we may use it, and adoption guardrails
 - **[docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md)** - Unresolved architectural decisions
 - **[docs/design/](docs/design/)** - UI/UX specifications
 - **[docs/decisions/](docs/decisions/)** - Architecture Decision Records (ADRs)

@@ -196,7 +196,7 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
     assert Map.has_key?(error_response["details"], "limit")
   end
 
-  test "returns forbidden for conversations the user does not belong to", %{
+  test "returns not_found for conversations the user does not belong to", %{
     authed_conn: authed_conn,
     partner: partner
   } do
@@ -209,9 +209,41 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
         user2: outsider
       })
 
-    authed_conn
-    |> get(~p"/api/v1/conversations/#{other_conversation.id}/messages")
-    |> json_response(403)
+    response =
+      authed_conn
+      |> get(~p"/api/v1/conversations/#{other_conversation.id}/messages")
+      |> json_response(404)
+
+    assert response == %{"error" => "not_found"}
+  end
+
+  test "returns indistinguishable not_found for inaccessible vs unknown conversation ids",
+       %{
+         authed_conn: authed_conn,
+         partner: partner
+       } do
+    outsider = ChatFixtures.user_fixture()
+
+    foreign_conversation =
+      ChatFixtures.conversation_fixture(%{
+        conversation_type: :direct,
+        user1: partner,
+        user2: outsider
+      })
+
+    existing_response =
+      authed_conn
+      |> get(~p"/api/v1/conversations/#{foreign_conversation.id}/messages")
+      |> json_response(404)
+
+    unknown_response =
+      authed_conn
+      |> get(~p"/api/v1/conversations/#{Ecto.UUID.generate()}/messages")
+      |> json_response(404)
+
+    assert existing_response == %{"error" => "not_found"}
+    assert unknown_response == %{"error" => "not_found"}
+    assert existing_response == unknown_response
   end
 
   test "returns unauthorized when bearer token is missing", %{
