@@ -109,6 +109,12 @@ function docs:boundary-check {
     "\\bmessage security state\\b"
     "\\bMLSStateStore\\b"
     "\\bencryption policy\\b"
+    "\\bConversationSecurityKeyPackagePolicy\\b"
+    "\\bensure_conversation_security_key_packages\\b"
+    "\\bconsume_conversation_security_key_package\\b"
+    "\\brotate_stale_conversation_security_key_package_inventory\\b"
+    "\\brotate_stale_conversation_security_key_package_inventories\\b"
+    "\\bkey[- ]package inventory policy\\b"
   )
 
   local -a suggestions=(
@@ -117,6 +123,12 @@ function docs:boundary-check {
     "Use conversation security state for durable conversation-scoped security state."
     "Use Famichat.Chat.ConversationSecurityStateStore and keep protocol as data."
     "Use conversation security policy for chat-domain policy wording."
+    "Use Famichat.Chat.ConversationSecurityClientInventoryPolicy for client inventory lifecycle policy naming."
+    "Use ensure_conversation_security_client_inventory/2 at the Chat facade boundary."
+    "Use consume_conversation_security_client_inventory_entry/2 at the Chat facade boundary."
+    "Use rotate_stale_conversation_security_client_inventory/2 at the Chat facade boundary."
+    "Use rotate_stale_conversation_security_client_inventories/1 at the Chat facade boundary."
+    "Use client inventory policy wording at Chat boundary docs; keep key_package terms scoped to MLS adapter/internal payload context."
   )
 
   local violations=0
@@ -203,6 +215,850 @@ function elixir:test:file {
 function runbook:seed {
   # Emit deterministic runbook seed data (users, tokens, conversation/topic)
   cmd mix famichat.runbook_seed "${@}"
+}
+
+function runbook:seed:matrix {
+  # Emit deterministic matrix seed data for self/direct/group/family QA probes
+  cmd mix famichat.runbook_seed_matrix "${@}"
+}
+
+function _qa_project_root {
+  cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
+}
+
+function _qa_require_host_command {
+  local command_name="$1"
+  local install_hint="$2"
+
+  if ! command -v "${command_name}" >/dev/null 2>&1; then
+    echo "Missing required host command: ${command_name}. ${install_hint}" >&2
+    return 1
+  fi
+}
+
+function _qa_ws_base_url {
+  local base_url="${1:-http://localhost:8002}"
+  local normalized_base_url="${base_url%/}"
+
+  if [[ -n "${QA_WS_URL:-}" ]]; then
+    echo "${QA_WS_URL}"
+    return
+  fi
+
+  if [[ "${normalized_base_url}" == http://* ]]; then
+    echo "${normalized_base_url/http:\/\//ws://}/socket/websocket?vsn=2.0.0"
+    return
+  fi
+
+  if [[ "${normalized_base_url}" == https://* ]]; then
+    echo "${normalized_base_url/https:\/\//wss://}/socket/websocket?vsn=2.0.0"
+    return
+  fi
+
+  echo "${normalized_base_url}/socket/websocket?vsn=2.0.0"
+}
+
+function _qa_base_url {
+  if [[ -n "${QA_BASE_URL:-}" ]]; then
+    echo "${QA_BASE_URL}"
+    return
+  fi
+
+  local mapped_port=""
+  local candidate_container_port
+  local -a candidates=(9000 8002 4000)
+  for candidate_container_port in "${candidates[@]}"; do
+    mapped_port="$(docker compose port web "${candidate_container_port}" 2>/dev/null | head -n 1 || true)"
+    if [[ -n "${mapped_port}" ]]; then
+      break
+    fi
+  done
+
+  if [[ -z "${mapped_port}" ]]; then
+    echo "http://localhost:8002"
+    return
+  fi
+
+  local host="${mapped_port%:*}"
+  local port="${mapped_port##*:}"
+
+  if [[ "${host}" == "0.0.0.0" || "${host}" == "::" || "${host}" == "[::]" ]]; then
+    host="localhost"
+  fi
+
+  host="${host#[}"
+  host="${host%]}"
+
+  echo "http://${host}:${port}"
+}
+
+function _qa_status_matches {
+  local actual_status="$1"
+  local expected_csv="$2"
+  local expected
+
+  IFS=',' read -r -a expected <<< "${expected_csv}"
+
+  local status
+  for status in "${expected[@]}"; do
+    if [[ "${actual_status}" == "${status}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+function _qa_message_count {
+  local base_url="$1"
+  local token="$2"
+  local conversation_id="$3"
+  local output_file="$4"
+
+  if ! curl -sS \
+    -H "Authorization: Bearer ${token}" \
+    "${base_url}/api/v1/conversations/${conversation_id}/messages" \
+    > "${output_file}"; then
+    echo "-1"
+    return
+  fi
+
+  jq -r 'if (.data | type) == "array" then (.data | length) else -1 end' \
+    "${output_file}" 2>/dev/null || echo "-1"
+}
+
+function _qa_run_http_matrix_scenario {
+  local scenario_id="$1"
+  local actor_label="$2"
+  local actor_token="$3"
+  local conversation_type="$4"
+  local conversation_id="$5"
+  local message_body="$6"
+  local expected_status_csv="$7"
+  local history_token="$8"
+  local history_conversation_id="$9"
+  local ws_token="${10}"
+  local ws_topic="${11}"
+  local base_url="${12}"
+  local ws_base_url="${13}"
+  local output_root="${14}"
+  local matrix_csv="${15}"
+
+  local scenario_dir="${output_root}/${scenario_id}"
+  local response_file="${scenario_dir}/response.json"
+  local request_file="${scenario_dir}/request.json"
+  local before_history_file="${scenario_dir}/history_before.json"
+  local after_history_file="${scenario_dir}/history_after.json"
+  local ws_log_file="${scenario_dir}/ws_listener.log"
+  local ws_pid=""
+  local ws_wait_seconds="${QA_WS_WAIT_SECONDS:-4}"
+
+  mkdir -p "${scenario_dir}"
+
+  jq -n \
+    --arg conversation_type "${conversation_type}" \
+    --arg conversation_id "${conversation_id}" \
+    --arg body "${message_body}" \
+    '{
+      conversation_type: $conversation_type,
+      conversation_id: $conversation_id,
+      body: $body
+    }' > "${request_file}"
+
+  local before_count
+  before_count="$(_qa_message_count \
+    "${base_url}" \
+    "${history_token}" \
+    "${history_conversation_id}" \
+    "${before_history_file}")"
+
+  if [[ -n "${ws_token}" && -n "${ws_topic}" ]]; then
+    node - "${ws_base_url}&token=${ws_token}" "${ws_topic}" "${ws_log_file}" "${ws_wait_seconds}" <<'NODE' &
+const fs = require("fs");
+
+const [url, topic, outputFile, waitSecondsRaw] = process.argv.slice(2);
+const waitMs = Math.max(1000, Number(waitSecondsRaw || "4") * 1000);
+const events = [];
+
+function pushEvent(value) {
+  if (typeof value === "string") {
+    events.push(value);
+    return;
+  }
+
+  events.push(JSON.stringify(value));
+}
+
+const ws = new WebSocket(url);
+
+ws.addEventListener("open", () => {
+  const joinPayload = JSON.stringify(["1", "1", topic, "phx_join", {}]);
+  ws.send(joinPayload);
+});
+
+ws.addEventListener("message", (event) => {
+  if (typeof event.data === "string") {
+    pushEvent(event.data);
+    return;
+  }
+
+  const text = Buffer.from(event.data).toString("utf8");
+  pushEvent(text);
+});
+
+ws.addEventListener("error", (event) => {
+  pushEvent({error: event.message || "ws_error"});
+});
+
+setTimeout(() => {
+  try {
+    ws.close();
+  } catch (error) {
+    pushEvent({close_error: String(error)});
+  }
+
+  fs.writeFileSync(outputFile, events.join("\n"), "utf8");
+  process.exit(0);
+}, waitMs);
+NODE
+    ws_pid="$!"
+
+    sleep 1
+  fi
+
+  local http_status
+  http_status="$(
+    curl -sS \
+      -o "${response_file}" \
+      -w "%{http_code}" \
+      -X POST \
+      "${base_url}/api/test/broadcast" \
+      -H "Authorization: Bearer ${actor_token}" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${request_file}"
+  )"
+
+  if [[ -n "${ws_pid}" ]]; then
+    wait "${ws_pid}" || true
+  fi
+
+  local after_count
+  after_count="$(_qa_message_count \
+    "${base_url}" \
+    "${history_token}" \
+    "${history_conversation_id}" \
+    "${after_history_file}")"
+
+  local expected_delta=0
+  if [[ "${expected_status_csv}" == *"200"* ]]; then
+    expected_delta=1
+  fi
+
+  local status="PASS"
+  local severity="none"
+  local notes="ok"
+  local ws_parity="not_checked"
+
+  if ! _qa_status_matches "${http_status}" "${expected_status_csv}"; then
+    status="FAIL"
+    if [[ "${expected_status_csv}" != *"200"* && "${http_status}" == "200" ]]; then
+      severity="S0"
+    else
+      severity="S1"
+    fi
+    notes="unexpected_http_status"
+  fi
+
+  if [[ "${before_count}" == "-1" || "${after_count}" == "-1" ]]; then
+    status="FAIL"
+    if [[ "${severity}" == "none" ]]; then
+      severity="S2"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="history_count_unavailable"
+    else
+      notes="${notes};history_count_unavailable"
+    fi
+  else
+    local delta
+    delta=$((after_count - before_count))
+    if [[ "${delta}" -ne "${expected_delta}" ]]; then
+      status="FAIL"
+      if [[ "${expected_delta}" -eq 0 && "${delta}" -gt 0 ]]; then
+        severity="S0"
+      elif [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+        severity="S1"
+      fi
+
+      if [[ "${notes}" == "ok" ]]; then
+        notes="persistence_delta_mismatch"
+      else
+        notes="${notes};persistence_delta_mismatch"
+      fi
+    fi
+  fi
+
+  if [[ -n "${ws_token}" && -n "${ws_topic}" ]]; then
+    if grep -Fq '"new_msg"' "${ws_log_file}" && grep -Fq "${message_body}" "${ws_log_file}"; then
+      ws_parity="pass"
+    else
+      ws_parity="fail"
+      status="FAIL"
+      if [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+        severity="S1"
+      fi
+
+      if [[ "${notes}" == "ok" ]]; then
+        notes="ws_parity_missing"
+      else
+        notes="${notes};ws_parity_missing"
+      fi
+    fi
+  fi
+
+  if [[ "${status}" == "FAIL" && "${severity}" == "none" ]]; then
+    severity="S1"
+  fi
+
+  local send_status_json=0
+  if [[ "${http_status}" =~ ^[0-9]+$ ]]; then
+    send_status_json="${http_status}"
+  fi
+
+  jq -n \
+    --arg scenario_id "${scenario_id}" \
+    --arg status "${status}" \
+    --arg severity "${severity}" \
+    --arg actor "${actor_label}" \
+    --arg conversation_type "${conversation_type}" \
+    --arg conversation_id "${conversation_id}" \
+    --arg expected_statuses "${expected_status_csv}" \
+    --arg ws_parity "${ws_parity}" \
+    --arg notes "${notes}" \
+    --argjson send_status "${send_status_json}" \
+    --argjson before_count "${before_count}" \
+    --argjson after_count "${after_count}" \
+    '{
+      scenario_id: $scenario_id,
+      status: $status,
+      severity: $severity,
+      actor: $actor,
+      conversation_type: $conversation_type,
+      conversation_id: $conversation_id,
+      expected_statuses: ($expected_statuses | split(",")),
+      send_status: $send_status,
+      before_count: $before_count,
+      after_count: $after_count,
+      ws_parity: $ws_parity,
+      notes: $notes
+    }' > "${scenario_dir}/assert.json"
+
+  printf '%s,%s,%s,%s,%s,%s,%s,"%s"\n' \
+    "${scenario_id}" \
+    "${status}" \
+    "${http_status}" \
+    "${before_count}" \
+    "${after_count}" \
+    "${ws_parity}" \
+    "${severity}" \
+    "${notes}" \
+    >> "${matrix_csv}"
+}
+
+function _qa_array_to_json {
+  if [[ "$#" -eq 0 ]]; then
+    echo "[]"
+    return
+  fi
+
+  printf '%s\n' "$@" | jq -R . | jq -s .
+}
+
+function qa:messaging:preflight {
+  # Validate runtime prerequisites before live messaging QA probes.
+  local output_dir="${1:-}"
+  local log_file=""
+
+  if [[ -n "${output_dir}" ]]; then
+    mkdir -p "${output_dir}"
+    log_file="${output_dir}/preflight.log"
+  fi
+
+  _qa_require_host_command jq "Install jq." || return 1
+  _qa_require_host_command curl "Install curl." || return 1
+  _qa_require_host_command node "Install Node.js for WS probe parity." || return 1
+
+  if [[ -n "${log_file}" ]]; then
+    {
+      echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "cwd=$(pwd)"
+      echo "docker_compose_ps_start"
+      docker compose ps
+      echo "docker_compose_ps_end"
+    } | tee "${log_file}"
+  else
+    echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "cwd=$(pwd)"
+    docker compose ps
+  fi
+
+  if [[ -n "${log_file}" ]]; then
+    echo "migration_check_start" | tee -a "${log_file}"
+    if ! cmd mix ecto.migrations >> "${log_file}" 2>&1; then
+      echo "Migration preflight failed (unable to read migration status)." >&2
+      return 1
+    fi
+    if grep -Eq '^[[:space:]]*down[[:space:]]' "${log_file}"; then
+      echo "Migration preflight failed (pending/failed migrations). QA run blocked." >&2
+      return 1
+    fi
+    echo "migration_check_end" | tee -a "${log_file}"
+  else
+    local migration_output
+    migration_output="$(cmd mix ecto.migrations)" || {
+      echo "Migration preflight failed (unable to read migration status)." >&2
+      return 1
+    }
+    if printf '%s\n' "${migration_output}" | grep -Eq '^[[:space:]]*down[[:space:]]'; then
+      echo "Migration preflight failed (pending/failed migrations). QA run blocked." >&2
+      return 1
+    fi
+  fi
+}
+
+function _qa_messaging_run {
+  local mode="$1"
+  shift
+
+  local project_root
+  project_root="$(_qa_project_root)"
+
+  local run_id="${QA_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
+  local output_root="${project_root}/.tmp/_qa_messaging/${run_id}"
+  local base_url
+  base_url="$(_qa_base_url)"
+  local ws_base_url
+  ws_base_url="$(_qa_ws_base_url "${base_url}")"
+
+  local matrix_csv="${output_root}/matrix_results.csv"
+  local summary_file="${output_root}/summary.md"
+  local gate_report="${output_root}/gate_report.json"
+
+  mkdir -p "${output_root}"
+  printf 'scenario_id,status,http_status,before_count,after_count,ws_parity,severity,notes\n' > "${matrix_csv}"
+
+  local started_at
+  started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  if ! qa:messaging:preflight "${output_root}"; then
+    jq -n \
+      --arg run_id "${run_id}" \
+      --arg mode "${mode}" \
+      --arg started_at "${started_at}" \
+      --arg ended_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg outcome "BLOCKED" \
+      --arg reason "preflight_failed" \
+      '{
+        run_id: $run_id,
+        mode: $mode,
+        started_at: $started_at,
+        ended_at: $ended_at,
+        outcome: $outcome,
+        reason: $reason
+      }' > "${gate_report}"
+    return 2
+  fi
+
+  if ! runbook:seed:matrix "$@" | sed -n '/^{/,$p' > "${output_root}/seed_matrix.json"; then
+    jq -n \
+      --arg run_id "${run_id}" \
+      --arg mode "${mode}" \
+      --arg started_at "${started_at}" \
+      --arg ended_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg outcome "BLOCKED" \
+      --arg reason "seed_failed" \
+      '{
+        run_id: $run_id,
+        mode: $mode,
+        started_at: $started_at,
+        ended_at: $ended_at,
+        outcome: $outcome,
+        reason: $reason
+      }' > "${gate_report}"
+    return 2
+  fi
+
+  local seed_file="${output_root}/seed_matrix.json"
+
+  local a_user_id
+  local a_tab1_token
+  local a_tab2_token
+  local a_dev2_token
+  local b_token
+  local c_token
+  local outsider_token
+  local self_sender_id
+  local self_receiver_id
+  local direct_id
+  local group_id
+  local family_id
+  local direct_topic
+  local group_topic
+  local family_topic
+  local self_sender_topic
+
+  a_user_id="$(jq -r '.actors.a_tab1.id' "${seed_file}")"
+  a_tab1_token="$(jq -r '.actors.a_tab1.access_token' "${seed_file}")"
+  a_tab2_token="$(jq -r '.actors.a_tab2.access_token' "${seed_file}")"
+  a_dev2_token="$(jq -r '.actors.a_dev2.access_token' "${seed_file}")"
+  b_token="$(jq -r '.actors.b.access_token' "${seed_file}")"
+  c_token="$(jq -r '.actors.c.access_token' "${seed_file}")"
+  outsider_token="$(jq -r '.actors.outsider.access_token' "${seed_file}")"
+  self_sender_id="$(jq -r '.conversations.self_sender.id' "${seed_file}")"
+  self_receiver_id="$(jq -r '.conversations.self_receiver.id' "${seed_file}")"
+  direct_id="$(jq -r '.conversations.direct.id' "${seed_file}")"
+  group_id="$(jq -r '.conversations.group.id' "${seed_file}")"
+  family_id="$(jq -r '.conversations.family.id' "${seed_file}")"
+  direct_topic="$(jq -r '.conversations.direct.topic' "${seed_file}")"
+  group_topic="$(jq -r '.conversations.group.topic' "${seed_file}")"
+  family_topic="$(jq -r '.conversations.family.topic' "${seed_file}")"
+  self_sender_topic="message:self:${a_user_id}"
+
+  local -a required_fields=(
+    "${a_tab1_token}"
+    "${a_tab2_token}"
+    "${a_dev2_token}"
+    "${b_token}"
+    "${c_token}"
+    "${outsider_token}"
+    "${self_sender_id}"
+    "${self_receiver_id}"
+    "${direct_id}"
+    "${group_id}"
+    "${family_id}"
+  )
+
+  local field
+  for field in "${required_fields[@]}"; do
+    if [[ -z "${field}" || "${field}" == "null" ]]; then
+      jq -n \
+        --arg run_id "${run_id}" \
+        --arg mode "${mode}" \
+        --arg started_at "${started_at}" \
+        --arg ended_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg outcome "BLOCKED" \
+        --arg reason "seed_payload_incomplete" \
+        '{
+          run_id: $run_id,
+          mode: $mode,
+          started_at: $started_at,
+          ended_at: $ended_at,
+          outcome: $outcome,
+          reason: $reason
+        }' > "${gate_report}"
+      return 2
+    fi
+  done
+
+  local canonical_status="PASS"
+  local canonical_elapsed=0
+  SECONDS=0
+  # shellcheck disable=SC2119
+  if ! elixir:test:canonical-flow > "${output_root}/canonical_flow_result.txt" 2>&1; then
+    canonical_status="FAIL"
+  fi
+  canonical_elapsed="${SECONDS}"
+  printf 'elapsed_seconds=%s\n' "${canonical_elapsed}" > "${output_root}/canonical_flow_timing.txt"
+
+  local coverage_status="SKIP"
+  if [[ "${mode}" == "deep" ]]; then
+    coverage_status="PASS"
+    if ! elixir:test:coverage test/famichat_web/integration/canonical_messaging_flow_test.exs \
+      > "${output_root}/canonical_flow_coverage.txt" 2>&1; then
+      coverage_status="FAIL"
+    fi
+  fi
+
+  local body_prefix="qa-${run_id}"
+
+  _qa_run_http_matrix_scenario \
+    "S1" \
+    "A-tab1" \
+    "${a_tab1_token}" \
+    "self" \
+    "${self_sender_id}" \
+    "${body_prefix}-s1-self" \
+    "200" \
+    "${a_tab1_token}" \
+    "${self_sender_id}" \
+    "${a_tab2_token}" \
+    "${self_sender_topic}" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  _qa_run_http_matrix_scenario \
+    "S2" \
+    "A-tab1" \
+    "${a_tab1_token}" \
+    "self" \
+    "${self_receiver_id}" \
+    "${body_prefix}-s2-spoof" \
+    "403" \
+    "${b_token}" \
+    "${self_receiver_id}" \
+    "" \
+    "" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  _qa_run_http_matrix_scenario \
+    "D1" \
+    "A-tab1" \
+    "${a_tab1_token}" \
+    "direct" \
+    "${direct_id}" \
+    "${body_prefix}-d1-direct" \
+    "200" \
+    "${a_tab1_token}" \
+    "${direct_id}" \
+    "${b_token}" \
+    "${direct_topic}" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  _qa_run_http_matrix_scenario \
+    "D2" \
+    "O" \
+    "${outsider_token}" \
+    "direct" \
+    "${direct_id}" \
+    "${body_prefix}-d2-outsider" \
+    "404" \
+    "${a_tab1_token}" \
+    "${direct_id}" \
+    "" \
+    "" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  _qa_run_http_matrix_scenario \
+    "G1" \
+    "A-tab1" \
+    "${a_tab1_token}" \
+    "group" \
+    "${group_id}" \
+    "${body_prefix}-g1-group" \
+    "200" \
+    "${a_tab1_token}" \
+    "${group_id}" \
+    "${c_token}" \
+    "${group_topic}" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  _qa_run_http_matrix_scenario \
+    "G2" \
+    "O" \
+    "${outsider_token}" \
+    "group" \
+    "${group_id}" \
+    "${body_prefix}-g2-outsider" \
+    "404" \
+    "${a_tab1_token}" \
+    "${group_id}" \
+    "" \
+    "" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  _qa_run_http_matrix_scenario \
+    "F1" \
+    "A-tab1" \
+    "${a_tab1_token}" \
+    "family" \
+    "${family_id}" \
+    "${body_prefix}-f1-family" \
+    "200" \
+    "${a_tab1_token}" \
+    "${family_id}" \
+    "${b_token}" \
+    "${family_topic}" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  _qa_run_http_matrix_scenario \
+    "F2" \
+    "O" \
+    "${outsider_token}" \
+    "family" \
+    "${family_id}" \
+    "${body_prefix}-f2-outsider" \
+    "404" \
+    "${a_tab1_token}" \
+    "${family_id}" \
+    "" \
+    "" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  local -a scenario_files=(
+    "${output_root}/S1/assert.json"
+    "${output_root}/S2/assert.json"
+    "${output_root}/D1/assert.json"
+    "${output_root}/D2/assert.json"
+    "${output_root}/G1/assert.json"
+    "${output_root}/G2/assert.json"
+    "${output_root}/F1/assert.json"
+    "${output_root}/F2/assert.json"
+  )
+
+  local scenario_results
+  scenario_results="$(jq -s '.' "${scenario_files[@]}")"
+
+  local -a critical_failures=()
+  local -a warning_failures=()
+  local scenario_file
+  for scenario_file in "${scenario_files[@]}"; do
+    local scenario_status
+    local scenario_severity
+    scenario_status="$(jq -r '.status' "${scenario_file}")"
+    scenario_severity="$(jq -r '.severity' "${scenario_file}")"
+
+    if [[ "${scenario_status}" == "FAIL" ]]; then
+      if [[ "${scenario_severity}" == "S0" || "${scenario_severity}" == "S1" ]]; then
+        critical_failures+=("$(jq -r '.scenario_id' "${scenario_file}")")
+      else
+        warning_failures+=("$(jq -r '.scenario_id' "${scenario_file}")")
+      fi
+    fi
+  done
+
+  local -a global_failures=()
+  local -a global_warnings=()
+
+  if [[ "${canonical_status}" == "FAIL" ]]; then
+    global_failures+=("canonical_flow")
+  fi
+
+  if [[ "${coverage_status}" == "FAIL" ]]; then
+    global_warnings+=("canonical_flow_coverage")
+  fi
+
+  local outcome="PASS"
+  if [[ "${#critical_failures[@]}" -gt 0 || "${#global_failures[@]}" -gt 0 ]]; then
+    outcome="FAIL"
+  elif [[ "${#warning_failures[@]}" -gt 0 || "${#global_warnings[@]}" -gt 0 ]]; then
+    outcome="WARN"
+  fi
+
+  local critical_json
+  local warning_json
+  local global_failures_json
+  local global_warnings_json
+
+  critical_json="$(_qa_array_to_json "${critical_failures[@]}")"
+  warning_json="$(_qa_array_to_json "${warning_failures[@]}")"
+  global_failures_json="$(_qa_array_to_json "${global_failures[@]}")"
+  global_warnings_json="$(_qa_array_to_json "${global_warnings[@]}")"
+
+  jq -n \
+    --arg run_id "${run_id}" \
+    --arg mode "${mode}" \
+    --arg started_at "${started_at}" \
+    --arg ended_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg base_url "${base_url}" \
+    --arg ws_base_url "${ws_base_url}" \
+    --arg outcome "${outcome}" \
+    --arg canonical_flow "${canonical_status}" \
+    --arg coverage "${coverage_status}" \
+    --argjson canonical_flow_elapsed_seconds "${canonical_elapsed}" \
+    --argjson scenarios "${scenario_results}" \
+    --argjson critical_failures "${critical_json}" \
+    --argjson warning_failures "${warning_json}" \
+    --argjson global_failures "${global_failures_json}" \
+    --argjson global_warnings "${global_warnings_json}" \
+    '{
+      run_id: $run_id,
+      mode: $mode,
+      started_at: $started_at,
+      ended_at: $ended_at,
+      base_url: $base_url,
+      ws_base_url: $ws_base_url,
+      outcome: $outcome,
+      canonical_flow: $canonical_flow,
+      canonical_flow_elapsed_seconds: $canonical_flow_elapsed_seconds,
+      canonical_flow_coverage: $coverage,
+      scenarios: $scenarios,
+      critical_failures: $critical_failures,
+      warning_failures: $warning_failures,
+      global_failures: $global_failures,
+      global_warnings: $global_warnings
+    }' > "${gate_report}"
+
+  {
+    echo "# Messaging QA ${mode^} Run"
+    echo ""
+    echo "- run_id: \`${run_id}\`"
+    echo "- outcome: \`${outcome}\`"
+    echo "- canonical_flow: \`${canonical_status}\`"
+    echo "- canonical_flow_elapsed_seconds: \`${canonical_elapsed}\`"
+    echo "- canonical_flow_coverage: \`${coverage_status}\`"
+    echo "- base_url: \`${base_url}\`"
+    echo "- ws_base_url: \`${ws_base_url}\`"
+    echo ""
+    echo "## Artifacts"
+    echo "- seed: \`seed_matrix.json\`"
+    echo "- matrix: \`matrix_results.csv\`"
+    echo "- gate report: \`gate_report.json\`"
+  } > "${summary_file}"
+
+  if [[ "${#critical_failures[@]}" -gt 0 ]]; then
+    mkdir -p "${project_root}/.tmp/_bugs"
+    local bug_file="${project_root}/.tmp/_bugs/list.md"
+    local scenario_id
+    for scenario_id in "${critical_failures[@]}"; do
+      local notes
+      notes="$(jq -r '.notes' "${output_root}/${scenario_id}/assert.json")"
+      printf -- "- [%s] %s failed: %s\n" \
+        "${run_id}" \
+        "${scenario_id}" \
+        "${notes}" >> "${bug_file}"
+    done
+  fi
+
+  echo "Messaging QA ${mode} run complete."
+  echo "Artifacts: ${output_root}"
+  echo "Gate report: ${gate_report}"
+
+  if [[ "${outcome}" == "FAIL" ]]; then
+    return 1
+  fi
+}
+
+function qa:messaging:fast {
+  # Live probe matrix for self/direct/group/family + isolation + WS/HTTP parity.
+  _qa_messaging_run fast "${@}"
+}
+
+function qa:messaging:deep {
+  # Full live probe matrix plus canonical-flow coverage capture.
+  _qa_messaging_run deep "${@}"
 }
 
 function elixir:test:coverage {

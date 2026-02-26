@@ -1,8 +1,8 @@
 # Sprint 7: Real–Time Messaging Integration
 
 **Duration**: Oct 1 - Oct 15, 2025
-**Progress**: ✅ Core channel/auth milestones, 7.4.2 secure CLI broadcast hardening, and group-role edge-case coverage are complete; remaining Sprint 7 work is runbook/doc consolidation follow-through
-**Status**: 🟡 Sprint 7 closeout in progress; full repo lint/static gates still have pre-existing baseline debt outside the completed stories
+**Progress**: ✅ Core channel/auth milestones, 7.4.2 secure CLI broadcast hardening, group-role edge-case coverage, and first-class messaging QA runbook commands are complete
+**Status**: 🟡 Sprint 7 closeout in progress; CI wiring for the new QA fast/deep commands and repo-wide lint/static baseline debt remain open
 
 > Scope note (2026-02-25): This file tracks Sprint 7 closeout items only. Active P0 implementation work is Sprint 9 MLS hardening (see `STATUS.md` and `9.2-mls-implementation-redteam-loop.md`).
 > Terminology note: use `conversation security policy` for domain policy wording (see `../ia-lexicon.md` and `../ia-boundary-guardrails.md`).
@@ -23,12 +23,10 @@
 - ✓ 7.9: Accounts context refactor (passkey-first onboarding, device trust, single token model)
 
 ### 🚧 In Progress
-- 🔄 7.2: Broadcast testing verification and coverage audit follow-through
-- 🔄 7.3: Client integration documentation refresh for auth + CLI broadcast workflows
+- 🔄 7.5: End-to-end real-time notification verification automation/CI follow-through (`qa:messaging:fast|deep` are now available)
 
 ### ❌ Not Started
 - ⏳ 7.4.1: Dummy UI route / LiveView message display test harness
-- ⏳ 7.5: End-to-end real-time notification verification script
 
 ---
 
@@ -45,6 +43,12 @@
 3. **Repo-wide lint/static baseline debt** (LOW PRIORITY)
    - Completed story paths are green in targeted tests/security checks, but repo-wide `elixir:lint` and `elixir:static-analysis` still fail on pre-existing issues.
    - **Action**: track debt separately and avoid conflating it with completed story behavior.
+
+4. ✅ **First-class messaging QA command path is now in place**
+   - `cd backend && ./run qa:messaging:preflight` (includes migration preflight)
+   - `cd backend && ./run qa:messaging:fast` (live matrix + WS/HTTP parity + timing artifacts)
+   - `cd backend && ./run qa:messaging:deep` (fast loop + canonical-flow coverage artifact)
+   - Matrix seed context: `cd backend && ./run runbook:seed:matrix`
 
 ### 🔁 Follow-ups Logged from Auth Hardening
 - ✅ Add `enrollment_required_since` marker and set/clear logic after magic-link logins (MAG-03 probation) — migration & state sync landed Oct 13, 2025
@@ -255,8 +259,10 @@ This provides clearer intent, more predictable validation, and a better develope
 - **Final Review 7.4:** Once all subtasks for Story 7.4 have been completed and verified, mark off the Story 7.4 checkbox in this Sprint7.md file.
 
 ### Story 7.5: Verification of Real–Time Notifications
-- [ ] **7.5.1:** Develop and run a manual test script (or use an IEx command) to trigger channel events; log and verify the complete end-to-end notification flow.
-  - [ ] **Subtask:** Document the manual test process and keep a record of output logs.
+- [x] **7.5.1:** Develop and run a manual test script (or use an IEx command) to trigger channel events; log and verify the complete end-to-end notification flow.
+  - [x] **Subtask:** Document the manual test process and keep a record of output logs (`docs/runbooks/messaging-qa-runbook.md` + `.tmp/_qa_messaging/<RUN_ID>/` artifacts).
+  - [x] **Subtask:** Add migration preflight to the runbook flow (`qa:messaging:preflight`).
+  - [x] **Subtask:** Capture canonical-flow timing and coverage artifacts (`canonical_flow_timing.txt`, `canonical_flow_coverage.txt`).
   - [ ] **Subtask:** Run security check and static analysis after implementing test scripts:
     - `cd backend && ./run elixir:security-check`
     - `cd backend && ./run elixir:static-analysis`

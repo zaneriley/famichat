@@ -34,15 +34,21 @@ Sprint 9 P0 done-state checklist: [9.3-mls-definition-of-done.md](9.3-mls-defini
    - ✅ Optimistic lock-version conflict handling is active (`:stale_state` mapped fail-closed to `:storage_inconsistent`)
    - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`: stage/merge/clear pending commit with optimistic locking)
    - ✅ Send path now fails closed while pending commits are unresolved (`:pending_proposals`)
-   - ✅ Durable client key-package inventory policy is active in `conversation_security_client_inventories` via `Famichat.Chat.ConversationSecurityClientInventoryStore` + `Famichat.Chat.ConversationSecurityKeyPackagePolicy` (create/consume/replenish threshold)
-   - ✅ Key-package rotation policy is active (trigger-based stale rotation + scheduled batch rotation API)
-   - ✅ Key-lifecycle telemetry for key-package inventory operations is active with aggregate-only metadata
+   - ✅ Durable client inventory policy is active in `conversation_security_client_inventories` via `Famichat.Chat.ConversationSecurityClientInventoryStore` + `Famichat.Chat.ConversationSecurityClientInventoryPolicy` (create/consume/replenish threshold; canonical boundary naming is in use during implementation rename)
+   - ✅ Client inventory rotation policy is active (trigger-based stale rotation + scheduled batch rotation API)
+   - ✅ Key-lifecycle telemetry for client inventory operations is active with aggregate-only metadata
    - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage remains incomplete (deeper payload/epoch semantics)
    - ⚠️ Remaining key lifecycle hardening (rejoin persistence + revocation strategy) is not complete
 2. ⚠️ **Operational Confidence Gaps** - quality visibility is incomplete
-   - Test coverage snapshot is not yet captured
+   - Live messaging QA is now productized with first-class commands and artifacted matrix output:
+     - `cd backend && ./run qa:messaging:preflight`
+     - `cd backend && ./run qa:messaging:fast`
+     - `cd backend && ./run qa:messaging:deep`
+     - artifacts: `.tmp/_qa_messaging/<RUN_ID>/`
+   - Canonical-flow coverage capture is now available via deep loop artifact (`canonical_flow_coverage.txt`)
    - Repo-wide lint/static baseline debt is still unresolved
-   - Canonical flow timing drift capture is not yet automated
+   - Canonical flow timing is now captured per run (`canonical_flow_timing.txt`)
+   - Remaining gap: CI required-check wiring (PR fast loop + nightly deep loop)
 
 ---
 
@@ -533,7 +539,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 2. **MLS Durability + Lifecycle Hardening Not Complete** 🚨
    - ✅ OpenMLS + Rustler NIF vertical slice is implemented and tested
    - ✅ Fail-closed runtime gating and adversarial baseline tests are in place
-   - ✅ Durable key-package inventory persistence policy is implemented (create/consume/replenish threshold)
+   - ✅ Durable client inventory persistence policy is implemented (create/consume/replenish threshold)
    - ❌ Durable state persistence/recovery across restarts is not complete
    - ❌ Remaining key lifecycle hardening (rejoin persistence + revocation strategy) is not complete
    - **Action**: Sprint 9 hardening track (state persistence + lifecycle + adversarial expansion)
@@ -617,9 +623,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ### Immediate (This Week)
 1. ✅ Canonical runbook + integration lock landed for `auth -> subscribe -> send -> receive`.
 2. ✅ Sprint 9 hardening follow-through delivered: dedicated `conversation_security_states` store with optimistic lock-version conflict handling is active.
-3. ⚠️ Add routine timing capture around the canonical flow command for drift tracking.
+3. ✅ Add routine timing capture around the canonical flow command for drift tracking (`qa:messaging:fast` / `qa:messaging:deep` artifacts).
 4. ⚠️ Triage repo-wide `elixir:lint` / `elixir:static-analysis` baseline debt separately so completed story behavior stays trackable.
-5. ⚠️ Measure test coverage snapshot (`cd backend && ./run mix coveralls`).
+5. ✅ Measure canonical-flow coverage snapshot (`cd backend && ./run qa:messaging:deep` -> `canonical_flow_coverage.txt`).
 
 ### Short-term (Current P0 Track - Sprint 9)
 1. Expand adversarial lifecycle matrix (out-of-order merge/clear, staged payload tampering, and epoch-race stress) on top of `ConversationSecurityLifecycle`.

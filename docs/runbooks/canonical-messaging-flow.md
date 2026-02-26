@@ -18,6 +18,7 @@ It validates:
 1. Containers are running.
 2. You run commands from the repo root.
 3. Environment is `dev` or `test`.
+4. No pending migrations (`cd backend && ./run qa:messaging:preflight`).
 
 ## Fast verification (recommended)
 
@@ -70,6 +71,13 @@ Output includes:
 4. `conversation.topic`
 5. canonical payload template
 
+For live QA matrix runs (self/direct/group/family + outsider + multi-device),
+use:
+
+```bash
+cd backend && ./run runbook:seed:matrix | sed -n '/^{/,$p'
+```
+
 ## Timing capture
 
 Use timing around the canonical test command:
@@ -77,6 +85,28 @@ Use timing around the canonical test command:
 ```bash
 cd backend && /usr/bin/time -f "elapsed=%e s" ./run elixir:test:canonical-flow
 ```
+
+Or use the first-class runbook command (writes timing to artifacts):
+
+```bash
+cd backend && ./run qa:messaging:fast
+```
+
+Artifacts:
+- `.tmp/_qa_messaging/<RUN_ID>/canonical_flow_result.txt`
+- `.tmp/_qa_messaging/<RUN_ID>/canonical_flow_timing.txt`
+- `.tmp/_qa_messaging/<RUN_ID>/gate_report.json`
+
+## Coverage snapshot capture
+
+Capture canonical-flow coverage in the deep run:
+
+```bash
+cd backend && ./run qa:messaging:deep
+```
+
+Coverage artifact:
+- `.tmp/_qa_messaging/<RUN_ID>/canonical_flow_coverage.txt`
 
 ## Source of truth in code
 

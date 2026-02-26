@@ -123,7 +123,7 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 📍 **See [CURRENT-SPRINT.md](CURRENT-SPRINT.md) for detailed tasks**
 
 **Duration**: Oct 1 - Oct 15, 2025
-**Status**: 🟡 Implementation landing is on track; repo-wide lint/static debt follow-through remains
+**Status**: 🟡 Implementation landing is on track; first-class QA command path is now shipped, with CI gating + repo-wide lint/static debt follow-through remaining
 
 **Goal**: Integrate real-time messaging via Phoenix Channels with encryption-aware infrastructure
 
@@ -137,9 +137,8 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 - ✅ Username fingerprint migration + single-use invite acceptance (registration JWT handshake)
 
 **In Progress**:
-- 🔄 Group role management edge case tests
-- 🔄 Story 7.4.2 secure CLI broadcast endpoint follow-through (implementation landed; repo-wide gate debt cleanup pending)
-- 🔄 Story 7.2/7.3 final verification, runbook, and documentation consolidation
+- 🔄 CI-required wiring for messaging QA fast/deep commands
+- 🔄 Repo-wide lint/static baseline debt cleanup (separate from story behavior verification)
 
 **Not Started**:
 - ❌ Story 7.4.1 dummy UI route / LiveView test harness
@@ -151,12 +150,13 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 - **Accounts context** ✅ shipped (Story 7.9)
 
 **Blockers**:
-1. Auth client integration docs outstanding (Story 7.3)
-2. Test coverage not measured
+1. QA command path is not yet wired as required PR/nightly CI gates
+2. Repo-wide lint/static baseline debt remains unresolved
 
 **Key Files**:
 - [MessageChannel](../../backend/lib/famichat_web/channels/message_channel.ex)
 - [Channel Tests](../../backend/test/famichat_web/channels/message_channel_test.exs)
+- [Messaging QA Runbook](../runbooks/messaging-qa-runbook.md)
 
 ---
 
@@ -237,9 +237,9 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`) with staged/merge/clear pending-commit flows
 - ✅ Send path app messages fail closed while pending commits remain unresolved
 - ✅ Stage/merge paths reject tampered lifecycle payloads (invalid operation, stale/regressive epochs, partial snapshot fragments) with explicit fail-closed errors
-- ✅ Durable client key-package inventory policy is active in `conversation_security_client_inventories` via `Famichat.Chat.ConversationSecurityClientInventoryStore` + `Famichat.Chat.ConversationSecurityKeyPackagePolicy` (`create`, `consume`, replenish-threshold behavior)
-- ✅ Key-package rotation policy is active (trigger-based stale rotation on canonical ensure/consume paths + scheduled batch rotation APIs)
-- ✅ Key-lifecycle telemetry for key-package inventory operations is active with redaction-safe aggregate metadata
+- ✅ Durable client inventory policy is active in `conversation_security_client_inventories` via `Famichat.Chat.ConversationSecurityClientInventoryStore` + `Famichat.Chat.ConversationSecurityClientInventoryPolicy` (`create`, `consume`, replenish-threshold behavior; canonical boundary naming is in use during implementation rename)
+- ✅ Client inventory rotation policy is active (trigger-based stale rotation on canonical ensure/consume paths + scheduled batch rotation APIs)
+- ✅ Key-lifecycle telemetry for client inventory operations is active with redaction-safe aggregate metadata
 - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage is still pending (deeper OpenMLS payload/epoch semantics)
 - ⚠️ Remaining key lifecycle hardening (rejoin persistence + revocation strategy) is still pending
 
