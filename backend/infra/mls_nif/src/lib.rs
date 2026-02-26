@@ -10,7 +10,10 @@ use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::OpenMlsRustCrypto;
 use rustler::{Encoder, Env, Term};
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex, OnceLock,
+};
 
 pub type Payload = HashMap<String, String>;
 
@@ -82,6 +85,7 @@ const SNAPSHOT_CACHE_KEY: &str = "session_cache";
 const MAX_DECRYPT_CACHE_ENTRIES: usize = 256;
 
 static GROUP_SESSIONS: OnceLock<Mutex<HashMap<String, GroupSession>>> = OnceLock::new();
+static KEY_PACKAGE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 fn group_sessions() -> &'static Mutex<HashMap<String, GroupSession>> {
     GROUP_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -141,7 +145,7 @@ pub fn create_key_package(params: &Payload) -> MlsResult {
             payload.insert("client_id".to_owned(), client_id.clone());
             payload.insert(
                 "key_package_ref".to_owned(),
-                format!("kp:{}:{}", client_id, current_epoch(params)),
+                next_key_package_ref(&client_id),
             );
             payload.insert("status".to_owned(), "created".to_owned());
             Ok(payload)
@@ -618,12 +622,9 @@ fn parse_bool(params: &Payload, key: &str) -> Option<bool> {
     })
 }
 
-fn current_epoch(params: &Payload) -> String {
-    params
-        .get("epoch")
-        .filter(|value| !value.trim().is_empty())
-        .cloned()
-        .unwrap_or_else(|| "1".to_owned())
+fn next_key_package_ref(client_id: &str) -> String {
+    let counter = KEY_PACKAGE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("kp:{}:{}", client_id, counter)
 }
 
 fn next_epoch(params: &Payload) -> String {
@@ -1437,11 +1438,23 @@ mod tests {
     }
 
     #[test]
-    fn create_key_package_and_group_are_deterministic() {
-        let kp = create_key_package(&payload(&[("client_id", "client-1")]))
+    fn create_key_package_refs_are_unique_and_group_create_is_stable() {
+        let first = create_key_package(&payload(&[("client_id", "client-1")]))
             .expect("key package must be generated");
-        assert_eq!(kp.get("status"), Some(&"created".to_owned()));
-        assert_eq!(kp.get("key_package_ref"), Some(&"kp:client-1:1".to_owned()));
+        let second = create_key_package(&payload(&[("client_id", "client-1")]))
+            .expect("key package must be generated");
+
+        assert_eq!(first.get("status"), Some(&"created".to_owned()));
+        assert_eq!(second.get("status"), Some(&"created".to_owned()));
+
+        let first_ref = first.get("key_package_ref").expect("first key package ref");
+        let second_ref = second
+            .get("key_package_ref")
+            .expect("second key package ref");
+
+        assert!(first_ref.starts_with("kp:client-1:"));
+        assert!(second_ref.starts_with("kp:client-1:"));
+        assert_ne!(first_ref, second_ref);
 
         let group_id = unique_group_id("group-kp");
 

@@ -217,6 +217,7 @@ defmodule Famichat.Chat do
   ## Conversation Visibility
 
   alias Famichat.Chat.Conversation
+  alias Famichat.Chat.ConversationSecurityKeyPackagePolicy
   alias Famichat.Chat.ConversationVisibilityService
 
   @doc """
@@ -271,5 +272,23 @@ defmodule Famichat.Chat do
         ]
   def list_visible_conversations(user_id, opts \\ []) do
     ConversationVisibilityService.list_visible_conversations(user_id, opts)
+  end
+
+  @doc """
+  Ensures durable key-package inventory exists for the client identity and replenishes if below threshold.
+  """
+  @spec ensure_conversation_security_key_packages(String.t(), keyword()) ::
+          {:ok, map()} | {:error, atom(), map()}
+  def ensure_conversation_security_key_packages(client_id, opts \\ []) do
+    ConversationSecurityKeyPackagePolicy.ensure_inventory(client_id, opts)
+  end
+
+  @doc """
+  Consumes one key package for the client identity and enforces replenish policy.
+  """
+  @spec consume_conversation_security_key_package(String.t(), keyword()) ::
+          {:ok, map()} | {:error, atom(), map()}
+  def consume_conversation_security_key_package(client_id, opts \\ []) do
+    ConversationSecurityKeyPackagePolicy.consume_key_package(client_id, opts)
   end
 end

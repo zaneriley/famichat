@@ -112,6 +112,18 @@ defmodule Famichat.TestSupport.MLS.FakeAdapter do
      }}
   end
 
+  defp success(:create_key_package, params) do
+    client_id = fetch_param(params, :client_id) || "fake-client"
+    ref = System.unique_integer([:positive, :monotonic])
+
+    {:ok,
+     %{
+       client_id: client_id,
+       key_package_ref: "kp:#{client_id}:#{ref}",
+       status: "created"
+     }}
+  end
+
   defp success(_operation, _params), do: {:ok, %{}}
 
   defp build_error_details(operation, params) do

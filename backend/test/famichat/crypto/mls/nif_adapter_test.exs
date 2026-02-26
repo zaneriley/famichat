@@ -24,6 +24,23 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
     assert fetch(health_payload, "reason") == "openmls_ready"
   end
 
+  test "create_key_package returns unique references per call" do
+    assert {:ok, first_payload} =
+             MLS.create_key_package(%{client_id: "nif-kp-unique"})
+
+    assert {:ok, second_payload} =
+             MLS.create_key_package(%{client_id: "nif-kp-unique"})
+
+    first_ref = fetch(first_payload, "key_package_ref")
+    second_ref = fetch(second_payload, "key_package_ref")
+
+    assert is_binary(first_ref)
+    assert is_binary(second_ref)
+    assert String.starts_with?(first_ref, "kp:nif-kp-unique:")
+    assert String.starts_with?(second_ref, "kp:nif-kp-unique:")
+    refute first_ref == second_ref
+  end
+
   test "group/message lifecycle operations return deterministic contract-safe payloads" do
     assert {:ok, create_group_payload} =
              MLS.create_group(%{
@@ -379,6 +396,7 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
         "session_sender_signer" -> :session_sender_signer
         "session_recipient_signer" -> :session_recipient_signer
         "session_cache" -> :session_cache
+        "key_package_ref" -> :key_package_ref
         _ -> nil
       end
 
