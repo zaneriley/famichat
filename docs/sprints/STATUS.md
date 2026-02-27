@@ -1,12 +1,18 @@
 # Famichat - Comprehensive Status Report
 
-**Last Updated**: 2026-02-26
+**Last Updated**: 2026-02-27
 **Sprint**: 9 (MLS E2EE Implementation)
 **Overall Progress**: 40% to MVP
 
 Terminology authority: [../ia-lexicon.md](../ia-lexicon.md)
 Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md)
 Sprint 9 P0 done-state checklist: [9.3-mls-definition-of-done.md](9.3-mls-definition-of-done.md)
+Sprint 9 product-diff done state: [9.4-mls-product-diff-done-state.md](9.4-mls-product-diff-done-state.md)
+Autonomous orchestration loop: [../runbooks/autonomous-implementation-loop.md](../runbooks/autonomous-implementation-loop.md)
+Continuity artifacts:
+- [../../.tmp/operations/agent-journal.md](../../.tmp/operations/agent-journal.md)
+- [../../.tmp/operations/questions-for-human.md](../../.tmp/operations/questions-for-human.md)
+- [../../.tmp/operations/checkpoint-ledger.md](../../.tmp/operations/checkpoint-ledger.md)
 
 ---
 
@@ -30,7 +36,10 @@ Sprint 9 P0 done-state checklist: [9.3-mls-definition-of-done.md](9.3-mls-defini
    - ✅ Dedicated conversation security state persistence is active in `conversation_security_states` via `Famichat.Chat.ConversationSecurityStateStore`
    - ✅ Legacy metadata envelopes are read for compatibility and migrated into the dedicated store on access
    - ✅ Replay-idempotency cache export is now bounded (max 256 entries)
-   - ✅ Adversarial contract tests now cover malformed ciphertext, cross-group misuse, replay rejection, out-of-order lifecycle sequencing, tampered pending metadata, epoch regression attempts, partial snapshot payload tampering, and concurrent stage/merge race outcomes
+   - ✅ Adversarial contract tests now cover malformed ciphertext, cross-group misuse, replay rejection, out-of-order lifecycle sequencing, tampered pending metadata, epoch regression attempts, malformed epoch encodings (including string epoch payloads), partial snapshot payload tampering, and concurrent stage/merge race outcomes
+   - ✅ Stage/merge lifecycle now enforces strict epoch progression (`stage == current+1`, `merge == staged`) with numeric-string epoch parsing and fail-closed malformed epoch rejection
+   - ✅ Stage/merge lifecycle now rejects contradictory payload hints (`group_id`, `operation`, `staged`, `merged`, `pending_commit`) when they do not match expected lifecycle semantics
+   - ✅ Adversarial lifecycle concurrency coverage now includes mixed stage-operation contention and clear-vs-merge contention with deterministic fail-closed outcomes
    - ✅ Optimistic lock-version conflict handling is active (`:stale_state` mapped fail-closed to `:storage_inconsistent`)
    - ✅ Lifecycle orchestrator exists (`ConversationSecurityLifecycle`: stage/merge/clear pending commit with optimistic locking)
    - ✅ Send path now fails closed while pending commits are unresolved (`:pending_proposals`)
@@ -38,18 +47,79 @@ Sprint 9 P0 done-state checklist: [9.3-mls-definition-of-done.md](9.3-mls-defini
    - ✅ Client inventory rotation policy is active (trigger-based stale rotation + scheduled batch rotation API)
    - ✅ Key-lifecycle telemetry for client inventory operations is active with aggregate-only metadata
    - ✅ Rejoin/state-loss recovery durability is active via `ConversationSecurityRecoveryLifecycle` + `conversation_security_recoveries` (idempotent recovery refs and fail-closed recovery semantics)
+   - ✅ Recovery lifecycle now retries transient stale lock-version conflicts during persistence, reducing false-hard-fail outcomes under churn while keeping fail-closed behavior on non-retryable errors
+   - ✅ Recovery-required states are now explicit on user paths:
+     - channel send: `recovery_required` + `recover_conversation_security_state` action
+     - canonical HTTP send: `409` + `error: recovery_required` + recovery action
+     - pending commit send block: `409` + `error: conversation_security_blocked` + `code: pending_proposals` + action `wait_for_pending_commit`
+   - ✅ Recovery/rejoin is now characterized end-to-end in integration tests (`recovery_rejoin_security_flow_test.exs`) with idempotent recovery replay proof
+   - ✅ Connected revoked channel clients are now blocked on new activity with explicit user-facing state (`device_revoked` + `security_state` event, plus channel shutdown before `new_msg` delivery)
+   - ✅ Revocation journal sealing APIs now exist (`complete_conversation_revocation/3`, `fail_conversation_revocation/3`) with idempotent transition tests
+   - ✅ Merge lifecycle now seals active revocation records with committed epoch specifically on `mls_remove` merge success (`ConversationSecurityLifecycle.merge_pending_commit/2`)
+   - ✅ Adversarial lifecycle coverage confirms revocations are not prematurely sealed by non-remove merges and are sealed on later remove merges
    - ⚠️ Commit/update/add/remove lifecycle hardening on top of dedicated state storage remains incomplete (deeper payload/epoch semantics)
    - ⚠️ Remaining key lifecycle hardening (revocation strategy + device/user removal semantics) is not complete
 2. ⚠️ **Operational Confidence Gaps** - quality visibility is incomplete
-   - Live messaging QA is now productized with first-class commands and artifacted matrix output:
-     - `cd backend && ./run qa:messaging:preflight`
-     - `cd backend && ./run qa:messaging:fast`
-     - `cd backend && ./run qa:messaging:deep`
-     - artifacts: `.tmp/_qa_messaging/<RUN_ID>/`
+   - Live messaging QA now produces artifacted matrix outcomes for `S1..F2 + R1 + R2` (revoked-device + recovery/rejoin explicit-state proof).
+   - Latest findings:
+     - `.tmp/_qa_messaging/20260226T143234Z_fast` (fast): PASS
+     - `.tmp/_qa_messaging/20260226T143234Z_deep` (deep): PASS with `canonical_flow_coverage: PASS` and `recovery_rejoin_contract: PASS`
+     - additional sequential verification: `.tmp/_qa_messaging/20260226T142958Z_fast` + `.tmp/_qa_messaging/20260226T143046Z_deep` (both PASS)
+     - post-lifecycle-hardening verification: `.tmp/_qa_messaging/20260227T003310Z_fast` (fast): PASS
+     - first-class `R2` verification: `.tmp/_qa_messaging/20260227T004329Z_fast` (fast): PASS
+     - first-class `R2` deep verification: `.tmp/_qa_messaging/20260227T004411Z_deep` (deep): PASS (`canonical_flow_coverage: PASS`, `recovery_rejoin_contract: PASS`)
+    - lock/isolation verification pair:
+      - `.tmp/_qa_messaging/20260227T014815Z_fast` (fast): BLOCKED (`reason: qa_run_already_active`)
+      - `.tmp/_qa_messaging/20260227T014811Z_fast` (fast): PASS
+    - clean post-restart verification:
+      - `.tmp/_qa_messaging/20260227T015152Z_fast` (fast): PASS
+      - `.tmp/_qa_messaging/20260227T014954Z_deep` (deep): PASS (`canonical_flow_coverage: PASS`, `recovery_rejoin_contract: PASS`)
+    - serialized repeatability burn-in (single-run mode):
+      - `.tmp/_qa_messaging/20260227T015741Z_fast` (fast): PASS
+      - `.tmp/_qa_messaging/20260227T015846Z_fast` (fast): PASS
+      - `.tmp/_qa_messaging/20260227T015950Z_deep` (deep): PASS
+      - `.tmp/_qa_messaging/20260227T020103Z_fast` (fast): PASS
+      - `.tmp/_qa_messaging/20260227T020218Z_deep` (deep): PASS
+    - post-peer-review hardening verification:
+      - `.tmp/_qa_messaging/20260227T021537Z_fast` (fast): PASS
+      - `.tmp/_qa_messaging/20260227T021711Z_deep` (deep): PASS
+	    - post-persistence-identity hardening verification:
+	      - `.tmp/_qa_messaging/20260227T022058Z_fast` (fast): PASS
+	      - `.tmp/_qa_messaging/20260227T022239Z_deep` (deep): PASS
+	    - post-guard-observer hardening verification:
+	      - `.tmp/_qa_messaging/20260227T022941Z_fast` (fast): PASS
+	      - `.tmp/_qa_messaging/20260227T023121Z_deep` (deep): PASS
+	     - `R1` in both passes confirms: healthy `new_msg` delivered; revoked `new_msg` blocked; revoked `security_state` present
+	     - `R2` in both passes confirms: reset succeeds, recovery succeeds, replay recovery is idempotent, and post-recovery message delivery/persistence succeeds
+     - post-merge-wiring deep run `.tmp/_qa_messaging/20260226T102453Z`: PASS, no failed scenarios, `R1` remains PASS
+     - blocked classification example: `.tmp/_qa_messaging/20260226T142648Z_fast` (`R1` status `BLOCKED`, `blocked_failures: [\"R1\"]`)
+   - Probe hardening note:
+     - prior deep run `.tmp/_qa_messaging/20260226T074005Z` failed `R1` with `revoked_missing_security_state`
+     - root cause was listener readiness race; harness now waits for join-ack before assertions
+     - runbook seed now uses UUID-backed device IDs to reduce nondeterminism from revoked-device identity reuse
+   - Additional harness hardening:
+     - listener timeout now starts after join-ack (not just socket-open), reducing false WS parity misses
+     - HTTP/revocation/recovery probes now treat transport errors as scenario evidence (`-1` status) instead of aborting gate execution
+     - canonical-flow session ids now include UUID entropy to avoid cross-run device-rate-limit collisions
+    - QA run lock now blocks overlapping `qa:messaging:*` executions (`reason: qa_run_already_active`) and releases lock only on main run exit
+    - lock acquisition now treats missing-pid lock dirs as in-flight unless stale (`QA_RUN_LOCK_STALE_SECONDS`) to reduce lock-steal races
+    - transport probes now use bounded curl timeout controls (`QA_CURL_CONNECT_TIMEOUT_SECONDS`, `QA_CURL_MAX_TIME_SECONDS`) to avoid indefinite hangs
+	    - transport status normalization now maps curl `000` to `-1` sentinel for consistent failure classification
+	    - persistence assertions now include message-identity validation (body presence in `history_after`) beyond count-only deltas
+	    - reject-path scenarios now enforce guard-observer WS parity (`guard_ws_parity`) to surface unauthorized fanout leaks explicitly
+	     - preflight now guards hung `docker compose ps` calls with timeout + `docker ps` fallback
+   - Parallel-run reliability note:
+     - running fast and deep in the same second used to collide on one run-id folder
+     - run-id generation now namespaces by mode (`*_fast`, `*_deep`) to prevent artifact races
    - Canonical-flow coverage capture is now available via deep loop artifact (`canonical_flow_coverage.txt`)
+   - GitHub Actions workflow now runs messaging QA gates automatically:
+     - PR/main push: `qa:messaging:fast`
+     - nightly schedule: `qa:messaging:deep`
+     - artifact upload: `.tmp/_qa_messaging/<QA_RUN_ID>` per run
    - Repo-wide lint/static baseline debt is still unresolved
    - Canonical flow timing is now captured per run (`canonical_flow_timing.txt`)
-   - Remaining gap: CI required-check wiring (PR fast loop + nightly deep loop)
+  - Remaining gap: enforce workflow checks as required branch protection gates + define explicit escalation ownership on failures
+  - Workflow now explicitly fails when `gate_report.outcome != PASS` (fast and deep jobs)
 
 ---
 
@@ -143,9 +213,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
   - **Schema**: [group_conversation_privileges.ex](../../backend/lib/famichat/chat/group_conversation_privileges.ex)
   - **Tests**: [group_conversation_privileges_test.exs](../../backend/test/famichat/chat/group_conversation_privileges_test.exs) ✓
 
-**Family Conversations** ⚠️:
-- ⚠️ Type defined in schema but no creation function
-- Conversation type `:family` exists but not implemented
+**Family Conversations** ✅ Runtime Path Working:
+- ✅ Family conversation messaging path is active in live QA (`F1`/`F2` scenarios pass in fast/deep matrix runs).
+- ⚠️ Dedicated public "create family conversation" API ergonomics can still be improved, but runtime product behavior is implemented.
 
 **Visibility Management** ✅:
 - ✅ **hide_conversation/2** - Add user to hidden_by_users array
@@ -322,7 +392,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ✅ `GET /up/databases` - Database health check
 
 **LiveView** (Dev/Test only):
-- ✅ `/admin/message-test` ([message_test_live.ex](../../backend/lib/famichat_web/live/message_test_live.ex)) - Message testing UI
+- ✅ `/admin/message` ([message_test_live.ex](../../backend/lib/famichat_web/live/message_test_live.ex)) - Canonical message testing UI (`/admin/message-test` kept as compatibility alias)
 - ✅ `/admin/tailwind-test` ([tailwind_test_live.ex](../../backend/lib/famichat_web/live/tailwind_test_live.ex)) - UI component testing
 - ✅ `/admin/dashboard` - Phoenix LiveDashboard
 
@@ -486,15 +556,16 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - **Priority**: HIGH - needed to dogfood and validate UX
 - **Note**: Native mobile app deferred until Layer 4
 
-#### 7. Family-Wide Conversations ❌ TYPE DEFINED
-- **Impact**: Cannot create family-wide chat rooms
-- **What Exists**: Conversation type `:family` defined in schema
+#### 7. Family-Wide Conversations ✅ CORE BACKEND IMPLEMENTED
+- **Impact**: Family-wide conversation behavior is available in backend/channel/API verification flows.
+- **What Exists**:
+  - Conversation type `:family` works in authorization, send, and QA matrix (`F1/F2`).
+  - Runtime evidence in `qa:messaging:*` artifacts confirms pass behavior for family send/reject scenarios.
+  - Seed/runbook path includes deterministic family conversation setup.
 - **What's Missing**:
-  - No `create_family_conversation/1` function
-  - No auto-membership logic (should all family members join automatically?)
-  - No family chat UI
-- **Planned**: Future sprint
-- **Effort**: ~2-3 days
+  - Dedicated product-facing family chat UX and policy controls (for example admin-only announcement mode).
+  - Clear product API boundary for family conversation creation/configuration beyond current seed/context setup.
+- **Planned**: UX/productization in later sprint.
 
 #### 8. Advanced Features ❌ NOT PLANNED
 - **Not Implemented**:

@@ -157,7 +157,7 @@ Famichat is a self-hosted, white-label communication platform designed specifica
 **User Story**: "As a family admin, I want to create a family-wide chat that includes all family members."
 
 **Features**:
-- ⚠️ Family conversation type (defined but not implemented)
+- ✅ Family conversation type is implemented in backend/channel paths (`:family`)
 - Auto-membership for all family members
 - Admin-only posting (optional)
 - Important announcements, events, shared calendar

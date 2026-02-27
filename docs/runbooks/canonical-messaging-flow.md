@@ -12,6 +12,8 @@ It validates:
 2. A real channel subscriber receives `new_msg`.
 3. Sent messages are persisted and visible via `GET /api/v1/conversations/:id/messages`.
 4. Non-happy paths (`401/403/422`) emit no channel message side effects.
+5. Revoked connected devices receive explicit `security_state` and do not receive new `new_msg` payloads.
+6. Required recovery states are explicit (`recovery_required`) and recovery/rejoin restores messaging.
 
 ## Preconditions
 
@@ -35,6 +37,17 @@ This command executes:
 - message receive assertion
 - message history persistence assertion
 - non-happy no-broadcast assertions
+
+Run recovery/rejoin characterization:
+
+```bash
+cd backend && ./run elixir:test test/famichat_web/integration/recovery_rejoin_security_flow_test.exs
+```
+
+This verifies:
+- missing MLS state fails with explicit `recovery_required`
+- `recover_conversation_security_state` succeeds and is idempotent on replay
+- post-recovery send succeeds on canonical path
 
 ## Seed data for manual drills
 
@@ -92,6 +105,8 @@ Or use the first-class runbook command (writes timing to artifacts):
 cd backend && ./run qa:messaging:fast
 ```
 
+`qa:messaging:fast` now includes revoked-device and recovery/rejoin gates (`S1..F2 + R1 + R2`) in addition to canonical flow timing artifacts.
+
 Artifacts:
 - `.tmp/_qa_messaging/<RUN_ID>/canonical_flow_result.txt`
 - `.tmp/_qa_messaging/<RUN_ID>/canonical_flow_timing.txt`
@@ -107,6 +122,7 @@ cd backend && ./run qa:messaging:deep
 
 Coverage artifact:
 - `.tmp/_qa_messaging/<RUN_ID>/canonical_flow_coverage.txt`
+- `.tmp/_qa_messaging/<RUN_ID>/recovery_rejoin_contract.txt` (deep mode recovery/rejoin integration gate)
 
 ## Source of truth in code
 
@@ -114,6 +130,8 @@ Coverage artifact:
 2. Contract tests (`200/401/403/422` + no-broadcast): `backend/test/famichat_web/controllers/message_test_controller_test.exs`
 3. End-to-end runbook integration test: `backend/test/famichat_web/integration/canonical_messaging_flow_test.exs`
 4. Seed task: `backend/lib/mix/tasks/famichat.runbook_seed.ex`
+5. Revoked-device integration contract: `backend/test/famichat_web/integration/revoked_device_security_flow_test.exs`
+6. Recovery/rejoin integration contract: `backend/test/famichat_web/integration/recovery_rejoin_security_flow_test.exs`
 
 ## Related Runbook
 

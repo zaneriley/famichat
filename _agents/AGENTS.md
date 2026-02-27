@@ -27,6 +27,33 @@ Here is the refactored, evergreen `AGENTS.md`:
 
 Our code must read like a description of the business domain, not just a series of technical operations. We optimize for the developer reading the code six months from now who needs to understand *why* something is happening, not just *what* is happening.
 
+## 0. Autonomous Orchestration Protocol
+When the user is away, keep moving. Do not block on "perfect" infra when a robust incremental path exists.
+
+### Required loop
+1. Spawn IA/DDD review agents for the current thin slice.
+2. Reconcile into one boundary-accurate implementation plan.
+3. Implement in small, test-first increments.
+4. Spawn peer review agents (security, performance, idiomatic/readable Elixir).
+5. Apply fixes and add adversarial tests.
+6. Spawn red-team agents to invalidate assumptions.
+7. Apply fixes and rerun verification.
+8. Update status + continuity docs, then commit.
+
+### Continuity artifacts (must update every loop)
+- `.tmp/operations/agent-journal.md`
+- `.tmp/operations/questions-for-human.md`
+- `.tmp/operations/checkpoint-ledger.md`
+- `docs/runbooks/autonomous-implementation-loop.md`
+
+### Decision posture
+- Prefer spirit over letter: optimize for trustworthy E2EE behavior, not checkbox completion.
+- Keep one canonical path for humans, frontend, CLI, and agents.
+- For large infra (for example, Oban), ship robust sync behavior now with explicit TODO hooks when ROI is low in pre-user phase.
+- Fail closed on security ambiguity; never hide boundary failures.
+- Treat `docs/sprints/9.4-mls-product-diff-done-state.md` as the user-minimum product stop condition.
+- Work in long uninterrupted windows and report at checkpoint-level product deltas, not thin-slice churn.
+
 ## 1. Agent Operating Principles: Navigating Ambiguity
 When an LLM or agent interacts with this codebase, it must adhere to the following empirical philosophy:
 * **Resist Premature Formalization:** Never invent formal methodologies, new acronyms, rigid checklists, or fake scoring systems (e.g., "calculating risk scores"). Tolerate unstructured messes.

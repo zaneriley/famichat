@@ -123,7 +123,7 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 📍 **See [CURRENT-SPRINT.md](CURRENT-SPRINT.md) for detailed tasks**
 
 **Duration**: Oct 1 - Oct 15, 2025
-**Status**: 🟡 Implementation landing is on track; first-class QA command path is now shipped, with CI gating + repo-wide lint/static debt follow-through remaining
+**Status**: 🟡 Implementation landing is on track; first-class QA command path and CI workflow are now shipped, with branch-protection enforcement + repo-wide lint/static debt follow-through remaining
 
 **Goal**: Integrate real-time messaging via Phoenix Channels with encryption-aware infrastructure
 
@@ -137,7 +137,7 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 - ✅ Username fingerprint migration + single-use invite acceptance (registration JWT handshake)
 
 **In Progress**:
-- 🔄 CI-required wiring for messaging QA fast/deep commands
+- 🔄 Branch-protection enforcement for messaging QA workflow checks
 - 🔄 Repo-wide lint/static baseline debt cleanup (separate from story behavior verification)
 
 **Not Started**:
@@ -150,7 +150,7 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 - **Accounts context** ✅ shipped (Story 7.9)
 
 **Blockers**:
-1. QA command path is not yet wired as required PR/nightly CI gates
+1. Required-check enforcement for QA workflow is not yet locked in branch protection settings
 2. Repo-wide lint/static baseline debt remains unresolved
 
 **Key Files**:
@@ -194,6 +194,7 @@ Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md
 **Goal**: Implement server-side MLS encryption via Rust NIF (OpenMLS)
 **Contract Reference**: [9.0-mls-rust-nif-contract-deep-dive.md](9.0-mls-rust-nif-contract-deep-dive.md)
 **TDD Plan Reference**: [9.1-mls-contract-tdd-plan.md](9.1-mls-contract-tdd-plan.md)
+**Product-Diff Done State**: [9.4-mls-product-diff-done-state.md](9.4-mls-product-diff-done-state.md)
 **Monorepo Placement**: backend infrastructure adapter at `backend/infra/mls_nif` (`/native` reserved for future app clients)
 
 **Key Deliverables**:
