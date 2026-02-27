@@ -99,6 +99,10 @@ Important:
 
 1. These routes are the product contract for LLM/CLI and alternate clients.
 2. `POST /api/test/broadcast` is a legacy harness route and not part of the product contract.
+3. `GET /api/v1/conversations/:id/messages` supports reconnect catch-up via `after=<message_id>` and returns:
+   - `meta.has_more` (`boolean`)
+   - `meta.next_cursor` (`message_id | null`)
+   - `422 invalid_pagination` for malformed `after`, foreign-conversation cursors, or incompatible `after + offset`.
 
 ## WS Contract Alignment
 
@@ -122,7 +126,7 @@ Important:
 
 1. Keep QA runner/integration contracts pinned to `/api/v1` routes and remove remaining `/api/test` write-path dependencies.
 2. Close response-envelope drift between auth/chat/read/write paths.
-3. Add cursor-based message catch-up contract (`after`/`has_more`/`next_cursor`) for reconnect continuity.
+3. Landed: cursor-based message catch-up contract on read API (`after` + `meta.has_more` + `meta.next_cursor`) for reconnect continuity.
 4. Normalize bearer-token parsing and 401 payloads across trusted + authenticated plugs.
 
 ## Related Docs

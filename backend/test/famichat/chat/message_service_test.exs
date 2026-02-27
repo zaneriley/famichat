@@ -1,6 +1,5 @@
 defmodule Famichat.Chat.MessageServiceTest do
-  use Famichat.DataCase
-  use ExUnit.Case, async: true
+  use Famichat.DataCase, async: false
 
   alias Famichat.Chat.{
     ConversationAccess,
@@ -11,6 +10,17 @@ defmodule Famichat.Chat.MessageServiceTest do
 
   alias Famichat.Repo
   import Famichat.ChatFixtures
+
+  setup do
+    previous = Application.get_env(:famichat, :mls_enforcement, false)
+    Application.put_env(:famichat, :mls_enforcement, false)
+
+    on_exit(fn ->
+      Application.put_env(:famichat, :mls_enforcement, previous)
+    end)
+
+    :ok
+  end
 
   describe "get_conversation_messages/2" do
     setup do
@@ -49,6 +59,129 @@ defmodule Famichat.Chat.MessageServiceTest do
                )
 
       assert length(messages) == 2
+    end
+
+    test "supports catch-up cursor via after message id (exclusive)", %{
+      conversation: conv,
+      user: user
+    } do
+      {:ok, m1} =
+        MessageService.send_message(
+          valid_message_params(user, conv, "msg-1", 1)
+        )
+
+      {:ok, m2} =
+        MessageService.send_message(
+          valid_message_params(user, conv, "msg-2", 2)
+        )
+
+      {:ok, m3} =
+        MessageService.send_message(
+          valid_message_params(user, conv, "msg-3", 3)
+        )
+
+      {:ok, m4} =
+        MessageService.send_message(
+          valid_message_params(user, conv, "msg-4", 4)
+        )
+
+      assert {:ok, [msg2, msg3]} =
+               MessageService.get_conversation_messages(conv.id,
+                 limit: 2,
+                 after: m1.id
+               )
+
+      assert msg2.id == m2.id
+      assert msg3.id == m3.id
+
+      assert {:ok, [msg4]} =
+               MessageService.get_conversation_messages(conv.id,
+                 limit: 2,
+                 after: m3.id
+               )
+
+      assert msg4.id == m4.id
+    end
+
+    test "returns invalid pagination when after is malformed", %{
+      conversation: conv
+    } do
+      assert {:error, {:invalid_pagination, changeset}} =
+               MessageService.get_conversation_messages(conv.id,
+                 after: "not-a-uuid"
+               )
+
+      assert {"is invalid", _} = Keyword.fetch!(changeset.errors, :after)
+    end
+
+    test "returns invalid pagination when after cursor is outside conversation",
+         %{conversation: conv} do
+      other_conversation = conversation_fixture(%{conversation_type: :direct})
+      [other_user | _] = ConversationService.list_members(other_conversation)
+
+      {:ok, foreign_message} =
+        MessageService.send_message(
+          valid_message_params(other_user, other_conversation, "foreign", 1)
+        )
+
+      assert {:error, {:invalid_pagination, changeset}} =
+               MessageService.get_conversation_messages(conv.id,
+                 after: foreign_message.id
+               )
+
+      assert {"does not belong to this conversation", _} =
+               Keyword.fetch!(changeset.errors, :after)
+    end
+
+    test "returns invalid pagination when after and offset are combined", %{
+      conversation: conv,
+      user: user
+    } do
+      {:ok, m1} =
+        MessageService.send_message(
+          valid_message_params(user, conv, "msg-1", 1)
+        )
+
+      assert {:error, {:invalid_pagination, changeset}} =
+               MessageService.get_conversation_messages(conv.id,
+                 after: m1.id,
+                 offset: 1
+               )
+
+      assert {"must be empty when after is provided", _} =
+               Keyword.fetch!(changeset.errors, :offset)
+    end
+
+    test "uses inserted_at + id ordering for stable cursor paging", %{
+      conversation: conv,
+      user: user
+    } do
+      timestamp = ~U[2026-01-01 00:00:00.000000Z]
+      m1 = create_message_at!(user, conv, "same-ts-a", timestamp)
+      m2 = create_message_at!(user, conv, "same-ts-b", timestamp)
+
+      m3 =
+        create_message_at!(
+          user,
+          conv,
+          "next-ts",
+          DateTime.add(timestamp, 1, :second)
+        )
+
+      expected_first_ids = Enum.sort([m1.id, m2.id])
+
+      assert {:ok, first_page} =
+               MessageService.get_conversation_messages(conv.id, limit: 2)
+
+      assert Enum.map(first_page, & &1.id) == expected_first_ids
+
+      assert {:ok, [next_message]} =
+               MessageService.get_conversation_messages(conv.id,
+                 limit: 2,
+                 after: List.last(expected_first_ids)
+               )
+
+      assert next_message.id == m3.id
     end
 
     test "returns error for invalid conversation ID" do
@@ -220,6 +353,17 @@ defmodule Famichat.Chat.MessageServiceTest do
     }
 
     Repo.insert(message)
+  end
+
+  defp create_message_at!(user, conv, content, inserted_at) do
+    %Message{
+      sender_id: user.id,
+      conversation_id: conv.id,
+      content: content,
+      inserted_at: inserted_at,
+      updated_at: inserted_at
+    }
+    |> Repo.insert!()
   end
 
   defp valid_message_params(

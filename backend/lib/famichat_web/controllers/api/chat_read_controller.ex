@@ -40,14 +40,20 @@ defmodule FamichatWeb.API.ChatReadController do
 
     with {:ok, _uuid} <- Ecto.UUID.cast(conversation_id),
          :ok <- authorize_message_read(conversation_id, user_id) do
-      case MessageService.get_conversation_messages(conversation_id,
+      case MessageService.get_conversation_messages_page(conversation_id,
              limit: params["limit"],
              offset: params["offset"],
+             after: params["after"],
              preload: []
            ) do
-        {:ok, messages} ->
+        {:ok,
+         %{messages: messages, has_more: has_more, next_cursor: next_cursor}} ->
           data = Enum.map(messages, &present_message/1)
-          json(conn, %{data: data})
+
+          json(conn, %{
+            data: data,
+            meta: %{has_more: has_more, next_cursor: next_cursor}
+          })
 
         {:error, {:invalid_pagination, changeset}} ->
           conn

@@ -134,10 +134,10 @@ Minimum actor/device set for each deep run:
 | F2 | family | outsider `O` sends to family | none | all | reject (`403/404`) |
 | R1 | revoked | revoked `A-dev2` is subscribed while healthy sender posts | healthy subscribers only | revoked `A-dev2` gets no `new_msg` and receives explicit `security_state` | success |
 | R2 | recovery | reset state, recover with stable `recovery_ref`, replay recovery, then send | authorized members receive post-recovery `new_msg` | no silent recovery failure; replay must be idempotent | success |
-| C1 | continuity (pilot) | sender posts while `A-dev2` offline, `A-dev2` joins later, reads history, then sender posts again | `A-dev2` catches missed message via history and receives later `new_msg` live | no gaps/duplicates in message ids | success |
+| C1 | continuity | sender posts while `A-dev2` offline, `A-dev2` joins later, reads history, then sender posts again | `A-dev2` catches missed message via history and receives later `new_msg` live | no gaps/duplicates in message ids | success |
 
-`S1..F2 + R1 + R2` are hard gates. A run cannot pass without all 10 rows executed with artifacts. `C1` is tracked as a pilot scenario until runner support is fully wired.
-`qa:messaging:deep` also records `recovery_rejoin_contract.txt` as an additional integration guardrail.
+`S1..F2 + R1 + R2` are hard probe gates, and `C1` is a hard integration gate (`continuity_contract.txt`). A run cannot pass unless both the probe matrix and continuity contract pass.
+`qa:messaging:*` records `continuity_contract.txt`; `qa:messaging:deep` additionally records `recovery_rejoin_contract.txt`.
 Reject-path scenarios (`S2`, `D2`, `G2`, `F2`) now include a guard observer and must show `guard_ws_parity: pass`.
 Runner determinism hardening:
 `qa:messaging:*` seeds run-scoped users/families (`<run_id>`-suffixed) and pre-seeds conversation recovery for matrix conversations before probes, so stale prior-message state does not poison history/read assertions.
@@ -221,6 +221,7 @@ Each scenario must have its own folder with generated probe artifacts (exact fil
   matrix_results.csv
   gate_report.json
   summary.md
+  continuity_contract.txt
 ```
 
 Bug output for red-team passes:
@@ -251,7 +252,7 @@ Additional fields are present for specialized scenarios:
 1. `S2`/`D2`/`G2`/`F2`: `guard_ws_parity` must remain `pass` (`fail` means unauthorized fanout leak)
 2. `R1`: `revoke_status`, `healthy_has_new_msg`, `revoked_has_new_msg`, `revoked_has_security_state`
 3. `R2`: `reset_status`, `recover_status`, `recover_replay_status`, `replay_idempotent`, `observer_has_new_msg`
-4. `C1` (pilot): `late_join_history_has_first`, `late_join_live_has_second`, `message_id_continuity`
+4. `C1` continuity gate evidence lives in `continuity_contract.txt` (integration contract: offline gap catch-up + post-reconnect live delivery by `message_id`)
 
 ## 10. Gate Decision and Severity
 
@@ -259,10 +260,11 @@ Hard pass criteria:
 1. `S1..F2` all executed
 2. `R1` executed with explicit revoked-device evidence (`security_state`, no `new_msg`)
 3. `R2` executed with explicit recovery replay idempotency evidence
-4. No unauthorized delivery in any scenario
-5. Rejected actions produce no side effects
-6. Same-user two-tab/two-device behavior matches expected fanout
-7. Success-path persistence checks prove message identity in `history_after` (not only count deltas)
+4. `C1` continuity integration gate passes (`continuity_contract.txt`)
+5. No unauthorized delivery in any scenario
+6. Rejected actions produce no side effects
+7. Same-user two-tab/two-device behavior matches expected fanout
+8. Success-path persistence checks prove message identity in `history_after` (not only count deltas)
 
 Severity:
 - `S0`: unauthorized visibility/send succeeds, or reject path causes delivery/persistence side effect

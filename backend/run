@@ -321,8 +321,7 @@ function _qa_message_count {
 
 function _qa_message_match_token {
   local response_file="$1"
-  local fallback_token="$2"
-  local match_token="${fallback_token}"
+  local match_token=""
   local message_id=""
 
   if [[ -f "${response_file}" ]]; then
@@ -332,7 +331,8 @@ function _qa_message_match_token {
     )"
   fi
 
-  if [[ -n "${message_id}" && "${message_id}" != "null" ]]; then
+  if [[ -n "${message_id}" && "${message_id}" != "null" &&
+    "${message_id}" != "empty" ]]; then
     match_token="${message_id}"
   fi
 
@@ -897,7 +897,9 @@ function _qa_run_http_matrix_scenario {
   fi
 
   if [[ -n "${ws_token}" && -n "${ws_topic}" ]]; then
-    if grep -Fq '"new_msg"' "${ws_log_file}" && grep -Fq "${ws_match_token}" "${ws_log_file}"; then
+    if [[ -n "${ws_match_token}" ]] &&
+      grep -Fq '"new_msg"' "${ws_log_file}" &&
+      grep -Fq "${ws_match_token}" "${ws_log_file}"; then
       ws_parity="pass"
     else
       ws_parity="fail"
@@ -927,7 +929,9 @@ function _qa_run_http_matrix_scenario {
       else
         notes="${notes};guard_ws_log_missing"
       fi
-    elif grep -Fq '"new_msg"' "${guard_ws_log_file}" && grep -Fq "${ws_match_token}" "${guard_ws_log_file}"; then
+    elif [[ -n "${ws_match_token}" ]] &&
+      grep -Fq '"new_msg"' "${guard_ws_log_file}" &&
+      grep -Fq "${ws_match_token}" "${guard_ws_log_file}"; then
       guard_ws_parity="fail"
       status="FAIL"
       severity="S0"
@@ -1241,6 +1245,9 @@ function _qa_run_revoked_device_scenario {
     send_status="-1"
   fi
 
+  local ws_match_token
+  ws_match_token="$(_qa_message_match_token "${response_file}")"
+
   if [[ -n "${revoked_ws_pid}" ]]; then
     wait "${revoked_ws_pid}" || true
   fi
@@ -1306,13 +1313,15 @@ function _qa_run_revoked_device_scenario {
   fi
 
   local healthy_has_new_msg="false"
-  if grep -Fq '"new_msg"' "${healthy_ws_log_file}" &&
+  if [[ -n "${ws_match_token}" ]] &&
+    grep -Fq '"new_msg"' "${healthy_ws_log_file}" &&
     grep -Fq "${ws_match_token}" "${healthy_ws_log_file}"; then
     healthy_has_new_msg="true"
   fi
 
   local revoked_has_new_msg="false"
-  if grep -Fq '"new_msg"' "${revoked_ws_log_file}" &&
+  if [[ -n "${ws_match_token}" ]] &&
+    grep -Fq '"new_msg"' "${revoked_ws_log_file}" &&
     grep -Fq "${ws_match_token}" "${revoked_ws_log_file}"; then
     revoked_has_new_msg="true"
   fi
@@ -1711,10 +1720,11 @@ function _qa_run_recovery_rejoin_scenario {
   fi
 
   local ws_match_token
-  ws_match_token="$(_qa_message_match_token "${send_response_file}" "${message_body}")"
+  ws_match_token="$(_qa_message_match_token "${send_response_file}")"
 
   local observer_has_new_msg="false"
-  if grep -Fq '"new_msg"' "${ws_log_file}" &&
+  if [[ -n "${ws_match_token}" ]] &&
+    grep -Fq '"new_msg"' "${ws_log_file}" &&
     grep -Fq "${ws_match_token}" "${ws_log_file}"; then
     observer_has_new_msg="true"
   fi
@@ -2299,7 +2309,14 @@ function _qa_messaging_run {
   printf 'elapsed_seconds=%s\n' "${canonical_elapsed}" > "${output_root}/canonical_flow_timing.txt"
 
   local coverage_status="SKIP"
+  local continuity_contract_status="PASS"
   local recovery_contract_status="SKIP"
+
+  if ! elixir:test test/famichat_web/integration/messaging_gap_contract_test.exs \
+    > "${output_root}/continuity_contract.txt" 2>&1; then
+    continuity_contract_status="FAIL"
+  fi
+
   if [[ "${mode}" == "deep" ]]; then
     coverage_status="PASS"
     if ! elixir:test:coverage test/famichat_web/integration/canonical_messaging_flow_test.exs \
@@ -2549,6 +2566,10 @@ function _qa_messaging_run {
     global_failures+=("recovery_rejoin_contract")
   fi
 
+  if [[ "${continuity_contract_status}" == "FAIL" ]]; then
+    global_failures+=("continuity_contract")
+  fi
+
   local outcome="PASS"
   if [[ "${#blocked_failures[@]}" -gt 0 ]]; then
     outcome="BLOCKED"
@@ -2580,6 +2601,7 @@ function _qa_messaging_run {
     --arg outcome "${outcome}" \
     --arg canonical_flow "${canonical_status}" \
     --arg coverage "${coverage_status}" \
+    --arg continuity_contract "${continuity_contract_status}" \
     --arg recovery_rejoin_contract "${recovery_contract_status}" \
     --argjson canonical_flow_elapsed_seconds "${canonical_elapsed}" \
     --argjson scenarios "${scenario_results}" \
@@ -2599,6 +2621,7 @@ function _qa_messaging_run {
       canonical_flow: $canonical_flow,
       canonical_flow_elapsed_seconds: $canonical_flow_elapsed_seconds,
       canonical_flow_coverage: $coverage,
+      continuity_contract: $continuity_contract,
       recovery_rejoin_contract: $recovery_rejoin_contract,
       scenarios: $scenarios,
       critical_failures: $critical_failures,
@@ -2616,6 +2639,7 @@ function _qa_messaging_run {
     echo "- canonical_flow: \`${canonical_status}\`"
     echo "- canonical_flow_elapsed_seconds: \`${canonical_elapsed}\`"
     echo "- canonical_flow_coverage: \`${coverage_status}\`"
+    echo "- continuity_contract: \`${continuity_contract_status}\`"
     echo "- recovery_rejoin_contract: \`${recovery_contract_status}\`"
     echo "- base_url: \`${base_url}\`"
     echo "- ws_base_url: \`${ws_base_url}\`"
@@ -2624,6 +2648,7 @@ function _qa_messaging_run {
     echo "- seed: \`seed_matrix.json\`"
     echo "- matrix: \`matrix_results.csv\`"
     echo "- gate report: \`gate_report.json\`"
+    echo "- continuity contract: \`continuity_contract.txt\`"
     if [[ "${mode}" == "deep" ]]; then
       echo "- recovery contract: \`recovery_rejoin_contract.txt\`"
     fi

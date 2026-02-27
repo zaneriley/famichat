@@ -14,8 +14,7 @@
       </h1>
       <p class="text-xs text-[var(--text-muted)]">
         Actor: <span class="font-mono"><%= @test_username %></span>
-        · Device:
-        <span class="font-mono"><%= @device_id || "none" %></span>
+        · Device: <span class="font-mono"><%= @device_id || "none" %></span>
       </p>
     </div>
     <button
@@ -34,14 +33,16 @@
 
   <section class="px-md pb-sm text-xs text-[var(--text-muted)]">
     <p>
-      Use <a href="/admin/spike" class="underline">/admin/spike</a> to open/share actor links.
+      Use <a href="/admin/spike" class="underline">/admin/spike</a>
+      to open/share actor links.
       This is a throwaway design-spike harness over real backend paths.
     </p>
     <p class="mt-1">
-      Topic status:
-      <span class="font-mono"><%= @topic || "not_joined" %></span>
+      Topic status: <span class="font-mono"><%= @topic || "not_joined" %></span>
       · MLS enforcement:
-      <span class="font-mono"><%= if @mls_enforcement_enabled, do: "on", else: "off" %></span>
+      <span class="font-mono">
+        <%= if @mls_enforcement_enabled, do: "on", else: "off" %>
+      </span>
     </p>
     <%= if not @mls_enforcement_enabled do %>
       <p class="mt-1">
@@ -52,8 +53,7 @@
     <% end %>
     <%= if @recovery_last_status do %>
       <p class="mt-1">
-        Recovery:
-        <span class="font-mono"><%= @recovery_last_status %></span>
+        Recovery: <span class="font-mono"><%= @recovery_last_status %></span>
       </p>
     <% end %>
   </section>
@@ -63,8 +63,7 @@
       <strong>Security state:</strong>
       <span class="font-mono"><%= @security_reason %></span>
       <%= if @security_action not in [nil, ""] do %>
-        · action:
-        <span class="font-mono"><%= @security_action %></span>
+        · action: <span class="font-mono"><%= @security_action %></span>
       <% end %>
     </div>
   <% end %>
@@ -81,7 +80,9 @@
   <section class="mx-md mb-sm grid grid-cols-1 gap-2 rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3 text-xs md:grid-cols-2">
     <div class="flex items-end gap-2">
       <div class="min-w-0 grow">
-        <label class="mb-1 block text-[var(--text-muted)]">Revoke device id</label>
+        <label class="mb-1 block text-[var(--text-muted)]">
+          Revoke device id
+        </label>
         <input
           type="text"
           class="ac-text-input w-full"
@@ -92,7 +93,10 @@
           placeholder="spike-zane-device-2"
         />
       </div>
-      <button class="ac-primary-button whitespace-nowrap px-3 py-2" phx-click="revoke-target-device">
+      <button
+        class="ac-primary-button whitespace-nowrap px-3 py-2"
+        phx-click="revoke-target-device"
+      >
         Revoke
       </button>
     </div>
@@ -159,9 +163,14 @@
         <div class={[
           "ac-chat-bubble",
           cond do
-            message.system_message -> "rounded-md border border-[var(--color-brown-200)] bg-white/70 px-3 py-2"
-            message.outgoing -> "ac-chat-bubble-outgoing"
-            true -> "ac-chat-bubble-incoming"
+            message.system_message ->
+              "rounded-md border border-[var(--color-brown-200)] bg-white/70 px-3 py-2"
+
+            message.outgoing ->
+              "ac-chat-bubble-outgoing"
+
+            true ->
+              "ac-chat-bubble-incoming"
           end
         ]}>
           <p class="leading-relaxed text-[var(--text-base)]">

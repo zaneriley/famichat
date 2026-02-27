@@ -1,9 +1,20 @@
 defmodule FamichatWeb.API.ChatReadControllerTest do
-  use FamichatWeb.ConnCase, async: true
+  use FamichatWeb.ConnCase, async: false
 
   alias Famichat.Auth.Sessions
   alias Famichat.Chat.{ConversationVisibilityService, MessageService}
   alias Famichat.ChatFixtures
+
+  setup do
+    previous = Application.get_env(:famichat, :mls_enforcement, false)
+    Application.put_env(:famichat, :mls_enforcement, false)
+
+    on_exit(fn ->
+      Application.put_env(:famichat, :mls_enforcement, previous)
+    end)
+
+    :ok
+  end
 
   setup %{conn: conn} do
     family = ChatFixtures.family_fixture()
@@ -183,6 +194,8 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
       |> json_response(200)
 
     assert %{"data" => data} = response
+    assert response["meta"]["has_more"] == true
+    assert is_binary(response["meta"]["next_cursor"])
     assert Enum.map(data, & &1["content"]) == ["msg-1", "msg-2"]
 
     error_response =
@@ -194,6 +207,137 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
 
     assert error_response["error"] == "invalid_pagination"
     assert Map.has_key?(error_response["details"], "limit")
+  end
+
+  test "supports catch-up via after cursor", %{
+    authed_conn: authed_conn,
+    conversation: conversation,
+    partner: partner
+  } do
+    {:ok, m1} =
+      MessageService.send_message(%{
+        conversation_id: conversation.id,
+        sender_id: partner.id,
+        content: "msg-1"
+      })
+
+    {:ok, m2} =
+      MessageService.send_message(%{
+        conversation_id: conversation.id,
+        sender_id: partner.id,
+        content: "msg-2"
+      })
+
+    {:ok, m3} =
+      MessageService.send_message(%{
+        conversation_id: conversation.id,
+        sender_id: partner.id,
+        content: "msg-3"
+      })
+
+    {:ok, m4} =
+      MessageService.send_message(%{
+        conversation_id: conversation.id,
+        sender_id: partner.id,
+        content: "msg-4"
+      })
+
+    page_1 =
+      authed_conn
+      |> get(~p"/api/v1/conversations/#{conversation.id}/messages", %{
+        after: m1.id,
+        limit: "2"
+      })
+      |> json_response(200)
+
+    assert Enum.map(page_1["data"], & &1["id"]) == [m2.id, m3.id]
+    assert page_1["meta"]["has_more"] == true
+    assert page_1["meta"]["next_cursor"] == m3.id
+
+    page_2 =
+      authed_conn
+      |> get(~p"/api/v1/conversations/#{conversation.id}/messages", %{
+        after: page_1["meta"]["next_cursor"],
+        limit: "2"
+      })
+      |> json_response(200)
+
+    assert Enum.map(page_2["data"], & &1["id"]) == [m4.id]
+    assert page_2["meta"]["has_more"] == false
+    assert page_2["meta"]["next_cursor"] == m4.id
+  end
+
+  test "returns invalid_pagination when after is malformed", %{
+    authed_conn: authed_conn,
+    conversation: conversation
+  } do
+    response =
+      authed_conn
+      |> get(~p"/api/v1/conversations/#{conversation.id}/messages", %{
+        after: "not-a-uuid"
+      })
+      |> json_response(422)
+
+    assert response["error"] == "invalid_pagination"
+    assert Map.has_key?(response["details"], "after")
+  end
+
+  test "returns invalid_pagination when after and offset are combined", %{
+    authed_conn: authed_conn,
+    conversation: conversation,
+    partner: partner
+  } do
+    {:ok, first_message} =
+      MessageService.send_message(%{
+        conversation_id: conversation.id,
+        sender_id: partner.id,
+        content: "msg-1"
+      })
+
+    response =
+      authed_conn
+      |> get(~p"/api/v1/conversations/#{conversation.id}/messages", %{
+        after: first_message.id,
+        offset: "1"
+      })
+      |> json_response(422)
+
+    assert response["error"] == "invalid_pagination"
+    assert Map.has_key?(response["details"], "offset")
+  end
+
+  test "returns invalid_pagination when after cursor points to another conversation",
+       %{
+         authed_conn: authed_conn,
+         partner: partner,
+         conversation: conversation
+       } do
+    outsider = ChatFixtures.user_fixture()
+
+    other_conversation =
+      ChatFixtures.conversation_fixture(%{
+        family_id: conversation.family_id,
+        conversation_type: :direct,
+        user1: partner,
+        user2: outsider
+      })
+
+    {:ok, foreign_message} =
+      MessageService.send_message(%{
+        conversation_id: other_conversation.id,
+        sender_id: partner.id,
+        content: "foreign-message"
+      })
+
+    response =
+      authed_conn
+      |> get(~p"/api/v1/conversations/#{conversation.id}/messages", %{
+        after: foreign_message.id
+      })
+      |> json_response(422)
+
+    assert response["error"] == "invalid_pagination"
+    assert Map.has_key?(response["details"], "after")
   end
 
   test "returns not_found for conversations the user does not belong to", %{

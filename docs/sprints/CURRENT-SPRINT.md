@@ -51,9 +51,10 @@
    - `cd backend && ./run qa:messaging:deep` (fast loop + canonical-flow coverage artifact)
    - Matrix seed context: `cd backend && ./run runbook:seed:matrix`
 
-5. **Runbook/API consistency follow-through**
-   - `docs/runbooks/messaging-qa-runbook.md` currently documents continuity (`C1`) as a pilot scenario.
-   - The runner is being aligned so documented hard gates and executable scenarios remain in lockstep.
+5. ✅ **Runbook/API consistency follow-through**
+   - `C1` continuity is now a hard gate via `continuity_contract.txt` in `qa:messaging:*`.
+   - Runner and runbook expectations are aligned on required gating behavior.
+   - Latest verification batch is green twice (`20260227T060141Z_fast`, `20260227T060329Z_deep`, `20260227T060555Z_fast`, `20260227T060744Z_deep`).
 
 ### 🔁 Follow-ups Logged from Auth Hardening
 - ✅ Add `enrollment_required_since` marker and set/clear logic after magic-link logins (MAG-03 probation) — migration & state sync landed Oct 13, 2025

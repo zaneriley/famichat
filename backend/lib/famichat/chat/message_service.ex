@@ -4,6 +4,7 @@ defmodule Famichat.Chat.MessageService do
   1. Validation -> 2. Authorization -> 3. Persistence -> 4. Notification
   """
   import Ecto.Query, warn: false
+  import Ecto.Changeset
   alias Famichat.Repo
 
   alias Famichat.Chat.{
@@ -55,20 +56,49 @@ defmodule Famichat.Chat.MessageService do
   @spec get_conversation_messages(Ecto.UUID.t(), Keyword.t()) ::
           {:ok, [Message.t()]} | {:error, atom()}
   def get_conversation_messages(conversation_id, opts \\ []) do
+    case get_conversation_messages_page(conversation_id, opts) do
+      {:ok, %{messages: messages}} -> {:ok, messages}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Cursor-aware message retrieval that returns page metadata for reconnect/catch-up.
+  """
+  @spec get_conversation_messages_page(Ecto.UUID.t(), Keyword.t()) ::
+          {:ok,
+           %{
+             messages: [Message.t()],
+             has_more: boolean(),
+             next_cursor: Ecto.UUID.t() | nil
+           }}
+          | {:error, atom()}
+          | {:error, {:invalid_pagination, Ecto.Changeset.t()}}
+  def get_conversation_messages_page(conversation_id, opts \\ []) do
     initial_state = %{
       conversation_id: conversation_id,
       opts: opts,
-      query: nil
+      query: nil,
+      base_query: nil,
+      mode: :page,
+      after_cursor_id: nil,
+      page_limit: nil,
+      page_offset: nil
     }
 
     initial_state
     |> validate_conversation_id()
+    |> validate_cursor_option()
+    |> validate_cursor_offset_combination()
     |> check_conversation_exists()
     |> build_base_query()
+    |> apply_after_cursor()
     |> apply_pagination()
     |> execute_query()
+    |> compute_has_more()
     |> preload_associations()
     |> decrypt_messages_if_required()
+    |> assign_next_cursor()
     |> handle_result()
   end
 
@@ -96,9 +126,74 @@ defmodule Famichat.Chat.MessageService do
     query =
       from m in Message,
         where: m.conversation_id == ^state.conversation_id,
-        order_by: [asc: m.inserted_at]
+        order_by: [asc: m.inserted_at, asc: m.id]
 
     Map.put(state, :query, query)
+  end
+
+  defp validate_cursor_option(%{error: _} = state), do: state
+
+  defp validate_cursor_option(%{opts: opts} = state) do
+    after_value = opts[:after]
+
+    case normalize_after_cursor(after_value) do
+      {:ok, after_cursor_id} ->
+        Map.put(state, :after_cursor_id, after_cursor_id)
+
+      {:error, changeset} ->
+        Map.put(state, :error, {:invalid_pagination, changeset})
+    end
+  end
+
+  defp validate_cursor_offset_combination(%{error: _} = state), do: state
+
+  defp validate_cursor_offset_combination(%{after_cursor_id: nil} = state),
+    do: state
+
+  defp validate_cursor_offset_combination(%{opts: opts} = state) do
+    if Keyword.has_key?(opts, :offset) and not is_nil(opts[:offset]) do
+      Map.put(
+        state,
+        :error,
+        {:invalid_pagination,
+         pagination_error_changeset(
+           :offset,
+           "must be empty when after is provided"
+         )}
+      )
+    else
+      state
+    end
+  end
+
+  defp apply_after_cursor(%{error: _} = state), do: state
+  defp apply_after_cursor(%{after_cursor_id: nil} = state), do: state
+
+  defp apply_after_cursor(
+         %{after_cursor_id: after_cursor_id, query: query, conversation_id: cid} =
+           state
+       ) do
+    case cursor_for_conversation(after_cursor_id, cid) do
+      {:ok, %{id: cursor_id, inserted_at: inserted_at}} ->
+        filtered_query =
+          from m in query,
+            where:
+              m.inserted_at > ^inserted_at or
+                (m.inserted_at == ^inserted_at and m.id > ^cursor_id)
+
+        %{state | query: filtered_query}
+
+      :error ->
+        Map.put(
+          state,
+          :error,
+          {:invalid_pagination,
+           pagination_error_changeset(
+             :after,
+             "does not belong to this conversation"
+           )}
+        )
+    end
   end
 
   defp apply_pagination(%{error: _} = state), do: state
@@ -111,7 +206,13 @@ defmodule Famichat.Chat.MessageService do
 
     case Pagination.apply_or_default(query, params) do
       {:ok, paginated_query} ->
-        Map.put(state, :query, paginated_query)
+        %{
+          state
+          | query: paginated_query,
+            base_query: query,
+            page_limit: pagination_limit(params),
+            page_offset: pagination_offset(params)
+        }
 
       {:error, {:invalid_pagination, _changeset} = reason} ->
         Map.put(state, :error, reason)
@@ -129,6 +230,30 @@ defmodule Famichat.Chat.MessageService do
     _ -> Map.put(state, :error, :query_execution_failed)
   end
 
+  defp compute_has_more(%{error: _} = state), do: state
+
+  defp compute_has_more(
+         %{
+           mode: :page,
+           result: result,
+           page_limit: limit,
+           page_offset: offset,
+           base_query: base_query
+         } = state
+       )
+       when is_list(result) and is_integer(limit) and is_integer(offset) do
+    has_more =
+      if length(result) < limit do
+        false
+      else
+        Repo.exists?(from m in base_query, offset: ^(offset + limit), limit: 1)
+      end
+
+    Map.put(state, :has_more, has_more)
+  end
+
+  defp compute_has_more(state), do: Map.put(state, :has_more, false)
+
   defp preload_associations(%{error: _} = state), do: state
 
   defp preload_associations(state) do
@@ -136,9 +261,118 @@ defmodule Famichat.Chat.MessageService do
     Map.update!(state, :result, &Repo.preload(&1, preloads))
   end
 
+  defp assign_next_cursor(%{error: _} = state), do: state
+
+  defp assign_next_cursor(%{mode: :page, result: result} = state)
+       when is_list(result) do
+    next_cursor =
+      case List.last(result) do
+        %Message{id: id} -> id
+        _ -> nil
+      end
+
+    Map.put(state, :next_cursor, next_cursor)
+  end
+
+  defp assign_next_cursor(state), do: state
+
   defp handle_result(%{error: error}), do: {:error, error}
+
+  defp handle_result(%{mode: :page, result: messages} = state) do
+    {:ok,
+     %{
+       messages: messages,
+       has_more: Map.get(state, :has_more, false),
+       next_cursor: Map.get(state, :next_cursor)
+     }}
+  end
+
   defp handle_result(%{message: message}), do: {:ok, message}
   defp handle_result(%{result: result}), do: {:ok, result}
+
+  defp normalize_after_cursor(value) when value in [nil, ""], do: {:ok, nil}
+
+  defp normalize_after_cursor(value) when is_binary(value) do
+    value = String.trim(value)
+
+    if value == "" do
+      {:ok, nil}
+    else
+      case Ecto.UUID.cast(value) do
+        {:ok, uuid} ->
+          {:ok, uuid}
+
+        :error ->
+          {:error, pagination_error_changeset(:after, "is invalid")}
+      end
+    end
+  end
+
+  defp normalize_after_cursor(_value) do
+    {:error, pagination_error_changeset(:after, "is invalid")}
+  end
+
+  defp cursor_for_conversation(message_id, conversation_id) do
+    query =
+      from m in Message,
+        where: m.id == ^message_id and m.conversation_id == ^conversation_id,
+        select: %{id: m.id, inserted_at: m.inserted_at}
+
+    case Repo.one(query) do
+      nil -> :error
+      cursor -> {:ok, cursor}
+    end
+  end
+
+  defp pagination_limit(params) do
+    params
+    |> get_param(:limit)
+    |> normalize_positive_integer(20)
+  end
+
+  defp pagination_offset(params) do
+    params
+    |> get_param(:offset)
+    |> normalize_non_negative_integer(0)
+  end
+
+  defp get_param(params, key) do
+    Map.get(params, key) || Map.get(params, Atom.to_string(key))
+  end
+
+  defp normalize_positive_integer(nil, default), do: default
+
+  defp normalize_positive_integer(value, _default) when is_integer(value),
+    do: value
+
+  defp normalize_positive_integer(value, default) when is_binary(value) do
+    case Integer.parse(value) do
+      {parsed, ""} -> parsed
+      _ -> default
+    end
+  end
+
+  defp normalize_positive_integer(_value, default), do: default
+
+  defp normalize_non_negative_integer(nil, default), do: default
+
+  defp normalize_non_negative_integer(value, _default) when is_integer(value),
+    do: value
+
+  defp normalize_non_negative_integer(value, default) when is_binary(value) do
+    case Integer.parse(value) do
+      {parsed, ""} -> parsed
+      _ -> default
+    end
+  end
+
+  defp normalize_non_negative_integer(_value, default), do: default
+
+  defp pagination_error_changeset(field, message) do
+    {%{}, %{after: :string, offset: :integer}}
+    |> cast(%{}, [:after, :offset])
+    |> add_error(field, message)
+  end
 
   @doc """
   Message creation pipeline:

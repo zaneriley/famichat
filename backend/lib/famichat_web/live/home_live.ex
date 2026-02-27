@@ -47,6 +47,7 @@ defmodule FamichatWeb.HomeLive do
            revoke_target: revoke_target,
            recovery_ref: recovery_ref,
            recovery_last_status: nil,
+           last_seen_message_id: nil,
            mls_enforcement_enabled:
              Application.get_env(:famichat, :mls_enforcement, false)
          )
@@ -67,7 +68,8 @@ defmodule FamichatWeb.HomeLive do
            device_label: device_label,
            test_username: test_username,
            actor_tag: "#{test_username}/#{device_label}",
-           error_message: "Failed to initialize test session: #{inspect(reason)}",
+           error_message:
+             "Failed to initialize test session: #{inspect(reason)}",
            auth_token: nil,
            topic: nil,
            security_reason: nil,
@@ -75,6 +77,7 @@ defmodule FamichatWeb.HomeLive do
            revoke_target: revoke_target,
            recovery_ref: recovery_ref,
            recovery_last_status: nil,
+           last_seen_message_id: nil,
            mls_enforcement_enabled:
              Application.get_env(:famichat, :mls_enforcement, false)
          )
@@ -200,7 +203,8 @@ defmodule FamichatWeb.HomeLive do
 
   @impl true
   def handle_event("send-message", _params, socket) do
-    message_body = socket.assigns.current_message |> to_string() |> String.trim()
+    message_body =
+      socket.assigns.current_message |> to_string() |> String.trim()
 
     cond do
       message_body == "" ->
@@ -218,7 +222,8 @@ defmodule FamichatWeb.HomeLive do
          |> assign(current_message: "", error_message: nil)}
 
       true ->
-        {:noreply, assign(socket, error_message: "Connect channel before sending.")}
+        {:noreply,
+         assign(socket, error_message: "Connect channel before sending.")}
     end
   end
 
@@ -228,7 +233,8 @@ defmodule FamichatWeb.HomeLive do
 
     cond do
       target == "" ->
-        {:noreply, assign(socket, error_message: "Enter a device id to revoke.")}
+        {:noreply,
+         assign(socket, error_message: "Enter a device id to revoke.")}
 
       true ->
         case Sessions.revoke_device(socket.assigns.user_id, target) do
@@ -247,7 +253,9 @@ defmodule FamichatWeb.HomeLive do
 
           {:error, reason} ->
             {:noreply,
-             assign(socket, error_message: "Device revoke failed: #{inspect(reason)}")}
+             assign(socket,
+               error_message: "Device revoke failed: #{inspect(reason)}"
+             )}
         end
     end
   end
@@ -265,7 +273,7 @@ defmodule FamichatWeb.HomeLive do
            recovery_last_status: "conversation_security_state reset"
          )
          |> put_system_notice(
-          "Conversation security state reset. Next send may require recovery."
+           "Conversation security state reset. Next send may require recovery."
          )}
 
       {:error, :invalid_input, details} ->
@@ -284,13 +292,18 @@ defmodule FamichatWeb.HomeLive do
     cond do
       recovery_ref == "" ->
         {:noreply,
-         assign(socket, error_message: "Enter a recovery ref before recovering.")}
+         assign(socket,
+           error_message: "Enter a recovery ref before recovering."
+         )}
 
       true ->
         case Chat.recover_conversation_security_state(
                socket.assigns.conversation_id,
                recovery_ref,
-               %{rejoin_token: "spike-rejoin-#{System.unique_integer([:positive])}"}
+               %{
+                 rejoin_token:
+                   "spike-rejoin-#{System.unique_integer([:positive])}"
+               }
              ) do
           {:ok, result} ->
             description =
@@ -312,7 +325,9 @@ defmodule FamichatWeb.HomeLive do
 
           {:error, reason} ->
             {:noreply,
-             assign(socket, error_message: "Recovery failed: #{inspect(reason)}")}
+             assign(socket,
+               error_message: "Recovery failed: #{inspect(reason)}"
+             )}
         end
     end
   end
@@ -330,6 +345,7 @@ defmodule FamichatWeb.HomeLive do
     Logger.error("Socket error: #{inspect(reason)}")
 
     reason_text = reason_to_string(reason)
+
     error_text =
       if reason_text == "connection_error" and
            socket.assigns.security_reason == "revoked" do
@@ -351,7 +367,13 @@ defmodule FamichatWeb.HomeLive do
   def handle_event("channel_joined", %{"topic" => topic}, socket) do
     Logger.info("Successfully joined channel: #{topic}")
 
-    {:noreply, assign(socket, channel_joined: true, error_message: nil, topic: topic)}
+    {:noreply,
+     socket
+     |> assign(channel_joined: true, error_message: nil, topic: topic)
+     |> sync_incremental_messages(
+       socket.assigns.conversation_id,
+       socket.assigns.user_id
+     )}
   end
 
   @impl true
@@ -374,20 +396,32 @@ defmodule FamichatWeb.HomeLive do
 
   @impl true
   def handle_event("message_received", payload, socket) do
-    received_message = %{
-      id: "msg-#{:erlang.unique_integer()}",
-      body: payload["body"],
-      timestamp:
-        case DateTime.from_iso8601(payload["timestamp"]) do
-          {:ok, datetime, _offset} -> datetime
-          _error -> DateTime.utc_now()
-        end,
-      outgoing: payload["user_id"] == socket.assigns.user_id,
-      system_message: false,
-      sender_name: sender_name_for_payload(payload, socket.assigns)
-    }
+    message_id = payload["message_id"]
 
-    {:noreply, stream_insert(socket, :messages, received_message)}
+    if not is_binary(message_id) or String.trim(message_id) == "" do
+      {:noreply,
+       socket
+       |> assign(error_message: "Dropped message missing message_id.")
+       |> put_system_notice("Dropped message: missing message_id in payload.")}
+    else
+      received_message = %{
+        id: "msg-#{message_id}",
+        body: resolve_display_body(payload, socket.assigns),
+        timestamp:
+          case DateTime.from_iso8601(payload["timestamp"]) do
+            {:ok, datetime, _offset} -> datetime
+            _error -> DateTime.utc_now()
+          end,
+        outgoing: payload["user_id"] == socket.assigns.user_id,
+        system_message: false,
+        sender_name: sender_name_for_payload(payload, socket.assigns)
+      }
+
+      {:noreply,
+       socket
+       |> assign(last_seen_message_id: message_id)
+       |> stream_insert(:messages, received_message)}
+    end
   end
 
   @impl true
@@ -500,16 +534,19 @@ defmodule FamichatWeb.HomeLive do
   end
 
   defp load_messages(socket, nil, _user_id) do
-    stream(socket, :messages, [], reset: true)
+    socket
+    |> stream(:messages, [], reset: true)
+    |> assign(last_seen_message_id: nil)
   end
 
   defp load_messages(socket, conversation_id, user_id) do
-    messages =
-      case Famichat.Chat.MessageService.get_conversation_messages(conversation_id,
-             limit: 50
-           ) do
-        {:ok, msgs} ->
-          Enum.map(msgs, fn msg ->
+    case Famichat.Chat.MessageService.get_conversation_messages_page(
+           conversation_id,
+           limit: 50
+         ) do
+      {:ok, %{messages: messages, next_cursor: next_cursor}} ->
+        rendered =
+          Enum.map(messages, fn msg ->
             %{
               id: "msg-#{msg.id}",
               body: msg.content,
@@ -520,11 +557,51 @@ defmodule FamichatWeb.HomeLive do
             }
           end)
 
-        _ ->
-          []
-      end
+        socket
+        |> stream(:messages, rendered, reset: true)
+        |> assign(last_seen_message_id: next_cursor)
 
-    stream(socket, :messages, messages, reset: true)
+      {:error, _reason} ->
+        socket
+        |> stream(:messages, [], reset: true)
+        |> assign(last_seen_message_id: nil)
+    end
+  end
+
+  defp sync_incremental_messages(socket, conversation_id, user_id)
+       when is_binary(conversation_id) and is_binary(user_id) do
+    opts =
+      [limit: 50]
+      |> maybe_put_after(socket.assigns.last_seen_message_id)
+
+    case Famichat.Chat.MessageService.get_conversation_messages_page(
+           conversation_id,
+           opts
+         ) do
+      {:ok, %{messages: [], next_cursor: _next_cursor}} ->
+        socket
+
+      {:ok, %{messages: messages, next_cursor: next_cursor}} ->
+        updated_socket =
+          Enum.reduce(messages, socket, fn msg, acc ->
+            stream_insert(acc, :messages, %{
+              id: "msg-#{msg.id}",
+              body: msg.content,
+              timestamp: msg.inserted_at,
+              outgoing: msg.sender_id == user_id,
+              system_message: false,
+              sender_name: sender_name_for_record(msg, user_id)
+            })
+          end)
+
+        assign(updated_socket,
+          last_seen_message_id:
+            next_cursor || socket.assigns.last_seen_message_id
+        )
+
+      {:error, _reason} ->
+        socket
+    end
   end
 
   defp put_system_notice(socket, body) do
@@ -537,6 +614,44 @@ defmodule FamichatWeb.HomeLive do
       sender_name: "System"
     })
   end
+
+  defp resolve_display_body(payload, assigns) do
+    body = Map.get(payload, "body", "")
+    message_id = Map.get(payload, "message_id")
+
+    if assigns.mls_enforcement_enabled and encrypted_wire_payload?(body) do
+      fetch_decrypted_body(assigns.conversation_id, message_id) ||
+        "[Encrypted MLS payload]"
+    else
+      body
+    end
+  end
+
+  defp encrypted_wire_payload?(value) when is_binary(value) do
+    String.match?(value, ~r/\A[0-9a-fA-F]{120,}\z/)
+  end
+
+  defp encrypted_wire_payload?(_), do: false
+
+  defp fetch_decrypted_body(conversation_id, message_id)
+       when is_binary(conversation_id) and is_binary(message_id) do
+    case Famichat.Chat.MessageService.get_conversation_messages(conversation_id,
+           limit: 50
+         ) do
+      {:ok, messages} ->
+        messages
+        |> Enum.find(fn message -> message.id == message_id end)
+        |> case do
+          nil -> nil
+          message -> message.content
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp fetch_decrypted_body(_conversation_id, _message_id), do: nil
 
   defp sender_name_for_record(msg, user_id) do
     cond do
@@ -578,11 +693,20 @@ defmodule FamichatWeb.HomeLive do
 
   defp security_action_for_reason("device_revoked"), do: "reauth_required"
   defp security_action_for_reason("revoked"), do: "reauth_required"
-  defp security_action_for_reason("pending_proposals"), do: "wait_for_pending_commit"
+
+  defp security_action_for_reason("pending_proposals"),
+    do: "wait_for_pending_commit"
+
   defp security_action_for_reason(_), do: nil
 
   defp reason_to_string(nil), do: ""
   defp reason_to_string(reason) when is_binary(reason), do: reason
   defp reason_to_string(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp reason_to_string(reason), do: inspect(reason)
+
+  defp maybe_put_after(opts, nil), do: opts
+  defp maybe_put_after(opts, ""), do: opts
+
+  defp maybe_put_after(opts, after_cursor),
+    do: Keyword.put(opts, :after, after_cursor)
 end

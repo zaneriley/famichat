@@ -52,7 +52,13 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
    - Recovery lifecycle now retries transient stale-lock persistence races (bounded retries) so contention does not prematurely hard-fail an otherwise valid recovery
 6. Messaging QA is now productized behind first-class run commands:
    - Gates now execute a 10-scenario matrix (`S1..F2 + R1 + R2`) and emit artifacted outcomes.
+   - Continuity/reconnect (`C1`) is enforced as a hard integration gate via `continuity_contract.txt` in `qa:messaging:*`.
    - Latest stable findings:
+     - fast: `.tmp/_qa_messaging/20260227T061442Z_fast` -> PASS (`R1: PASS`, `continuity_contract: PASS`)
+     - fast: `.tmp/_qa_messaging/20260227T060141Z_fast` -> PASS (`R1: PASS`, `continuity_contract: PASS`)
+     - deep: `.tmp/_qa_messaging/20260227T060329Z_deep` -> PASS (`R1: PASS`, `continuity_contract: PASS`, `recovery_rejoin_contract: PASS`)
+     - repeat fast: `.tmp/_qa_messaging/20260227T060555Z_fast` -> PASS (`R1: PASS`, `continuity_contract: PASS`)
+     - repeat deep: `.tmp/_qa_messaging/20260227T060744Z_deep` -> PASS (`R1: PASS`, `continuity_contract: PASS`, `recovery_rejoin_contract: PASS`)
      - fast: `.tmp/_qa_messaging/20260226T143234Z_fast` -> PASS
      - deep: `.tmp/_qa_messaging/20260226T143234Z_deep` -> PASS (`canonical_flow_coverage: PASS`, `recovery_rejoin_contract: PASS`)
      - additional sequential verification: `.tmp/_qa_messaging/20260226T142958Z_fast` + `.tmp/_qa_messaging/20260226T143046Z_deep` (both PASS)
@@ -94,7 +100,7 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 	    - transport status normalization maps curl `000` to `-1` sentinel to avoid ambiguous JSON `0` statuses.
 	    - persistence checks now validate message identity in `history_after` (not only count deltas) to reduce false confidence/false failures from background traffic.
 	    - reject-path scenarios now enforce guard-observer WS parity (`guard_ws_parity`) to catch unauthorized fanout leaks explicitly.
-      - matrix WS parity now matches on `message_id` (with body fallback), so MLS ciphertext bodies do not cause false WS failures.
+      - matrix WS parity now matches on stable `message_id` only (no body fallback), so MLS ciphertext bodies do not cause false WS failures.
       - matrix seeding now uses run-scoped families/users and pre-seeded recovery for matrix conversations, preventing stale-state history drift across runs.
 	    - preflight times out hung `docker compose ps` and falls back to `docker ps`.
    - Matrix seed and command path remain available via `runbook:seed:matrix`, `qa:messaging:fast`, and `qa:messaging:deep`.

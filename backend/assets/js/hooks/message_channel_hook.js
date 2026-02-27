@@ -24,6 +24,7 @@ const MessageChannelHook = {
       // Initialize connection state
       this.channel = null;
       this.connected = false;
+      this.seenMessageIds = new Set();
 
       // If we need to auto-connect on mount
       if (this.el.dataset.autoConnect === "true") {
@@ -102,10 +103,22 @@ const MessageChannelHook = {
       this.channel.on("new_msg", (payload) => {
         console.log("[MessageChannel] Received message", payload);
 
-        // Generate a unique message ID if not provided by the server
-        const messageId =
-          payload.message_id ||
-          `msg-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const messageId = payload.message_id;
+
+        if (typeof messageId !== "string" || messageId.trim() === "") {
+          console.warn(
+            "[MessageChannel] Dropping message without message_id",
+            payload,
+          );
+          this.pushEvent("message_error", { reason: "invalid_message_payload" });
+          return;
+        }
+
+        if (this.seenMessageIds.has(messageId)) {
+          return;
+        }
+
+        this.seenMessageIds.add(messageId);
 
         // Send the message to the LiveView
         this.pushEvent("message_received", {
@@ -149,6 +162,10 @@ const MessageChannelHook = {
     if (this.socket) {
       this.socket.disconnect();
     }
+
+    this.connected = false;
+    this.channel = null;
+    this.socket = null;
   },
 
   sendMessage(payload) {

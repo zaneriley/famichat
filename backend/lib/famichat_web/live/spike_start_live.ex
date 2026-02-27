@@ -46,7 +46,9 @@ defmodule FamichatWeb.SpikeStartLive do
 
     params =
       [{"user", user}, {"device", device}] ++
-        if is_binary(revoke_target), do: [{"revoke_target", revoke_target}], else: []
+        if is_binary(revoke_target),
+          do: [{"revoke_target", revoke_target}],
+          else: []
 
     %{
       label: label,
