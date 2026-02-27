@@ -4,8 +4,10 @@ defmodule Famichat.Chat.ConversationSecurityRecoveryLifecycleTest do
   import Ecto.Query, warn: false
 
   alias Famichat.Chat.{
+    ConversationSecurityLifecycle,
     ConversationSecurityRecoveryLifecycle,
     ConversationSecurityRecoveryStore,
+    ConversationSecurityRevocationStore,
     ConversationSecurityState,
     ConversationSecurityStateStore
   }
@@ -78,12 +80,71 @@ defmodule Famichat.Chat.ConversationSecurityRecoveryLifecycleTest do
     end
   end
 
+  defmodule RecoveryStaleRetryAdapter do
+    @behaviour Famichat.Crypto.MLS.Adapter
+
+    import Ecto.Query, warn: false
+    alias Famichat.Chat.ConversationSecurityState
+    alias Famichat.Repo
+
+    def nif_version, do: {:ok, %{}}
+    def nif_health, do: {:ok, %{status: "ok"}}
+    def create_key_package(_params), do: {:ok, %{}}
+    def create_group(_params), do: {:ok, %{}}
+    def process_incoming(_params), do: {:ok, %{plaintext: "ok"}}
+    def commit_to_pending(_params), do: {:ok, %{}}
+    def mls_commit(_params), do: {:ok, %{}}
+    def mls_update(_params), do: {:ok, %{}}
+    def mls_add(_params), do: {:ok, %{}}
+    def mls_remove(_params), do: {:ok, %{}}
+    def merge_staged_commit(_params), do: {:ok, %{}}
+    def clear_pending_commit(_params), do: {:ok, %{}}
+    def create_application_message(_params), do: {:ok, %{ciphertext: "c"}}
+    def export_group_info(_params), do: {:ok, %{}}
+    def export_ratchet_tree(_params), do: {:ok, %{}}
+
+    def join_from_welcome(params) do
+      calls = Process.get(:rejoin_stale_calls, 0)
+      Process.put(:rejoin_stale_calls, calls + 1)
+
+      token = Map.get(params, :rejoin_token) || Map.get(params, "rejoin_token")
+      group_id = Map.get(params, :group_id) || Map.get(params, "group_id")
+
+      unless Process.get(:recovery_stale_bumped, false) do
+        _ =
+          Repo.update_all(
+            from(s in ConversationSecurityState,
+              where: s.conversation_id == ^group_id
+            ),
+            inc: [lock_version: 1]
+          )
+
+        Process.put(:recovery_stale_bumped, true)
+      end
+
+      {:ok,
+       %{
+         group_id: group_id,
+         group_state_ref: "state:#{token}",
+         audit_id: "audit:#{token}",
+         epoch: 7,
+         session_sender_storage: Base.encode64("sender-storage:#{token}"),
+         session_recipient_storage: Base.encode64("recipient-storage:#{token}"),
+         session_sender_signer: Base.encode64("sender-signer:#{token}"),
+         session_recipient_signer: Base.encode64("recipient-signer:#{token}"),
+         session_cache: ""
+       }}
+    end
+  end
+
   setup do
     previous_adapter = Application.get_env(:famichat, :mls_adapter)
 
     on_exit(fn ->
       restore_env(:mls_adapter, previous_adapter)
       Process.delete(:rejoin_calls)
+      Process.delete(:rejoin_stale_calls)
+      Process.delete(:recovery_stale_bumped)
     end)
 
     conversation = conversation_fixture(%{conversation_type: :direct})
@@ -250,6 +311,145 @@ defmodule Famichat.Chat.ConversationSecurityRecoveryLifecycleTest do
              ConversationSecurityStateStore.load(conversation.id)
 
     assert repaired_state.epoch == 7
+  end
+
+  test "recovery clears stale pending_commit metadata and restores usable state",
+       %{conversation: conversation} do
+    Application.put_env(:famichat, :mls_adapter, RecoverySuccessAdapter)
+
+    assert {:ok, _persisted} =
+             ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{
+                 state: snapshot_payload(),
+                 epoch: 3,
+                 protocol: "mls",
+                 pending_commit: %{
+                   "operation" => "mls_commit",
+                   "staged_epoch" => 4
+                 }
+               },
+               nil
+             )
+
+    assert {:ok, result} =
+             ConversationSecurityRecoveryLifecycle.recover_conversation_security_state(
+               conversation.id,
+               "recovery-ref-pending-clear",
+               %{rejoin_token: "token-pending-clear"}
+             )
+
+    assert result.status == :completed
+    assert result.recovered_epoch == 7
+
+    assert {:ok, state} = ConversationSecurityStateStore.load(conversation.id)
+    assert state.epoch == 7
+    assert state.pending_commit == nil
+  end
+
+  test "recovery retries transient stale lock races and completes",
+       %{conversation: conversation} do
+    Application.put_env(:famichat, :mls_adapter, RecoveryStaleRetryAdapter)
+    Process.put(:rejoin_stale_calls, 0)
+    Process.put(:recovery_stale_bumped, false)
+
+    assert {:ok, _persisted} =
+             ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{state: snapshot_payload(), epoch: 2, protocol: "mls"},
+               nil
+             )
+
+    assert {:ok, result} =
+             ConversationSecurityRecoveryLifecycle.recover_conversation_security_state(
+               conversation.id,
+               "recovery-ref-stale-retry",
+               %{rejoin_token: "token-stale-retry"}
+             )
+
+    assert result.status == :completed
+    assert result.recovered_epoch == 7
+    assert Process.get(:rejoin_stale_calls) == 2
+
+    assert {:ok, state} = ConversationSecurityStateStore.load(conversation.id)
+    assert state.epoch == 7
+    assert state.pending_commit == nil
+
+    assert {:ok, recovery} =
+             ConversationSecurityRecoveryStore.load_by_ref(
+               conversation.id,
+               "recovery-ref-stale-retry"
+             )
+
+    assert recovery.status == :completed
+    assert recovery.error_code == nil
+  end
+
+  test "recovery keeps active revocations pending until a later remove merge seals them",
+       %{conversation: conversation} do
+    Application.put_env(:famichat, :mls_adapter, RecoverySuccessAdapter)
+
+    assert {:ok, _persisted} =
+             ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{state: snapshot_payload(), epoch: 3, protocol: "mls"},
+               nil
+             )
+
+    assert {:ok, {:started, revocation}} =
+             ConversationSecurityRevocationStore.start_or_load(
+               conversation.id,
+               "recovery-revocation-ref-1",
+               %{subject_type: :client, subject_id: "client-recovery-revoke-1"}
+             )
+
+    assert {:ok, _pending} =
+             ConversationSecurityRevocationStore.mark_pending_commit(
+               revocation.id,
+               %{proposal_ref: "proposal-recovery-revoke-1"}
+             )
+
+    assert {:ok, _recovered} =
+             ConversationSecurityRecoveryLifecycle.recover_conversation_security_state(
+               conversation.id,
+               "recovery-ref-revocation-interplay",
+               %{rejoin_token: "token-recovery-revocation"}
+             )
+
+    assert {:ok, state_after_recovery} =
+             ConversationSecurityStateStore.load(conversation.id)
+
+    assert state_after_recovery.epoch == 7
+    assert state_after_recovery.pending_commit == nil
+
+    assert {:ok, still_pending} =
+             ConversationSecurityRevocationStore.load_by_ref(
+               conversation.id,
+               "recovery-revocation-ref-1"
+             )
+
+    assert still_pending.status == :pending_commit
+    assert still_pending.committed_epoch == nil
+
+    assert {:ok, _staged_remove} =
+             ConversationSecurityLifecycle.stage_pending_commit(
+               conversation.id,
+               :mls_remove
+             )
+
+    assert {:ok, merged_remove} =
+             ConversationSecurityLifecycle.merge_pending_commit(conversation.id)
+
+    assert merged_remove.epoch == 8
+
+    assert {:ok, sealed} =
+             ConversationSecurityRevocationStore.load_by_ref(
+               conversation.id,
+               "recovery-revocation-ref-1"
+             )
+
+    assert sealed.status == :completed
+    assert sealed.committed_epoch == 8
   end
 
   defp snapshot_payload do

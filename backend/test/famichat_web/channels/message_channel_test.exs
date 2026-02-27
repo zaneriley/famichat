@@ -15,6 +15,7 @@ defmodule FamichatWeb.MessageChannelTest do
 
   alias Famichat.ChatFixtures
   alias Famichat.Repo
+  alias Famichat.TestSupport.MLS.RecoveryGateAdapter
   alias FamichatWeb.MessageChannel
   alias FamichatWeb.UserSocket
 
@@ -185,7 +186,7 @@ defmodule FamichatWeb.MessageChannelTest do
       assert {:ok, :revoked} =
                Sessions.revoke_device(user.id, user_session.device.device_id)
 
-      assert {:error, %{reason: "invalid_token"}} =
+      assert {:error, %{reason: "device_revoked"}} =
                subscribe_and_join(
                  socket,
                  MessageChannel,
@@ -193,8 +194,40 @@ defmodule FamichatWeb.MessageChannelTest do
                )
 
       ref = push(channel_socket, "new_msg", %{"body" => "should not send"})
-      assert_reply ref, :error, %{reason: "invalid_token"}
+      assert_reply ref, :error, %{reason: "device_revoked"}
       refute_broadcast "new_msg", _
+
+      ack_ref = push(channel_socket, "message_ack", %{"message_id" => "msg-1"})
+      assert_reply ack_ref, :error, %{reason: "device_revoked"}
+    end
+
+    test "revoked connected device is blocked from receiving new messages and gets explicit security state",
+         %{
+           user: user,
+           user_session: user_session
+         } do
+      {:ok, socket} =
+        connect(UserSocket, %{"token" => user_session.access_token})
+
+      topic = "message:direct:#{@direct_conversation_id}"
+
+      assert {:ok, _, _channel_socket} =
+               subscribe_and_join(socket, MessageChannel, topic)
+
+      assert {:ok, :revoked} =
+               Sessions.revoke_device(user.id, user_session.device.device_id)
+
+      @endpoint.broadcast!(topic, "new_msg", %{
+        "body" => "should not deliver",
+        "user_id" => @second_user_id
+      })
+
+      assert_push "security_state", payload
+
+      assert (payload[:reason] || payload["reason"]) == "device_revoked"
+      assert (payload[:action] || payload["action"]) == "reauth_required"
+
+      refute_push "new_msg", _
     end
   end
 
@@ -827,6 +860,30 @@ defmodule FamichatWeb.MessageChannelTest do
       assert_reply ref, :error, %{reason: "invalid_message"}
 
       # Verify no broadcast occurred
+      refute_broadcast "new_msg", _
+    end
+
+    test "returns explicit recovery_required when conversation security state must be recovered",
+         %{socket: socket} do
+      previous_adapter = Application.get_env(:famichat, :mls_adapter)
+      previous_enforcement = Application.get_env(:famichat, :mls_enforcement)
+
+      Application.put_env(:famichat, :mls_adapter, RecoveryGateAdapter)
+      Application.put_env(:famichat, :mls_enforcement, true)
+
+      on_exit(fn ->
+        restore_env(:mls_adapter, previous_adapter)
+        restore_env(:mls_enforcement, previous_enforcement)
+      end)
+
+      ref = push(socket, "new_msg", %{"body" => "requires recovery"})
+
+      assert_reply ref, :error, %{
+        reason: "recovery_required",
+        action: "recover_conversation_security_state",
+        recovery_reason: "missing_group_state"
+      }
+
       refute_broadcast "new_msg", _
     end
 
@@ -1533,6 +1590,9 @@ defmodule FamichatWeb.MessageChannelTest do
   defp token_for_user(user, opts \\ []) do
     issue_access_token(user, opts).access_token
   end
+
+  defp restore_env(key, nil), do: Application.delete_env(:famichat, key)
+  defp restore_env(key, value), do: Application.put_env(:famichat, key, value)
 
   defp maybe_put_direct_key(attrs, :direct, family_id, [user1_id, user2_id | _]) do
     direct_key =

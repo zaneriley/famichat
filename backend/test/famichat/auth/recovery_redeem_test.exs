@@ -6,6 +6,7 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
   alias Famichat.Accounts.{User, UserDevice}
   alias Famichat.Auth.{Recovery, Sessions}
   alias Famichat.Auth.Runtime.AuditLog
+  alias Famichat.Chat.ConversationSecurityRevocation
   alias Famichat.ChatFixtures
   alias Famichat.Repo
   alias Famichat.TestSupport.{RedactionHelpers, TelemetryHelpers}
@@ -16,6 +17,15 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
     family = ChatFixtures.family_fixture()
     admin = ChatFixtures.user_fixture(%{family_id: family.id, role: :admin})
     member = ChatFixtures.user_fixture(%{family_id: family.id, role: :member})
+    peer = ChatFixtures.user_fixture(%{family_id: family.id, role: :member})
+
+    conversation =
+      ChatFixtures.conversation_fixture(%{
+        conversation_type: :direct,
+        family: family,
+        user1: member,
+        user2: peer
+      })
 
     session = start_session(member)
 
@@ -45,6 +55,8 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
     assert {:error, :revoked} =
              Sessions.refresh_session(session.device_id, session.refresh_token)
 
+    assert_pending_user_revocation(conversation.id, member.id)
+
     member_id = member.id
 
     assert [%AuditLog{event: "recovery.redeem", subject_id: ^member_id}] =
@@ -64,6 +76,22 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
     admin = ChatFixtures.user_fixture(%{family_id: family.id, role: :admin})
     member_a = ChatFixtures.user_fixture(%{family_id: family.id, role: :member})
     member_b = ChatFixtures.user_fixture(%{family_id: family.id, role: :member})
+
+    conversation_a =
+      ChatFixtures.conversation_fixture(%{
+        conversation_type: :direct,
+        family: family,
+        user1: admin,
+        user2: member_a
+      })
+
+    conversation_b =
+      ChatFixtures.conversation_fixture(%{
+        conversation_type: :direct,
+        family: family,
+        user1: admin,
+        user2: member_b
+      })
 
     session_a = start_session(member_a)
     session_b = start_session(member_b)
@@ -126,6 +154,11 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
       assert audit.household_id == family.id
       assert audit.scope == "household"
     end)
+
+    assert_pending_user_revocation(conversation_a.id, admin.id)
+    assert_pending_user_revocation(conversation_a.id, member_a.id)
+    assert_pending_user_revocation(conversation_b.id, admin.id)
+    assert_pending_user_revocation(conversation_b.id, member_b.id)
   end
 
   defp start_session(user) do
@@ -139,5 +172,16 @@ defmodule Famichat.Auth.Recovery.RedeemTest do
       Sessions.start_session(user, device_info, remember_device?: true)
 
     session
+  end
+
+  defp assert_pending_user_revocation(conversation_id, user_id) do
+    query =
+      from r in ConversationSecurityRevocation,
+        where:
+          r.conversation_id == ^conversation_id and
+            r.subject_type == :user and r.subject_id == ^user_id and
+            r.status == :pending_commit
+
+    assert Repo.aggregate(query, :count, :id) == 1
   end
 end

@@ -199,7 +199,8 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
     Sessions.start_session(
       user,
       %{
-        id: "runbook-flow-#{suffix}-#{System.unique_integer([:positive])}",
+        id:
+          "runbook-flow-#{suffix}-#{System.unique_integer([:positive])}-#{Ecto.UUID.generate()}",
         user_agent: "canonical-messaging-flow-test",
         ip: "127.0.0.1"
       },

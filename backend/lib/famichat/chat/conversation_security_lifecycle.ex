@@ -6,8 +6,10 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
   persistence ownership in `Famichat.Chat`.
   """
 
+  alias Famichat.Chat.ConversationSecurityRevocationStore
   alias Famichat.Chat.ConversationSecurityStateStore
   alias Famichat.Crypto.MLS
+  alias Famichat.Repo
 
   @supported_stage_operations [:mls_commit, :mls_update, :mls_add, :mls_remove]
   @snapshot_keys [
@@ -34,6 +36,7 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
          :ok <- ensure_no_pending_commit(state, operation),
          request <- build_request(state, attrs),
          {:ok, payload} <- apply(MLS, operation, [request]),
+         :ok <- validate_stage_payload(payload, conversation_id, operation),
          {:ok, staged_epoch} <- staged_epoch(payload, state.epoch),
          pending_commit <-
            build_pending_commit(operation, staged_epoch, payload),
@@ -67,14 +70,17 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
              |> Map.put_new(:epoch, merge_epoch)
            ),
          {:ok, payload} <- MLS.merge_staged_commit(request),
+         :ok <- validate_merge_payload(payload, conversation_id),
          {:ok, next_state, next_epoch} <-
            resolve_merge_payload(state, payload, merge_epoch),
+         seal_active_revocations? = pending_remove_operation?(pending_commit),
          {:ok, persisted} <-
-           persist_state(state, %{
-             state: next_state,
-             epoch: next_epoch,
-             pending_commit: nil
-           }) do
+           persist_merged_state_and_complete_revocations(
+             state,
+             next_state,
+             next_epoch,
+             seal_active_revocations?
+           ) do
       {:ok, persisted}
     end
   end
@@ -171,19 +177,26 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
 
   defp staged_epoch(payload, current_epoch) do
     case extract_epoch(payload) do
-      nil ->
+      :missing ->
         {:ok, current_epoch + 1}
 
-      value when is_integer(value) and value > current_epoch ->
+      {:ok, value} when value == current_epoch + 1 ->
         {:ok, value}
 
       value ->
+        staged_epoch =
+          case value do
+            {:ok, parsed} -> parsed
+            {:invalid, raw} -> raw
+            other -> other
+          end
+
         {:error, :commit_rejected,
          %{
            reason: :invalid_staged_epoch,
            operation: :stage_pending_commit,
            current_epoch: current_epoch,
-           staged_epoch: value
+           staged_epoch: staged_epoch
          }}
     end
   end
@@ -193,7 +206,7 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
     with :ok <- validate_merge_epoch(payload, merge_epoch),
          :ok <- validate_snapshot_payload(payload) do
       next_state = extract_snapshot(payload) || state.state
-      next_epoch = extract_epoch(payload) || merge_epoch
+      next_epoch = merged_epoch_from_payload(payload, merge_epoch)
       {:ok, next_state, next_epoch}
     end
   end
@@ -204,19 +217,26 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
 
   defp validate_merge_epoch(payload, merge_epoch) do
     case extract_epoch(payload) do
-      nil ->
+      :missing ->
         :ok
 
-      value when is_integer(value) and value >= merge_epoch ->
+      {:ok, value} when value == merge_epoch ->
         :ok
 
       value ->
+        merge_payload_epoch =
+          case value do
+            {:ok, parsed} -> parsed
+            {:invalid, raw} -> raw
+            other -> other
+          end
+
         {:error, :commit_rejected,
          %{
            reason: :invalid_merge_epoch,
            operation: :merge_pending_commit,
            staged_epoch: merge_epoch,
-           merge_epoch: value
+           merge_epoch: merge_payload_epoch
          }}
     end
   end
@@ -316,12 +336,311 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
     end
   end
 
+  defp persist_merged_state_and_complete_revocations(
+         state,
+         next_state,
+         next_epoch,
+         seal_active_revocations?
+       ) do
+    attrs = %{
+      protocol: state.protocol,
+      state: next_state,
+      epoch: next_epoch,
+      pending_commit: nil
+    }
+
+    case Repo.transaction(fn ->
+           with {:ok, persisted} <- persist_state_attrs(state, attrs),
+                :ok <-
+                  maybe_complete_active_revocations(
+                    persisted.conversation_id,
+                    persisted.epoch,
+                    seal_active_revocations?
+                  ) do
+             persisted
+           else
+             {:error, code, details} ->
+               Repo.rollback({code, details})
+           end
+         end) do
+      {:ok, persisted} ->
+        {:ok, persisted}
+
+      {:error, {code, details}} ->
+        {:error, code, details}
+    end
+  end
+
+  defp persist_state_attrs(state, attrs) do
+    case ConversationSecurityStateStore.upsert(
+           state.conversation_id,
+           attrs,
+           state.lock_version
+         ) do
+      {:ok, persisted} ->
+        {:ok, persisted}
+
+      {:error, code, details} ->
+        {:error, map_store_error(code), details}
+    end
+  end
+
+  defp complete_active_revocations(conversation_id, committed_epoch) do
+    with {:ok, revocations} <-
+           ConversationSecurityRevocationStore.list_active_for_conversation(
+             conversation_id
+           ) do
+      Enum.reduce_while(revocations, :ok, fn revocation, :ok ->
+        case ConversationSecurityRevocationStore.mark_completed(
+               revocation.id,
+               %{committed_epoch: committed_epoch}
+             ) do
+          {:ok, _updated} ->
+            {:cont, :ok}
+
+          {:error, code, details} ->
+            {:halt, {:error, map_store_error(code), details}}
+        end
+      end)
+    end
+  end
+
+  defp maybe_complete_active_revocations(
+         _conversation_id,
+         _committed_epoch,
+         false
+       ),
+       do: :ok
+
+  defp maybe_complete_active_revocations(
+         conversation_id,
+         committed_epoch,
+         true
+       ) do
+    complete_active_revocations(conversation_id, committed_epoch)
+  end
+
+  defp pending_remove_operation?(pending_commit) do
+    operation =
+      Map.get(pending_commit, "operation") ||
+        Map.get(pending_commit, :operation)
+
+    operation in [:mls_remove, "mls_remove"]
+  end
+
   defp build_request(state, attrs) do
     attrs
     |> Map.put_new(:group_id, state.conversation_id)
     |> Map.put_new(:epoch, state.epoch)
     |> Map.merge(state.state)
   end
+
+  defp validate_stage_payload(payload, conversation_id, operation)
+       when is_map(payload) and is_binary(conversation_id) and
+              operation in @supported_stage_operations do
+    with :ok <-
+           validate_payload_group_id(
+             payload,
+             conversation_id,
+             :stage_pending_commit
+           ),
+         :ok <-
+           validate_operation_hint(
+             payload,
+             Atom.to_string(operation),
+             :stage_pending_commit,
+             :invalid_stage_operation_hint
+           ),
+         :ok <- validate_stage_status_hint(payload, operation) do
+      :ok
+    end
+  end
+
+  defp validate_stage_payload(_payload, _conversation_id, _operation) do
+    {:error, :commit_rejected,
+     %{reason: :invalid_stage_payload, operation: :stage_pending_commit}}
+  end
+
+  defp validate_stage_status_hint(payload, :mls_commit) do
+    validate_optional_boolean(
+      payload,
+      :pending_commit,
+      true,
+      :stage_pending_commit,
+      :invalid_pending_commit_hint
+    )
+  end
+
+  defp validate_stage_status_hint(payload, operation)
+       when operation in [:mls_update, :mls_add, :mls_remove] do
+    validate_optional_boolean(
+      payload,
+      :staged,
+      true,
+      :stage_pending_commit,
+      :invalid_staged_hint
+    )
+  end
+
+  defp validate_merge_payload(payload, conversation_id)
+       when is_map(payload) and is_binary(conversation_id) do
+    with :ok <-
+           validate_payload_group_id(
+             payload,
+             conversation_id,
+             :merge_pending_commit
+           ),
+         :ok <-
+           validate_operation_hint(
+             payload,
+             "merge_staged_commit",
+             :merge_pending_commit,
+             :invalid_merge_operation_hint
+           ),
+         :ok <-
+           validate_optional_boolean(
+             payload,
+             :pending_commit,
+             false,
+             :merge_pending_commit,
+             :invalid_pending_commit_hint
+           ),
+         :ok <-
+           validate_optional_boolean(
+             payload,
+             :merged,
+             true,
+             :merge_pending_commit,
+             :invalid_merged_hint
+           ) do
+      :ok
+    end
+  end
+
+  defp validate_merge_payload(_payload, _conversation_id) do
+    {:error, :commit_rejected,
+     %{reason: :invalid_merge_payload, operation: :merge_pending_commit}}
+  end
+
+  defp validate_payload_group_id(payload, expected_group_id, operation) do
+    case fetch_payload_value(payload, :group_id) do
+      :missing ->
+        :ok
+
+      {:present, value} when is_binary(value) and value == expected_group_id ->
+        :ok
+
+      {:present, value} ->
+        {:error, :commit_rejected,
+         %{
+           reason: :invalid_payload_group_id,
+           operation: operation,
+           expected_group_id: expected_group_id,
+           payload_group_id: value
+         }}
+    end
+  end
+
+  defp validate_operation_hint(payload, expected_operation, operation, reason) do
+    case fetch_payload_value(payload, :operation) do
+      :missing ->
+        :ok
+
+      {:present, value} ->
+        case normalize_operation_hint(value) do
+          {:ok, ^expected_operation} ->
+            :ok
+
+          {:ok, normalized} ->
+            {:error, :commit_rejected,
+             %{
+               reason: reason,
+               operation: operation,
+               expected_operation: expected_operation,
+               payload_operation: normalized
+             }}
+
+          :error ->
+            {:error, :commit_rejected,
+             %{
+               reason: reason,
+               operation: operation,
+               expected_operation: expected_operation,
+               payload_operation: value
+             }}
+        end
+    end
+  end
+
+  defp validate_optional_boolean(
+         payload,
+         key,
+         expected,
+         operation,
+         reason
+       )
+       when is_boolean(expected) do
+    case fetch_payload_value(payload, key) do
+      :missing ->
+        :ok
+
+      {:present, value} ->
+        case parse_boolean(value) do
+          {:ok, ^expected} ->
+            :ok
+
+          {:ok, actual} ->
+            {:error, :commit_rejected,
+             %{
+               reason: reason,
+               operation: operation,
+               expected: expected,
+               actual: actual,
+               field: Atom.to_string(key)
+             }}
+
+          :error ->
+            {:error, :commit_rejected,
+             %{
+               reason: reason,
+               operation: operation,
+               expected: expected,
+               actual: value,
+               field: Atom.to_string(key)
+             }}
+        end
+    end
+  end
+
+  defp fetch_payload_value(payload, key)
+       when is_map(payload) and is_atom(key) do
+    string_key = Atom.to_string(key)
+
+    cond do
+      Map.has_key?(payload, key) ->
+        {:present, Map.get(payload, key)}
+
+      Map.has_key?(payload, string_key) ->
+        {:present, Map.get(payload, string_key)}
+
+      true ->
+        :missing
+    end
+  end
+
+  defp fetch_payload_value(_payload, _key), do: :missing
+
+  defp normalize_operation_hint(value) when is_binary(value), do: {:ok, value}
+
+  defp normalize_operation_hint(value) when is_atom(value),
+    do: {:ok, Atom.to_string(value)}
+
+  defp normalize_operation_hint(_value), do: :error
+
+  defp parse_boolean(value) when is_boolean(value), do: {:ok, value}
+  defp parse_boolean(value) when value in ["true", "1"], do: {:ok, true}
+  defp parse_boolean(value) when value in ["false", "0"], do: {:ok, false}
+  defp parse_boolean(_value), do: :error
 
   defp extract_snapshot(payload) when is_map(payload) do
     snapshot =
@@ -378,17 +697,54 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
 
   defp extract_snapshot(_payload), do: nil
 
-  defp extract_epoch(payload) when is_map(payload) do
-    value = Map.get(payload, :epoch) || Map.get(payload, "epoch")
-
-    if is_integer(value) and value >= 0 do
-      value
-    else
-      nil
+  defp merged_epoch_from_payload(payload, fallback_epoch) do
+    case extract_epoch(payload) do
+      {:ok, value} -> value
+      _ -> fallback_epoch
     end
   end
 
-  defp extract_epoch(_payload), do: nil
+  defp extract_epoch(payload) when is_map(payload) do
+    case epoch_value(payload) do
+      :missing ->
+        :missing
+
+      {:present, value} ->
+        case parse_epoch(value) do
+          {:ok, epoch} -> {:ok, epoch}
+          :error -> {:invalid, value}
+        end
+    end
+  end
+
+  defp extract_epoch(_payload), do: :missing
+
+  defp epoch_value(payload) when is_map(payload) do
+    cond do
+      Map.has_key?(payload, :epoch) ->
+        {:present, Map.get(payload, :epoch)}
+
+      Map.has_key?(payload, "epoch") ->
+        {:present, Map.get(payload, "epoch")}
+
+      true ->
+        :missing
+    end
+  end
+
+  defp epoch_value(_payload), do: :missing
+
+  defp parse_epoch(value) when is_integer(value) and value >= 0,
+    do: {:ok, value}
+
+  defp parse_epoch(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {parsed, ""} when parsed >= 0 -> {:ok, parsed}
+      _ -> :error
+    end
+  end
+
+  defp parse_epoch(_value), do: :error
 
   defp map_store_error(:stale_state), do: :storage_inconsistent
   defp map_store_error(:state_encode_failed), do: :storage_inconsistent

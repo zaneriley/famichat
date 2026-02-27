@@ -398,7 +398,7 @@ defmodule Mix.Tasks.Famichat.RunbookSeedMatrix do
     Sessions.start_session(
       user,
       %{
-        id: "runbook-#{label}-#{System.unique_integer([:positive])}",
+        id: "runbook-#{label}-#{Ecto.UUID.generate()}",
         user_agent: "famichat.runbook_seed_matrix",
         ip: "127.0.0.1"
       },

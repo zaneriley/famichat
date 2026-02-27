@@ -3,6 +3,7 @@ defmodule FamichatWeb.MessageTestControllerTest do
 
   alias Famichat.Auth.Sessions
   alias Famichat.Chat.{Message, MessageRateLimiter}
+  alias Famichat.Chat.ConversationSecurityStateStore
   alias Famichat.ChatFixtures
   alias Famichat.Repo
 
@@ -527,6 +528,185 @@ defmodule FamichatWeb.MessageTestControllerTest do
     end
   end
 
+  describe "POST /api/test/conversation_security/recover" do
+    test "returns 401 when bearer token is missing", %{
+      conn: conn,
+      conversation: conversation
+    } do
+      conn =
+        post(conn, ~p"/api/test/conversation_security/recover", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id,
+          "recovery_ref" => "recover-missing-auth",
+          "rejoin_token" => "token-missing-auth"
+        })
+
+      assert json_response(conn, 401) == %{"error" => "unauthorized"}
+    end
+
+    test "returns 422 when required recovery fields are missing", %{
+      authed_conn: authed_conn,
+      conversation: conversation
+    } do
+      conn =
+        post(authed_conn, ~p"/api/test/conversation_security/recover", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id
+        })
+
+      response = json_response(conn, 422)
+      assert response["status"] == "error"
+      assert response["error"] == "invalid_request"
+      assert response["details"]["recovery_ref"] == "must be a non-empty string"
+
+      assert response["details"]["rejoin_token"] ==
+               "rejoin_token or welcome is required"
+    end
+
+    test "returns 404 for authenticated non-member", %{
+      outsider_conn: outsider_conn,
+      conversation: conversation
+    } do
+      conn =
+        post(outsider_conn, ~p"/api/test/conversation_security/recover", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id,
+          "recovery_ref" => "recover-outsider",
+          "rejoin_token" => "token-outsider"
+        })
+
+      assert json_response(conn, 404) == %{
+               "status" => "error",
+               "error" => "not_found"
+             }
+    end
+
+    test "returns 200 and replay is idempotent for valid recovery request", %{
+      authed_conn: authed_conn,
+      conversation: conversation
+    } do
+      recovery_ref = "recover-#{System.unique_integer([:positive])}"
+
+      first_conn =
+        post(authed_conn, ~p"/api/test/conversation_security/recover", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id,
+          "recovery_ref" => recovery_ref,
+          "rejoin_token" => "rejoin-#{System.unique_integer([:positive])}",
+          "recovery_reason" => "message_test_controller"
+        })
+
+      first_response = json_response(first_conn, 200)
+      assert first_response["status"] == "success"
+      assert first_response["action"] == "recover_conversation_security_state"
+      assert first_response["conversation_id"] == conversation.id
+      assert first_response["recovery_ref"] == recovery_ref
+      assert first_response["idempotent"] == false
+      assert is_binary(first_response["recovery_id"])
+      assert is_integer(first_response["recovered_epoch"])
+
+      replay_conn =
+        post(authed_conn, ~p"/api/test/conversation_security/recover", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id,
+          "recovery_ref" => recovery_ref,
+          "rejoin_token" => "rejoin-replay-ignored"
+        })
+
+      replay_response = json_response(replay_conn, 200)
+      assert replay_response["status"] == "success"
+      assert replay_response["action"] == "recover_conversation_security_state"
+      assert replay_response["conversation_id"] == conversation.id
+      assert replay_response["recovery_ref"] == recovery_ref
+      assert replay_response["idempotent"] == true
+      assert replay_response["recovery_id"] == first_response["recovery_id"]
+
+      assert replay_response["recovered_epoch"] ==
+               first_response["recovered_epoch"]
+    end
+  end
+
+  describe "POST /api/test/conversation_security/reset_state" do
+    test "returns 401 when bearer token is missing", %{
+      conn: conn,
+      conversation: conversation
+    } do
+      conn =
+        post(conn, ~p"/api/test/conversation_security/reset_state", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id
+        })
+
+      assert json_response(conn, 401) == %{"error" => "unauthorized"}
+    end
+
+    test "returns 404 for authenticated non-member", %{
+      outsider_conn: outsider_conn,
+      conversation: conversation
+    } do
+      conn =
+        post(outsider_conn, ~p"/api/test/conversation_security/reset_state", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id
+        })
+
+      assert json_response(conn, 404) == %{
+               "status" => "error",
+               "error" => "not_found"
+             }
+    end
+
+    test "returns 422 for invalid payload", %{authed_conn: authed_conn} do
+      conn =
+        post(authed_conn, ~p"/api/test/conversation_security/reset_state", %{
+          "conversation_type" => "invalid",
+          "conversation_id" => "not-a-uuid"
+        })
+
+      response = json_response(conn, 422)
+      assert response["status"] == "error"
+      assert response["error"] == "invalid_request"
+
+      assert response["details"]["conversation_type"] ==
+               "must be one of: self, direct, group, family"
+
+      assert response["details"]["conversation_id"] == "must be a valid UUID"
+    end
+
+    test "returns 200 and deletes stored conversation security state", %{
+      authed_conn: authed_conn,
+      conversation: conversation
+    } do
+      assert {:ok, _stored} =
+               ConversationSecurityStateStore.upsert(
+                 conversation.id,
+                 %{
+                   protocol: "mls",
+                   epoch: 3,
+                   state: snapshot_payload("reset-state")
+                 },
+                 nil
+               )
+
+      assert {:ok, _loaded} =
+               ConversationSecurityStateStore.load(conversation.id)
+
+      conn =
+        post(authed_conn, ~p"/api/test/conversation_security/reset_state", %{
+          "conversation_type" => "direct",
+          "conversation_id" => conversation.id
+        })
+
+      response = json_response(conn, 200)
+      assert response["status"] == "success"
+      assert response["action"] == "reset_conversation_security_state"
+      assert response["conversation_id"] == conversation.id
+
+      assert {:error, :not_found, _details} =
+               ConversationSecurityStateStore.load(conversation.id)
+    end
+  end
+
   defp authed_conn(conn, user) do
     {:ok, session} =
       Sessions.start_session(
@@ -558,5 +738,16 @@ defmodule FamichatWeb.MessageTestControllerTest do
 
   defp assert_no_broadcast_on_topic(topic) do
     refute_receive %Phoenix.Socket.Broadcast{topic: ^topic}, 50
+  end
+
+  defp snapshot_payload(token) do
+    %{
+      "session_sender_storage" => Base.encode64("sender-storage:#{token}"),
+      "session_recipient_storage" =>
+        Base.encode64("recipient-storage:#{token}"),
+      "session_sender_signer" => Base.encode64("sender-signer:#{token}"),
+      "session_recipient_signer" => Base.encode64("recipient-signer:#{token}"),
+      "session_cache" => ""
+    }
   end
 end

@@ -219,6 +219,7 @@ defmodule Famichat.Chat do
   alias Famichat.Chat.Conversation
   alias Famichat.Chat.ConversationSecurityKeyPackagePolicy
   alias Famichat.Chat.ConversationSecurityRecoveryLifecycle
+  alias Famichat.Chat.ConversationSecurityRevocationLifecycle
   alias Famichat.Chat.ConversationVisibilityService
 
   @doc """
@@ -334,6 +335,83 @@ defmodule Famichat.Chat do
     ConversationSecurityRecoveryLifecycle.recover_conversation_security_state(
       conversation_id,
       recovery_ref,
+      attrs
+    )
+  end
+
+  @doc """
+  Stages conversation-security revocation intents for all conversations that include the client.
+
+  The operation is idempotent per `{conversation_id, revocation_ref}` and writes
+  revocation journal rows in `:pending_commit` state.
+
+  `revocation_ref` is an idempotency key and must be stable across retries
+  (for example, do not include timestamps).
+  """
+  @spec stage_client_revocation(String.t(), String.t(), map()) ::
+          {:ok, map()} | {:error, atom(), map()}
+  def stage_client_revocation(client_id, revocation_ref, attrs \\ %{}) do
+    ConversationSecurityRevocationLifecycle.stage_client_revocation(
+      client_id,
+      revocation_ref,
+      attrs
+    )
+  end
+
+  @doc """
+  Stages conversation-security revocation intents for all conversations that include the user.
+
+  The operation is idempotent per `{conversation_id, revocation_ref}` and writes
+  revocation journal rows in `:pending_commit` state.
+
+  `revocation_ref` is an idempotency key and must be stable across retries
+  (for example, do not include timestamps).
+  """
+  @spec stage_user_revocation(Ecto.UUID.t(), String.t(), map()) ::
+          {:ok, map()} | {:error, atom(), map()}
+  def stage_user_revocation(user_id, revocation_ref, attrs \\ %{}) do
+    ConversationSecurityRevocationLifecycle.stage_user_revocation(
+      user_id,
+      revocation_ref,
+      attrs
+    )
+  end
+
+  @doc """
+  Seals a staged revocation for a conversation once commit/epoch outcome is known.
+
+  Requires a non-negative `committed_epoch` when transitioning from
+  `:in_progress`/`:pending_commit` to `:completed`.
+  """
+  @spec complete_conversation_revocation(Ecto.UUID.t(), String.t(), map()) ::
+          {:ok, map()} | {:error, atom(), map()}
+  def complete_conversation_revocation(
+        conversation_id,
+        revocation_ref,
+        attrs \\ %{}
+      ) do
+    ConversationSecurityRevocationLifecycle.complete_conversation_revocation(
+      conversation_id,
+      revocation_ref,
+      attrs
+    )
+  end
+
+  @doc """
+  Marks a staged revocation as failed with an explicit error code.
+
+  Required attrs for state transition: `error_code`.
+  """
+  @spec fail_conversation_revocation(Ecto.UUID.t(), String.t(), map()) ::
+          {:ok, map()} | {:error, atom(), map()}
+  def fail_conversation_revocation(
+        conversation_id,
+        revocation_ref,
+        attrs \\ %{}
+      ) do
+    ConversationSecurityRevocationLifecycle.fail_conversation_revocation(
+      conversation_id,
+      revocation_ref,
       attrs
     )
   end

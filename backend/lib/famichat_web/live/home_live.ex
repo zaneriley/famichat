@@ -1,9 +1,10 @@
 defmodule FamichatWeb.HomeLive do
   use FamichatWeb, :live_view
+  import Ecto.Query
   require Logger
 
   alias Famichat.Auth.{Households, Identity, Sessions}
-  alias Famichat.Chat.{Family, Self}
+  alias Famichat.Chat.{Conversation, Family}
   alias Famichat.Repo
 
   @default_test_username_prefix "ac-user"
@@ -20,47 +21,13 @@ defmodule FamichatWeb.HomeLive do
          user: user,
          conversation_id: conversation_id
        }} ->
-        messages =
-          case Famichat.Chat.MessageService.get_conversation_messages(
-                 conversation_id,
-                 limit: 50
-               ) do
-            {:ok, msgs} ->
-              Enum.map(msgs, fn msg ->
-                %{
-                  id: "msg-#{msg.id}",
-                  body: msg.content,
-                  timestamp: msg.inserted_at,
-                  outgoing: msg.sender_id == user.id,
-                  system_message: false,
-                  sender_name:
-                    if(msg.sender_id == user.id,
-                      do: "Me",
-                      else: "Family Member"
-                    )
-                }
-              end)
-
-            _ ->
-              []
-          end
-
-        # Subscribe to conversation topic for real-time updates
-        Phoenix.PubSub.subscribe(
-          Famichat.PubSub,
-          "conversation:#{conversation_id}"
-        )
-
         {:ok,
          socket
          |> assign(
            channel_joined: false,
-           conversation_type: "self",
+           conversation_type: "family",
            conversation_id: conversation_id,
            current_message: "",
-           encryption_enabled: false,
-           key_id: "KEY_TEST_v1",
-           version_tag: "v1.0.0",
            user_id: user.id,
            device_id: device_id,
            test_username: test_username,
@@ -68,7 +35,7 @@ defmodule FamichatWeb.HomeLive do
            auth_token: access_token,
            topic: nil
          )
-         |> stream(:messages, messages)}
+         |> load_messages(conversation_id, user.id)}
 
       {:error, reason} ->
         Logger.error("Failed to create test session: #{inspect(reason)}")
@@ -77,7 +44,7 @@ defmodule FamichatWeb.HomeLive do
          socket
          |> assign(
            channel_joined: false,
-           conversation_type: "self",
+           conversation_type: "family",
            conversation_id: nil,
            current_message: "",
            user_id: nil,
@@ -88,7 +55,7 @@ defmodule FamichatWeb.HomeLive do
            auth_token: nil,
            topic: nil
          )
-         |> stream(:messages, [])}
+         |> stream(:messages, [], reset: true)}
     end
   end
 
@@ -98,7 +65,7 @@ defmodule FamichatWeb.HomeLive do
       user = ensure_test_user!(test_username)
 
       ensure_membership!(user.id, family.id)
-      conversation = ensure_self_conversation!(user.id)
+      conversation = ensure_family_conversation!(family.id)
 
       session_data = start_test_session!(user)
       Map.put(session_data, :conversation_id, conversation.id)
@@ -119,10 +86,25 @@ defmodule FamichatWeb.HomeLive do
     end
   end
 
-  defp ensure_self_conversation!(user_id) do
-    case Self.get_or_create(user_id) do
-      {:ok, conversation} -> conversation
-      {:error, reason} -> Repo.rollback(reason)
+  defp ensure_family_conversation!(family_id) do
+    query =
+      from c in Conversation,
+        where: c.family_id == ^family_id and c.conversation_type == :family,
+        order_by: [asc: c.inserted_at],
+        limit: 1
+
+    case Repo.one(query) do
+      %Conversation{} = conversation ->
+        conversation
+
+      nil ->
+        %Conversation{}
+        |> Conversation.create_changeset(%{
+          family_id: family_id,
+          conversation_type: :family,
+          metadata: %{"name" => "Family Chat"}
+        })
+        |> Repo.insert!()
     end
   end
 
@@ -168,29 +150,24 @@ defmodule FamichatWeb.HomeLive do
     message_body =
       socket.assigns.current_message |> to_string() |> String.trim()
 
-    if socket.assigns.channel_joined && message_body != "" do
-      payload = %{
-        "body" => message_body,
-        "user_id" => socket.assigns.user_id
-      }
+    cond do
+      message_body == "" ->
+        {:noreply, socket}
 
-      socket = push_event(socket, "send_message", payload)
+      socket.assigns.channel_joined ->
+        payload = %{
+          "body" => message_body,
+          "user_id" => socket.assigns.user_id
+        }
 
-      sent_message = %{
-        id: "msg-#{:erlang.unique_integer()}",
-        body: message_body,
-        timestamp: DateTime.utc_now(),
-        outgoing: true,
-        system_message: false,
-        sender_name: "Me"
-      }
+        {:noreply,
+         socket
+         |> push_event("send_message", payload)
+         |> assign(current_message: "", error_message: nil)}
 
-      {:noreply,
-       socket
-       |> stream_insert(:messages, sent_message)
-       |> assign(current_message: "")}
-    else
-      {:noreply, socket}
+      true ->
+        {:noreply,
+         assign(socket, error_message: "Connect channel before sending.")}
     end
   end
 
@@ -199,7 +176,11 @@ defmodule FamichatWeb.HomeLive do
     Logger.error("Socket error: #{inspect(reason)}")
 
     {:noreply,
-     assign(socket, channel_joined: false, error_message: "Socket error")}
+     assign(
+       socket,
+       channel_joined: false,
+       error_message: "Socket error: #{reason_to_string(reason)}"
+     )}
   end
 
   @impl true
@@ -215,7 +196,11 @@ defmodule FamichatWeb.HomeLive do
     Logger.error("Failed to join channel: #{inspect(reason)}")
 
     {:noreply,
-     assign(socket, channel_joined: false, error_message: "Failed to join")}
+     assign(
+       socket,
+       channel_joined: false,
+       error_message: "Failed to join: #{reason_to_string(reason)}"
+     )}
   end
 
   @impl true
@@ -225,53 +210,36 @@ defmodule FamichatWeb.HomeLive do
 
   @impl true
   def handle_event("message_received", payload, socket) do
-    if local_echo_on_same_device?(payload, socket.assigns) do
-      {:noreply, socket}
-    else
-      received_message = %{
-        id: "msg-#{:erlang.unique_integer()}",
-        body: payload["body"],
-        timestamp:
-          case DateTime.from_iso8601(payload["timestamp"]) do
-            {:ok, datetime, _offset} -> datetime
-            _error -> DateTime.utc_now()
-          end,
-        outgoing: false,
-        system_message: false,
-        sender_name: "Family Member"
-      }
+    received_message = %{
+      id: "msg-#{:erlang.unique_integer()}",
+      body: payload["body"],
+      timestamp:
+        case DateTime.from_iso8601(payload["timestamp"]) do
+          {:ok, datetime, _offset} -> datetime
+          _error -> DateTime.utc_now()
+        end,
+      outgoing: payload["user_id"] == socket.assigns.user_id,
+      system_message: false,
+      sender_name: sender_name_for_payload(payload, socket.assigns)
+    }
 
-      {:noreply, stream_insert(socket, :messages, received_message)}
-    end
+    {:noreply, stream_insert(socket, :messages, received_message)}
   end
 
   @impl true
   def handle_event("message_error", %{"reason" => reason}, socket) do
     Logger.error("Message error: #{inspect(reason)}")
-    {:noreply, socket}
+
+    {:noreply,
+     assign(
+       socket,
+       error_message: "Message failed: #{reason_to_string(reason)}"
+     )}
   end
 
   @impl true
   def handle_info({:channel_push_confirmed, _ref}, socket) do
     {:noreply, socket}
-  end
-
-  # Handle incoming messages from PubSub (e.g. from other users)
-  @impl true
-  def handle_info(
-        %{__struct__: Phoenix.Socket.Broadcast, topic: _, payload: payload},
-        socket
-      ) do
-    received_message = %{
-      id: "msg-#{:erlang.unique_integer()}",
-      body: payload.body || payload["body"],
-      timestamp: DateTime.utc_now(),
-      outgoing: false,
-      system_message: false,
-      sender_name: "Family Member"
-    }
-
-    {:noreply, stream_insert(socket, :messages, received_message)}
   end
 
   def handle_info(_msg, socket) do
@@ -306,12 +274,57 @@ defmodule FamichatWeb.HomeLive do
     "#{@default_test_username_prefix}-#{System.unique_integer([:positive])}"
   end
 
-  defp local_echo_on_same_device?(
-         %{"user_id" => user_id, "device_id" => device_id},
-         %{user_id: local_user_id, device_id: local_device_id}
-       ) do
-    user_id == local_user_id and device_id == local_device_id
+  defp load_messages(socket, nil, _user_id) do
+    stream(socket, :messages, [], reset: true)
   end
 
-  defp local_echo_on_same_device?(_payload, _assigns), do: false
+  defp load_messages(socket, conversation_id, user_id) do
+    messages =
+      case Famichat.Chat.MessageService.get_conversation_messages(
+             conversation_id,
+             limit: 50
+           ) do
+        {:ok, msgs} ->
+          Enum.map(msgs, fn msg ->
+            %{
+              id: "msg-#{msg.id}",
+              body: msg.content,
+              timestamp: msg.inserted_at,
+              outgoing: msg.sender_id == user_id,
+              system_message: false,
+              sender_name: sender_name_for_record(msg, user_id)
+            }
+          end)
+
+        _ ->
+          []
+      end
+
+    stream(socket, :messages, messages, reset: true)
+  end
+
+  defp sender_name_for_record(msg, user_id) do
+    cond do
+      msg.sender_id == user_id ->
+        "Me"
+
+      is_map(msg.sender) and is_binary(msg.sender.username) ->
+        msg.sender.username
+
+      true ->
+        "Family Member"
+    end
+  end
+
+  defp sender_name_for_payload(payload, assigns) do
+    if payload["user_id"] == assigns.user_id do
+      "Me"
+    else
+      "Family Member"
+    end
+  end
+
+  defp reason_to_string(reason) when is_binary(reason), do: reason
+  defp reason_to_string(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp reason_to_string(reason), do: inspect(reason)
 end

@@ -117,6 +117,7 @@ defmodule FamichatWeb.MessageChannel do
 
   @encryption_metadata_fields ~w(version_tag encryption_flag key_id)
   @default_perf_budget 200
+  intercept(["new_msg"])
 
   @doc """
   Handles joining the message channel.
@@ -387,6 +388,23 @@ defmodule FamichatWeb.MessageChannel do
     handle_message_ack(payload, socket)
   end
 
+  @impl true
+  def handle_out("new_msg", payload, socket) do
+    case ensure_socket_device_active(socket) do
+      :ok ->
+        push(socket, "new_msg", payload)
+        {:noreply, socket}
+
+      {:error, reason} ->
+        push(socket, "security_state", %{
+          reason: reason_to_string(reason),
+          action: "reauth_required"
+        })
+
+        {:stop, :normal, socket}
+    end
+  end
+
   defp build_message_params(payload, sender_id, conversation_id) do
     params = %{
       sender_id: sender_id,
@@ -425,6 +443,15 @@ defmodule FamichatWeb.MessageChannel do
     end
   end
 
+  defp message_send_error(
+         {:mls_encryption_failed, :recovery_required, _details}
+       ),
+       do: "recovery_required"
+
+  defp message_send_error({:mls_encryption_failed, code, _details})
+       when is_atom(code),
+       do: reason_to_string(code)
+
   defp message_send_error({:rate_limited, _retry_in}), do: "rate_limited"
   defp message_send_error({:missing_fields, _missing}), do: "invalid_message"
   defp message_send_error(:not_participant), do: "unauthorized"
@@ -438,6 +465,16 @@ defmodule FamichatWeb.MessageChannel do
   defp message_send_error_payload({:rate_limited, retry_in})
        when is_integer(retry_in) and retry_in > 0 do
     %{reason: "rate_limited", retry_in: retry_in}
+  end
+
+  defp message_send_error_payload(
+         {:mls_encryption_failed, :recovery_required, details}
+       ) do
+    %{
+      reason: "recovery_required",
+      action: "recover_conversation_security_state",
+      recovery_reason: mls_error_reason(details)
+    }
   end
 
   defp message_send_error_payload(reason) do
@@ -570,11 +607,13 @@ defmodule FamichatWeb.MessageChannel do
     user_id = socket.assigns[:user_id]
     device_id = socket.assigns[:device_id]
 
-    if is_binary(user_id) and is_binary(device_id) and
-         Sessions.device_active?(user_id, device_id) do
-      :ok
+    if is_binary(user_id) and is_binary(device_id) do
+      case Sessions.device_access_state(user_id, device_id) do
+        :ok -> :ok
+        {:error, reason} -> {:error, reason}
+      end
     else
-      {:error, :invalid_token}
+      {:error, :invalid}
     end
   end
 
@@ -605,6 +644,11 @@ defmodule FamichatWeb.MessageChannel do
   defp reason_to_string(:invalid_conversation_id), do: "invalid_conversation_id"
   defp reason_to_string(:conversation_not_found), do: "conversation_not_found"
   defp reason_to_string(:not_found), do: "not_found"
+  defp reason_to_string(:revoked), do: "device_revoked"
+  defp reason_to_string(:trust_required), do: "reauth_required"
+  defp reason_to_string(:trust_expired), do: "reauth_required"
+  defp reason_to_string(:device_not_found), do: "invalid_token"
+  defp reason_to_string(:invalid), do: "invalid_token"
 
   defp reason_to_string(:invalid_conversation_type),
     do: "invalid_conversation_type"
@@ -620,6 +664,16 @@ defmodule FamichatWeb.MessageChannel do
   defp reason_to_string(:invalid_topic_format), do: "invalid_topic_format"
   defp reason_to_string(other), do: to_string(other)
 
+  defp mls_error_reason(details) when is_map(details) do
+    case Map.get(details, :reason) || Map.get(details, "reason") do
+      reason when is_atom(reason) -> Atom.to_string(reason)
+      reason when is_binary(reason) -> reason
+      _ -> "unspecified"
+    end
+  end
+
+  defp mls_error_reason(_details), do: "unspecified"
+
   defp public_join_reason(:invalid_conversation_id), do: :not_found
 
   defp public_join_reason(:conversation_not_found), do: :not_found
@@ -627,6 +681,9 @@ defmodule FamichatWeb.MessageChannel do
   defp public_join_reason(:unauthorized), do: :not_found
   defp public_join_reason(:user_not_found), do: :not_found
   defp public_join_reason(:wrong_family), do: :not_found
+  defp public_join_reason(:revoked), do: :revoked
+  defp public_join_reason(:trust_required), do: :trust_required
+  defp public_join_reason(:trust_expired), do: :trust_expired
   defp public_join_reason(reason), do: reason
 
   defp topic_context(%{

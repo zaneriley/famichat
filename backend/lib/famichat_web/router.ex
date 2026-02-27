@@ -98,13 +98,23 @@ defmodule FamichatWeb.Router do
 
       post "/broadcast", MessageTestController, :broadcast
       post "/test_events", MessageTestController, :broadcast_alias
+
+      post "/conversation_security/recover",
+           MessageTestController,
+           :recover_conversation_security_state
+
+      post "/conversation_security/reset_state",
+           MessageTestController,
+           :reset_conversation_security_state
     end
 
     scope "/admin", FamichatWeb do
       pipe_through [:admin]
 
       live_session :admin, on_mount: {FamichatWeb.LiveHelpers, :admin} do
-        # Add the new message testing route
+        # Canonical message QA route
+        live "/message", MessageTestLive, :index
+        # Compatibility alias retained for existing links/scripts
         live "/message-test", MessageTestLive, :index
       end
 

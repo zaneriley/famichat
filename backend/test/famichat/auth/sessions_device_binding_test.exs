@@ -1,11 +1,26 @@
 defmodule Famichat.Auth.Sessions.DeviceBindingTest do
   use Famichat.DataCase, async: true
 
+  import Ecto.Query
+
   alias Famichat.Auth.Sessions
+  alias Famichat.Chat.ConversationSecurityRevocation
   alias Famichat.ChatFixtures
+  alias Famichat.Repo
 
   test "refresh tokens are bound to their device and revoked tokens stay revoked" do
-    user = ChatFixtures.user_fixture()
+    family = ChatFixtures.family_fixture()
+
+    user = ChatFixtures.user_fixture(%{family_id: family.id, role: :member})
+    peer = ChatFixtures.user_fixture(%{family_id: family.id, role: :member})
+
+    conversation =
+      ChatFixtures.conversation_fixture(%{
+        conversation_type: :direct,
+        family: family,
+        user1: user,
+        user2: peer
+      })
 
     session1 = start_session(user, "binding-device-1")
 
@@ -28,6 +43,18 @@ defmodule Famichat.Auth.Sessions.DeviceBindingTest do
 
     assert {:ok, :revoked} = Sessions.revoke_device(user.id, session3.device_id)
 
+    revocation_query =
+      from r in ConversationSecurityRevocation,
+        where:
+          r.conversation_id == ^conversation.id and
+            r.subject_type == :client and
+            r.subject_id == ^session3.device_id
+
+    assert Repo.aggregate(revocation_query, :count, :id) == 1
+
+    assert {:ok, :revoked} = Sessions.revoke_device(user.id, session3.device_id)
+    assert Repo.aggregate(revocation_query, :count, :id) == 1
+
     assert {:error, :invalid} =
              Sessions.verify_access_token(session3.access_token)
 
@@ -36,6 +63,34 @@ defmodule Famichat.Auth.Sessions.DeviceBindingTest do
                session3.device_id,
                session3.refresh_token
              )
+  end
+
+  test "revoke_all_for_user stages a single user revocation per conversation across retries" do
+    family = ChatFixtures.family_fixture()
+    user = ChatFixtures.user_fixture(%{family_id: family.id, role: :member})
+    peer = ChatFixtures.user_fixture(%{family_id: family.id, role: :member})
+
+    conversation =
+      ChatFixtures.conversation_fixture(%{
+        conversation_type: :direct,
+        family: family,
+        user1: user,
+        user2: peer
+      })
+
+    _session = start_session(user, "binding-device-all")
+
+    assert :ok = Sessions.revoke_all_for_user(user.id)
+    assert :ok = Sessions.revoke_all_for_user(user.id)
+
+    revocation_query =
+      from r in ConversationSecurityRevocation,
+        where:
+          r.conversation_id == ^conversation.id and
+            r.subject_type == :user and r.subject_id == ^user.id and
+            r.status == :pending_commit
+
+    assert Repo.aggregate(revocation_query, :count, :id) == 1
   end
 
   defp start_session(user, suffix) do

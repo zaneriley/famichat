@@ -1,8 +1,11 @@
 defmodule FamichatWeb.AuthControllerTest do
   use FamichatWeb.ConnCase, async: true
 
+  import Ecto.Query
+
   alias Famichat.Repo
   alias Famichat.Auth.Sessions
+  alias Famichat.Chat.ConversationSecurityRevocation
   alias Famichat.ChatFixtures
   alias Famichat.Accounts.{User, UserDevice}
 
@@ -34,7 +37,7 @@ defmodule FamichatWeb.AuthControllerTest do
        %{
          conn: conn,
          family: family,
-         admin: _admin,
+         admin: admin,
          admin_session: admin_session
        } do
     conn =
@@ -120,6 +123,14 @@ defmodule FamichatWeb.AuthControllerTest do
     assert register_token
 
     created_user = Repo.get!(User, user_id)
+
+    conversation =
+      ChatFixtures.conversation_fixture(%{
+        conversation_type: :direct,
+        family: family,
+        user1: created_user,
+        user2: admin
+      })
 
     assert created_user.email |> to_string() |> String.downcase() ==
              "newuser@example.test"
@@ -221,6 +232,15 @@ defmodule FamichatWeb.AuthControllerTest do
     |> json_response(401)
 
     assert Repo.get_by(UserDevice, device_id: device_id).revoked_at
+
+    revocation_query =
+      from r in ConversationSecurityRevocation,
+        where:
+          r.conversation_id == ^conversation.id and
+            r.subject_type == :client and r.subject_id == ^device_id and
+            r.status == :pending_commit
+
+    assert Repo.aggregate(revocation_query, :count, :id) == 1
   end
 
   test "magic link and otp flows", %{conn: conn, admin: admin} do

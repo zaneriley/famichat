@@ -306,6 +306,8 @@ function _qa_message_count {
   local output_file="$4"
 
   if ! curl -sS \
+    --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+    --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
     -H "Authorization: Bearer ${token}" \
     "${base_url}/api/v1/conversations/${conversation_id}/messages" \
     > "${output_file}"; then
@@ -315,6 +317,144 @@ function _qa_message_count {
 
   jq -r 'if (.data | type) == "array" then (.data | length) else -1 end' \
     "${output_file}" 2>/dev/null || echo "-1"
+}
+
+function _qa_spawn_ws_listener {
+  local ws_url="$1"
+  local ws_topic="$2"
+  local output_file="$3"
+  local wait_seconds="${4:-4}"
+  local ready_file="${5:-}"
+
+  node - "${ws_url}" "${ws_topic}" "${output_file}" "${wait_seconds}" "${ready_file}" <<'NODE' &
+const fs = require("fs");
+
+const [url, topic, outputFile, waitSecondsRaw, readyFile] = process.argv.slice(2);
+const waitMs = Math.max(1000, Number(waitSecondsRaw || "4") * 1000);
+const events = [];
+let readyWritten = false;
+let closeTimer = null;
+let finished = false;
+
+const preReadyTimeoutMs = readyFile ? waitMs + 5000 : waitMs;
+
+function finish() {
+  if (finished) {
+    return;
+  }
+
+  finished = true;
+
+  try {
+    ws.close();
+  } catch (error) {
+    pushEvent({close_error: String(error)});
+  }
+
+  fs.writeFileSync(outputFile, events.join("\n"), "utf8");
+  process.exit(0);
+}
+
+function scheduleClose(delayMs) {
+  if (closeTimer) {
+    clearTimeout(closeTimer);
+  }
+
+  closeTimer = setTimeout(finish, delayMs);
+}
+
+function markReady() {
+  if (readyWritten || !readyFile) {
+    return;
+  }
+
+  try {
+    fs.writeFileSync(readyFile, new Date().toISOString(), "utf8");
+    readyWritten = true;
+    scheduleClose(waitMs);
+  } catch (_error) {
+    // Best effort only; QA assertions still rely on captured WS logs.
+  }
+}
+
+function pushEvent(value) {
+  if (typeof value === "string") {
+    events.push(value);
+    return;
+  }
+
+  events.push(JSON.stringify(value));
+}
+
+const ws = new WebSocket(url);
+
+scheduleClose(preReadyTimeoutMs);
+
+ws.addEventListener("open", () => {
+  const joinPayload = JSON.stringify(["1", "1", topic, "phx_join", {}]);
+  ws.send(joinPayload);
+});
+
+ws.addEventListener("message", (event) => {
+  if (typeof event.data === "string") {
+    pushEvent(event.data);
+    try {
+      const decoded = JSON.parse(event.data);
+      if (Array.isArray(decoded) && decoded[3] === "phx_reply" && decoded[4] && decoded[4].status === "ok") {
+        markReady();
+      }
+    } catch (_error) {
+      // ignore non-JSON or non-phx frames
+    }
+    return;
+  }
+
+  const text = Buffer.from(event.data).toString("utf8");
+  pushEvent(text);
+  try {
+    const decoded = JSON.parse(text);
+    if (Array.isArray(decoded) && decoded[3] === "phx_reply" && decoded[4] && decoded[4].status === "ok") {
+      markReady();
+    }
+  } catch (_error) {
+    // ignore non-JSON or non-phx frames
+  }
+});
+
+ws.addEventListener("error", (event) => {
+  pushEvent({error: event.message || "ws_error"});
+});
+
+NODE
+  _qa_ws_listener_pid="$!"
+}
+
+function _qa_wait_for_files {
+  local timeout_seconds="${1:-3}"
+  shift
+  local -a files=("$@")
+  local started_at=$SECONDS
+
+  while true; do
+    local all_ready=1
+    local candidate
+    for candidate in "${files[@]}"; do
+      if [[ ! -f "${candidate}" ]]; then
+        all_ready=0
+        break
+      fi
+    done
+
+    if [[ "${all_ready}" -eq 1 ]]; then
+      return 0
+    fi
+
+    if ((SECONDS - started_at >= timeout_seconds)); then
+      return 1
+    fi
+
+    sleep 0.1
+  done
 }
 
 function _qa_run_http_matrix_scenario {
@@ -333,6 +473,8 @@ function _qa_run_http_matrix_scenario {
   local ws_base_url="${13}"
   local output_root="${14}"
   local matrix_csv="${15}"
+  local guard_ws_token="${16:-}"
+  local guard_ws_topic="${17:-}"
 
   local scenario_dir="${output_root}/${scenario_id}"
   local response_file="${scenario_dir}/response.json"
@@ -340,8 +482,21 @@ function _qa_run_http_matrix_scenario {
   local before_history_file="${scenario_dir}/history_before.json"
   local after_history_file="${scenario_dir}/history_after.json"
   local ws_log_file="${scenario_dir}/ws_listener.log"
+  local ws_ready_file="${scenario_dir}/ws_listener.ready"
   local ws_pid=""
-  local ws_wait_seconds="${QA_WS_WAIT_SECONDS:-4}"
+  local guard_ws_log_file="${scenario_dir}/ws_guard.log"
+  local guard_ws_ready_file="${scenario_dir}/ws_guard.ready"
+  local guard_ws_pid=""
+  local ws_wait_seconds="${QA_WS_WAIT_SECONDS:-8}"
+  local ws_ready_timeout_seconds="${QA_WS_READY_TIMEOUT_SECONDS:-10}"
+  local ws_ready_attempts="${QA_WS_READY_ATTEMPTS:-5}"
+  local ws_ready_retry_sleep_seconds="${QA_WS_READY_RETRY_SLEEP_SECONDS:-1}"
+  local ws_post_ready_delay_seconds="${QA_WS_POST_READY_DELAY_SECONDS:-0.5}"
+  local listener_attempt=1
+  local listener_ready="false"
+  local guard_listener_attempt=1
+  local guard_listener_ready="false"
+  local guard_ws_parity="not_checked"
 
   mkdir -p "${scenario_dir}"
 
@@ -363,73 +518,231 @@ function _qa_run_http_matrix_scenario {
     "${before_history_file}")"
 
   if [[ -n "${ws_token}" && -n "${ws_topic}" ]]; then
-    node - "${ws_base_url}&token=${ws_token}" "${ws_topic}" "${ws_log_file}" "${ws_wait_seconds}" <<'NODE' &
-const fs = require("fs");
+    rm -f "${ws_ready_file}"
 
-const [url, topic, outputFile, waitSecondsRaw] = process.argv.slice(2);
-const waitMs = Math.max(1000, Number(waitSecondsRaw || "4") * 1000);
-const events = [];
+    while ((listener_attempt <= ws_ready_attempts)); do
+      _qa_spawn_ws_listener \
+        "${ws_base_url}&token=${ws_token}" \
+        "${ws_topic}" \
+        "${ws_log_file}" \
+        "${ws_wait_seconds}" \
+        "${ws_ready_file}"
+      ws_pid="${_qa_ws_listener_pid}"
 
-function pushEvent(value) {
-  if (typeof value === "string") {
-    events.push(value);
-    return;
-  }
+      if _qa_wait_for_files "${ws_ready_timeout_seconds}" "${ws_ready_file}"; then
+        if [[ -n "${ws_pid}" ]] && ! kill -0 "${ws_pid}" 2>/dev/null; then
+          rm -f "${ws_ready_file}"
+          ws_pid=""
+          listener_attempt=$((listener_attempt + 1))
 
-  events.push(JSON.stringify(value));
-}
+          if ((listener_attempt <= ws_ready_attempts)); then
+            sleep "${ws_ready_retry_sleep_seconds}"
+            continue
+          fi
 
-const ws = new WebSocket(url);
+          break
+        fi
 
-ws.addEventListener("open", () => {
-  const joinPayload = JSON.stringify(["1", "1", topic, "phx_join", {}]);
-  ws.send(joinPayload);
-});
+        listener_ready="true"
+        break
+      fi
 
-ws.addEventListener("message", (event) => {
-  if (typeof event.data === "string") {
-    pushEvent(event.data);
-    return;
-  }
+      if [[ -n "${ws_pid}" ]]; then
+        kill "${ws_pid}" 2>/dev/null || true
+        wait "${ws_pid}" || true
+        ws_pid=""
+      fi
 
-  const text = Buffer.from(event.data).toString("utf8");
-  pushEvent(text);
-});
+      rm -f "${ws_ready_file}"
+      listener_attempt=$((listener_attempt + 1))
 
-ws.addEventListener("error", (event) => {
-  pushEvent({error: event.message || "ws_error"});
-});
+      if ((listener_attempt <= ws_ready_attempts)); then
+        sleep "${ws_ready_retry_sleep_seconds}"
+      fi
+    done
 
-setTimeout(() => {
-  try {
-    ws.close();
-  } catch (error) {
-    pushEvent({close_error: String(error)});
-  }
+    if [[ "${listener_ready}" != "true" ]]; then
+      local status="BLOCKED"
+      local severity="S2"
+      local notes="ws_listener_not_ready_after_${ws_ready_attempts}_attempts"
+      local ws_parity="blocked"
 
-  fs.writeFileSync(outputFile, events.join("\n"), "utf8");
-  process.exit(0);
-}, waitMs);
-NODE
-    ws_pid="$!"
+      jq -n \
+        --arg scenario_id "${scenario_id}" \
+        --arg status "${status}" \
+        --arg severity "${severity}" \
+        --arg actor "${actor_label}" \
+        --arg conversation_type "${conversation_type}" \
+        --arg conversation_id "${conversation_id}" \
+        --arg expected_statuses "${expected_status_csv}" \
+        --arg ws_parity "${ws_parity}" \
+        --arg guard_ws_parity "${guard_ws_parity}" \
+        --arg notes "${notes}" \
+        --argjson send_status "-1" \
+        --argjson before_count "${before_count}" \
+        --argjson after_count "${before_count}" \
+        '{
+          scenario_id: $scenario_id,
+          status: $status,
+          severity: $severity,
+          actor: $actor,
+          conversation_type: $conversation_type,
+          conversation_id: $conversation_id,
+          expected_statuses: ($expected_statuses | split(",")),
+          send_status: $send_status,
+          before_count: $before_count,
+          after_count: $after_count,
+          ws_parity: $ws_parity,
+          guard_ws_parity: $guard_ws_parity,
+          notes: $notes
+        }' > "${scenario_dir}/assert.json"
 
-    sleep 1
+      printf '%s,%s,%s,%s,%s,%s,%s,"%s"\n' \
+        "${scenario_id}" \
+        "${status}" \
+        "blocked" \
+        "${before_count}" \
+        "${before_count}" \
+        "${ws_parity}" \
+        "${severity}" \
+        "${notes}" \
+        >> "${matrix_csv}"
+
+      return
+    fi
+
+    sleep "${ws_post_ready_delay_seconds}"
+  fi
+
+  if [[ -n "${guard_ws_token}" && -n "${guard_ws_topic}" ]]; then
+    rm -f "${guard_ws_ready_file}"
+
+    while ((guard_listener_attempt <= ws_ready_attempts)); do
+      _qa_spawn_ws_listener \
+        "${ws_base_url}&token=${guard_ws_token}" \
+        "${guard_ws_topic}" \
+        "${guard_ws_log_file}" \
+        "${ws_wait_seconds}" \
+        "${guard_ws_ready_file}"
+      guard_ws_pid="${_qa_ws_listener_pid}"
+
+      if _qa_wait_for_files "${ws_ready_timeout_seconds}" "${guard_ws_ready_file}"; then
+        if [[ -n "${guard_ws_pid}" ]] && ! kill -0 "${guard_ws_pid}" 2>/dev/null; then
+          rm -f "${guard_ws_ready_file}"
+          guard_ws_pid=""
+          guard_listener_attempt=$((guard_listener_attempt + 1))
+
+          if ((guard_listener_attempt <= ws_ready_attempts)); then
+            sleep "${ws_ready_retry_sleep_seconds}"
+            continue
+          fi
+
+          break
+        fi
+
+        guard_listener_ready="true"
+        break
+      fi
+
+      if [[ -n "${guard_ws_pid}" ]]; then
+        kill "${guard_ws_pid}" 2>/dev/null || true
+        wait "${guard_ws_pid}" || true
+        guard_ws_pid=""
+      fi
+
+      rm -f "${guard_ws_ready_file}"
+      guard_listener_attempt=$((guard_listener_attempt + 1))
+
+      if ((guard_listener_attempt <= ws_ready_attempts)); then
+        sleep "${ws_ready_retry_sleep_seconds}"
+      fi
+    done
+
+    if [[ "${guard_listener_ready}" != "true" ]]; then
+      local status="BLOCKED"
+      local severity="S2"
+      local notes="ws_guard_listener_not_ready_after_${ws_ready_attempts}_attempts"
+      local ws_parity="blocked"
+      guard_ws_parity="blocked"
+
+      if [[ -n "${ws_pid}" ]]; then
+        kill "${ws_pid}" 2>/dev/null || true
+        wait "${ws_pid}" || true
+      fi
+      if [[ -n "${guard_ws_pid}" ]]; then
+        kill "${guard_ws_pid}" 2>/dev/null || true
+        wait "${guard_ws_pid}" || true
+      fi
+
+      jq -n \
+        --arg scenario_id "${scenario_id}" \
+        --arg status "${status}" \
+        --arg severity "${severity}" \
+        --arg actor "${actor_label}" \
+        --arg conversation_type "${conversation_type}" \
+        --arg conversation_id "${conversation_id}" \
+        --arg expected_statuses "${expected_status_csv}" \
+        --arg ws_parity "${ws_parity}" \
+        --arg guard_ws_parity "${guard_ws_parity}" \
+        --arg notes "${notes}" \
+        --argjson send_status "-1" \
+        --argjson before_count "${before_count}" \
+        --argjson after_count "${before_count}" \
+        '{
+          scenario_id: $scenario_id,
+          status: $status,
+          severity: $severity,
+          actor: $actor,
+          conversation_type: $conversation_type,
+          conversation_id: $conversation_id,
+          expected_statuses: ($expected_statuses | split(",")),
+          send_status: $send_status,
+          before_count: $before_count,
+          after_count: $after_count,
+          ws_parity: $ws_parity,
+          guard_ws_parity: $guard_ws_parity,
+          notes: $notes
+        }' > "${scenario_dir}/assert.json"
+
+      printf '%s,%s,%s,%s,%s,%s,%s,"%s"\n' \
+        "${scenario_id}" \
+        "${status}" \
+        "blocked" \
+        "${before_count}" \
+        "${before_count}" \
+        "${ws_parity}" \
+        "${severity}" \
+        "${notes}" \
+        >> "${matrix_csv}"
+
+      return
+    fi
+
+    sleep "${ws_post_ready_delay_seconds}"
   fi
 
   local http_status
   http_status="$(
     curl -sS \
+      --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+      --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
       -o "${response_file}" \
       -w "%{http_code}" \
       -X POST \
       "${base_url}/api/test/broadcast" \
       -H "Authorization: Bearer ${actor_token}" \
       -H "Content-Type: application/json" \
-      --data-binary "@${request_file}"
+      --data-binary "@${request_file}" || true
   )"
+  if [[ -z "${http_status}" || "${http_status}" == "000" ]]; then
+    http_status="-1"
+  fi
 
   if [[ -n "${ws_pid}" ]]; then
     wait "${ws_pid}" || true
+  fi
+  if [[ -n "${guard_ws_pid}" ]]; then
+    wait "${guard_ws_pid}" || true
   fi
 
   local after_count
@@ -470,20 +783,52 @@ NODE
       notes="${notes};history_count_unavailable"
     fi
   else
+    local message_in_after="false"
+    if jq -e --arg body "${message_body}" \
+      '.data | type == "array" and any(.[]; .content == $body)' \
+      "${after_history_file}" >/dev/null 2>&1; then
+      message_in_after="true"
+    fi
+
     local delta
     delta=$((after_count - before_count))
-    if [[ "${delta}" -ne "${expected_delta}" ]]; then
+
+    if [[ "${expected_delta}" -eq 1 ]]; then
+      if [[ "${delta}" -lt 1 || "${message_in_after}" != "true" ]]; then
+        status="FAIL"
+        if [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+          severity="S1"
+        fi
+
+        if [[ "${notes}" == "ok" ]]; then
+          notes="persistence_message_missing"
+        else
+          notes="${notes};persistence_message_missing"
+        fi
+      elif [[ "${delta}" -gt 1 ]]; then
+        status="FAIL"
+        if [[ "${severity}" == "none" ]]; then
+          severity="S2"
+        fi
+
+        if [[ "${notes}" == "ok" ]]; then
+          notes="persistence_extra_traffic"
+        else
+          notes="${notes};persistence_extra_traffic"
+        fi
+      fi
+    elif [[ "${delta}" -ne 0 || "${message_in_after}" == "true" ]]; then
       status="FAIL"
-      if [[ "${expected_delta}" -eq 0 && "${delta}" -gt 0 ]]; then
+      if [[ "${delta}" -gt 0 || "${message_in_after}" == "true" ]]; then
         severity="S0"
       elif [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
         severity="S1"
       fi
 
       if [[ "${notes}" == "ok" ]]; then
-        notes="persistence_delta_mismatch"
+        notes="persistence_reject_side_effect"
       else
-        notes="${notes};persistence_delta_mismatch"
+        notes="${notes};persistence_reject_side_effect"
       fi
     fi
   fi
@@ -506,6 +851,31 @@ NODE
     fi
   fi
 
+  if [[ -n "${guard_ws_token}" && -n "${guard_ws_topic}" ]]; then
+    guard_ws_parity="pass"
+    if [[ ! -f "${guard_ws_log_file}" ]]; then
+      guard_ws_parity="fail"
+      status="FAIL"
+      if [[ "${severity}" == "none" ]]; then
+        severity="S2"
+      fi
+      if [[ "${notes}" == "ok" ]]; then
+        notes="guard_ws_log_missing"
+      else
+        notes="${notes};guard_ws_log_missing"
+      fi
+    elif grep -Fq '"new_msg"' "${guard_ws_log_file}" && grep -Fq "${message_body}" "${guard_ws_log_file}"; then
+      guard_ws_parity="fail"
+      status="FAIL"
+      severity="S0"
+      if [[ "${notes}" == "ok" ]]; then
+        notes="guard_ws_parity_violation"
+      else
+        notes="${notes};guard_ws_parity_violation"
+      fi
+    fi
+  fi
+
   if [[ "${status}" == "FAIL" && "${severity}" == "none" ]]; then
     severity="S1"
   fi
@@ -524,6 +894,7 @@ NODE
     --arg conversation_id "${conversation_id}" \
     --arg expected_statuses "${expected_status_csv}" \
     --arg ws_parity "${ws_parity}" \
+    --arg guard_ws_parity "${guard_ws_parity}" \
     --arg notes "${notes}" \
     --argjson send_status "${send_status_json}" \
     --argjson before_count "${before_count}" \
@@ -540,6 +911,7 @@ NODE
       before_count: $before_count,
       after_count: $after_count,
       ws_parity: $ws_parity,
+      guard_ws_parity: $guard_ws_parity,
       notes: $notes
     }' > "${scenario_dir}/assert.json"
 
@@ -555,6 +927,898 @@ NODE
     >> "${matrix_csv}"
 }
 
+function _qa_run_revoked_device_scenario {
+  local scenario_id="$1"
+  local owner_actor_label="$2"
+  local owner_actor_token="$3"
+  local revoked_actor_label="$4"
+  local revoked_actor_token="$5"
+  local revoked_device_id="$6"
+  local sender_actor_label="$7"
+  local sender_actor_token="$8"
+  local conversation_type="$9"
+  local conversation_id="${10}"
+  local ws_topic="${11}"
+  local message_body="${12}"
+  local history_token="${13}"
+  local history_conversation_id="${14}"
+  local base_url="${15}"
+  local ws_base_url="${16}"
+  local output_root="${17}"
+  local matrix_csv="${18}"
+
+  local scenario_dir="${output_root}/${scenario_id}"
+  local request_file="${scenario_dir}/request.json"
+  local response_file="${scenario_dir}/response.json"
+  local revoke_request_file="${scenario_dir}/revoke_request.json"
+  local revoke_response_file="${scenario_dir}/revoke_response.json"
+  local before_history_file="${scenario_dir}/history_before.json"
+  local after_history_file="${scenario_dir}/history_after.json"
+  local revoked_ws_log_file="${scenario_dir}/ws_revoked.log"
+  local revoked_ready_file="${scenario_dir}/ws_revoked.ready"
+  local healthy_ws_log_file="${scenario_dir}/ws_healthy.log"
+  local healthy_ready_file="${scenario_dir}/ws_healthy.ready"
+  local revoked_ws_pid=""
+  local healthy_ws_pid=""
+  local ws_wait_seconds="${QA_WS_WAIT_SECONDS_R1:-${QA_WS_WAIT_SECONDS:-12}}"
+  local ws_ready_timeout_seconds="${QA_WS_READY_TIMEOUT_SECONDS_R1:-${QA_WS_READY_TIMEOUT_SECONDS:-12}}"
+  local ws_ready_attempts="${QA_WS_READY_ATTEMPTS_R1:-${QA_WS_READY_ATTEMPTS:-5}}"
+  local ws_ready_retry_sleep_seconds="${QA_WS_READY_RETRY_SLEEP_SECONDS:-1}"
+  local ws_post_ready_delay_seconds="${QA_WS_POST_READY_DELAY_SECONDS_R1:-${QA_WS_POST_READY_DELAY_SECONDS:-1.5}}"
+  local listeners_ready="false"
+  local listener_attempt=1
+
+  mkdir -p "${scenario_dir}"
+
+  jq -n \
+    --arg conversation_type "${conversation_type}" \
+    --arg conversation_id "${conversation_id}" \
+    --arg body "${message_body}" \
+    --arg sender "${sender_actor_label}" \
+    '{
+      conversation_type: $conversation_type,
+      conversation_id: $conversation_id,
+      body: $body,
+      sender: $sender
+    }' > "${request_file}"
+
+  jq -n \
+    --arg actor "${owner_actor_label}" \
+    --arg revoked_actor "${revoked_actor_label}" \
+    --arg revoked_device_id "${revoked_device_id}" \
+    '{
+      actor: $actor,
+      revoked_actor: $revoked_actor,
+      revoked_device_id: $revoked_device_id
+    }' > "${revoke_request_file}"
+
+  local before_count
+  before_count="$(_qa_message_count \
+    "${base_url}" \
+    "${history_token}" \
+    "${history_conversation_id}" \
+    "${before_history_file}")"
+
+  rm -f "${revoked_ready_file}" "${healthy_ready_file}"
+
+  while ((listener_attempt <= ws_ready_attempts)); do
+    _qa_spawn_ws_listener \
+      "${ws_base_url}&token=${revoked_actor_token}" \
+      "${ws_topic}" \
+      "${revoked_ws_log_file}" \
+      "${ws_wait_seconds}" \
+      "${revoked_ready_file}"
+    revoked_ws_pid="${_qa_ws_listener_pid}"
+
+    _qa_spawn_ws_listener \
+      "${ws_base_url}&token=${sender_actor_token}" \
+      "${ws_topic}" \
+      "${healthy_ws_log_file}" \
+      "${ws_wait_seconds}" \
+      "${healthy_ready_file}"
+    healthy_ws_pid="${_qa_ws_listener_pid}"
+
+    if _qa_wait_for_files \
+      "${ws_ready_timeout_seconds}" \
+      "${revoked_ready_file}" \
+      "${healthy_ready_file}"; then
+      if [[ -n "${revoked_ws_pid}" ]] && ! kill -0 "${revoked_ws_pid}" 2>/dev/null; then
+        if [[ -n "${healthy_ws_pid}" ]]; then
+          kill "${healthy_ws_pid}" 2>/dev/null || true
+          wait "${healthy_ws_pid}" || true
+        fi
+
+        rm -f "${revoked_ready_file}" "${healthy_ready_file}"
+        revoked_ws_pid=""
+        healthy_ws_pid=""
+        listener_attempt=$((listener_attempt + 1))
+
+        if ((listener_attempt <= ws_ready_attempts)); then
+          sleep "${ws_ready_retry_sleep_seconds}"
+          continue
+        fi
+
+        break
+      fi
+
+      if [[ -n "${healthy_ws_pid}" ]] && ! kill -0 "${healthy_ws_pid}" 2>/dev/null; then
+        if [[ -n "${revoked_ws_pid}" ]]; then
+          kill "${revoked_ws_pid}" 2>/dev/null || true
+          wait "${revoked_ws_pid}" || true
+        fi
+
+        rm -f "${revoked_ready_file}" "${healthy_ready_file}"
+        revoked_ws_pid=""
+        healthy_ws_pid=""
+        listener_attempt=$((listener_attempt + 1))
+
+        if ((listener_attempt <= ws_ready_attempts)); then
+          sleep "${ws_ready_retry_sleep_seconds}"
+          continue
+        fi
+
+        break
+      fi
+
+      listeners_ready="true"
+      break
+    fi
+
+    if [[ -n "${revoked_ws_pid}" ]]; then
+      kill "${revoked_ws_pid}" 2>/dev/null || true
+      wait "${revoked_ws_pid}" || true
+      revoked_ws_pid=""
+    fi
+
+    if [[ -n "${healthy_ws_pid}" ]]; then
+      kill "${healthy_ws_pid}" 2>/dev/null || true
+      wait "${healthy_ws_pid}" || true
+      healthy_ws_pid=""
+    fi
+
+    rm -f "${revoked_ready_file}" "${healthy_ready_file}"
+    listener_attempt=$((listener_attempt + 1))
+
+    if ((listener_attempt <= ws_ready_attempts)); then
+      sleep "${ws_ready_retry_sleep_seconds}"
+    fi
+  done
+
+  if [[ "${listeners_ready}" != "true" ]]; then
+    local status="BLOCKED"
+    local severity="S2"
+    local notes="ws_listener_not_ready_after_${ws_ready_attempts}_attempts"
+    local ws_parity="blocked"
+
+    jq -n \
+      --arg scenario_id "${scenario_id}" \
+      --arg status "${status}" \
+      --arg severity "${severity}" \
+      --arg actor "${sender_actor_label}" \
+      --arg conversation_type "${conversation_type}" \
+      --arg conversation_id "${conversation_id}" \
+      --arg ws_parity "${ws_parity}" \
+      --arg notes "${notes}" \
+      --arg owner_actor "${owner_actor_label}" \
+      --arg revoked_actor "${revoked_actor_label}" \
+      --argjson send_status "-1" \
+      --argjson revoke_status "-1" \
+      --argjson before_count "${before_count}" \
+      --argjson after_count "${before_count}" \
+      --argjson healthy_has_new_msg "false" \
+      --argjson revoked_has_new_msg "false" \
+      --argjson revoked_has_security_state "false" \
+      '{
+        scenario_id: $scenario_id,
+        status: $status,
+        severity: $severity,
+        actor: $actor,
+        owner_actor: $owner_actor,
+        revoked_actor: $revoked_actor,
+        conversation_type: $conversation_type,
+        conversation_id: $conversation_id,
+        expected_statuses: ["revoke:204", "send:200"],
+        send_status: $send_status,
+        revoke_status: $revoke_status,
+        before_count: $before_count,
+        after_count: $after_count,
+        ws_parity: $ws_parity,
+        healthy_has_new_msg: $healthy_has_new_msg,
+        revoked_has_new_msg: $revoked_has_new_msg,
+        revoked_has_security_state: $revoked_has_security_state,
+        notes: $notes
+      }' > "${scenario_dir}/assert.json"
+
+    printf '%s,%s,%s,%s,%s,%s,%s,"%s"\n' \
+      "${scenario_id}" \
+      "${status}" \
+      "blocked" \
+      "${before_count}" \
+      "${before_count}" \
+      "${ws_parity}" \
+      "${severity}" \
+      "${notes}" \
+      >> "${matrix_csv}"
+
+    return
+  fi
+
+  sleep "${ws_post_ready_delay_seconds}"
+
+  local revoke_status
+  revoke_status="$(
+    curl -sS \
+      --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+      --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
+      -o "${revoke_response_file}" \
+      -w "%{http_code}" \
+      -X DELETE \
+      "${base_url}/api/v1/auth/devices/${revoked_device_id}" \
+      -H "Authorization: Bearer ${owner_actor_token}" \
+      -H "Content-Type: application/json" || true
+  )"
+  if [[ -z "${revoke_status}" || "${revoke_status}" == "000" ]]; then
+    revoke_status="-1"
+  fi
+
+  local send_status
+  send_status="$(
+    curl -sS \
+      --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+      --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
+      -o "${response_file}" \
+      -w "%{http_code}" \
+      -X POST \
+      "${base_url}/api/test/broadcast" \
+      -H "Authorization: Bearer ${sender_actor_token}" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${request_file}" || true
+  )"
+  if [[ -z "${send_status}" || "${send_status}" == "000" ]]; then
+    send_status="-1"
+  fi
+
+  if [[ -n "${revoked_ws_pid}" ]]; then
+    wait "${revoked_ws_pid}" || true
+  fi
+
+  if [[ -n "${healthy_ws_pid}" ]]; then
+    wait "${healthy_ws_pid}" || true
+  fi
+
+  local after_count
+  after_count="$(_qa_message_count \
+    "${base_url}" \
+    "${history_token}" \
+    "${history_conversation_id}" \
+    "${after_history_file}")"
+
+  local status="PASS"
+  local severity="none"
+  local notes="ok"
+  local ws_parity="pass"
+
+  if [[ "${revoke_status}" != "204" ]]; then
+    status="FAIL"
+    severity="S1"
+    notes="unexpected_revoke_status"
+  fi
+
+  if [[ "${send_status}" != "200" ]]; then
+    status="FAIL"
+    if [[ "${severity}" == "none" ]]; then
+      severity="S1"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="unexpected_send_status"
+    else
+      notes="${notes};unexpected_send_status"
+    fi
+  fi
+
+  if [[ "${before_count}" == "-1" || "${after_count}" == "-1" ]]; then
+    status="FAIL"
+    if [[ "${severity}" == "none" ]]; then
+      severity="S2"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="history_count_unavailable"
+    else
+      notes="${notes};history_count_unavailable"
+    fi
+  else
+    local delta
+    delta=$((after_count - before_count))
+    if [[ "${delta}" -ne 1 ]]; then
+      status="FAIL"
+      if [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+        severity="S1"
+      fi
+      if [[ "${notes}" == "ok" ]]; then
+        notes="persistence_delta_mismatch"
+      else
+        notes="${notes};persistence_delta_mismatch"
+      fi
+    fi
+  fi
+
+  local healthy_has_new_msg="false"
+  if grep -Fq '"new_msg"' "${healthy_ws_log_file}" &&
+    grep -Fq "${message_body}" "${healthy_ws_log_file}"; then
+    healthy_has_new_msg="true"
+  fi
+
+  local revoked_has_new_msg="false"
+  if grep -Fq '"new_msg"' "${revoked_ws_log_file}" &&
+    grep -Fq "${message_body}" "${revoked_ws_log_file}"; then
+    revoked_has_new_msg="true"
+  fi
+
+  local revoked_has_security_state="false"
+  if grep -Fq '"security_state"' "${revoked_ws_log_file}" &&
+    grep -Fq 'device_revoked' "${revoked_ws_log_file}"; then
+    revoked_has_security_state="true"
+  fi
+
+  if [[ "${healthy_has_new_msg}" != "true" ]]; then
+    status="FAIL"
+    ws_parity="fail"
+    if [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+      severity="S1"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="healthy_ws_missing_new_msg"
+    else
+      notes="${notes};healthy_ws_missing_new_msg"
+    fi
+  fi
+
+  if [[ "${revoked_has_new_msg}" == "true" ]]; then
+    status="FAIL"
+    ws_parity="fail"
+    severity="S0"
+    if [[ "${notes}" == "ok" ]]; then
+      notes="revoked_received_new_msg"
+    else
+      notes="${notes};revoked_received_new_msg"
+    fi
+  fi
+
+  if [[ "${revoked_has_security_state}" != "true" ]]; then
+    status="FAIL"
+    ws_parity="fail"
+    if [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+      severity="S1"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="revoked_missing_security_state"
+    else
+      notes="${notes};revoked_missing_security_state"
+    fi
+  fi
+
+  if [[ "${status}" == "FAIL" && "${severity}" == "none" ]]; then
+    severity="S1"
+  fi
+
+  local send_status_json=0
+  local revoke_status_json=0
+  if [[ "${send_status}" =~ ^[0-9]+$ ]]; then
+    send_status_json="${send_status}"
+  fi
+  if [[ "${revoke_status}" =~ ^[0-9]+$ ]]; then
+    revoke_status_json="${revoke_status}"
+  fi
+
+  jq -n \
+    --arg scenario_id "${scenario_id}" \
+    --arg status "${status}" \
+    --arg severity "${severity}" \
+    --arg actor "${sender_actor_label}" \
+    --arg conversation_type "${conversation_type}" \
+    --arg conversation_id "${conversation_id}" \
+    --arg ws_parity "${ws_parity}" \
+    --arg notes "${notes}" \
+    --arg owner_actor "${owner_actor_label}" \
+    --arg revoked_actor "${revoked_actor_label}" \
+    --argjson send_status "${send_status_json}" \
+    --argjson revoke_status "${revoke_status_json}" \
+    --argjson before_count "${before_count}" \
+    --argjson after_count "${after_count}" \
+    --argjson healthy_has_new_msg "$([[ "${healthy_has_new_msg}" == "true" ]] && echo "true" || echo "false")" \
+    --argjson revoked_has_new_msg "$([[ "${revoked_has_new_msg}" == "true" ]] && echo "true" || echo "false")" \
+    --argjson revoked_has_security_state "$([[ "${revoked_has_security_state}" == "true" ]] && echo "true" || echo "false")" \
+    '{
+      scenario_id: $scenario_id,
+      status: $status,
+      severity: $severity,
+      actor: $actor,
+      owner_actor: $owner_actor,
+      revoked_actor: $revoked_actor,
+      conversation_type: $conversation_type,
+      conversation_id: $conversation_id,
+      expected_statuses: ["revoke:204", "send:200"],
+      send_status: $send_status,
+      revoke_status: $revoke_status,
+      before_count: $before_count,
+      after_count: $after_count,
+      ws_parity: $ws_parity,
+      healthy_has_new_msg: $healthy_has_new_msg,
+      revoked_has_new_msg: $revoked_has_new_msg,
+      revoked_has_security_state: $revoked_has_security_state,
+      notes: $notes
+    }' > "${scenario_dir}/assert.json"
+
+  printf '%s,%s,%s,%s,%s,%s,%s,"%s"\n' \
+    "${scenario_id}" \
+    "${status}" \
+    "${send_status}" \
+    "${before_count}" \
+    "${after_count}" \
+    "${ws_parity}" \
+    "${severity}" \
+    "${notes};revoke_status=${revoke_status}" \
+    >> "${matrix_csv}"
+}
+
+function _qa_run_recovery_rejoin_scenario {
+  local scenario_id="$1"
+  local actor_label="$2"
+  local actor_token="$3"
+  local observer_label="$4"
+  local observer_token="$5"
+  local conversation_type="$6"
+  local conversation_id="$7"
+  local ws_topic="$8"
+  local message_body="$9"
+  local history_token="${10}"
+  local history_conversation_id="${11}"
+  local base_url="${12}"
+  local ws_base_url="${13}"
+  local output_root="${14}"
+  local matrix_csv="${15}"
+
+  local scenario_dir="${output_root}/${scenario_id}"
+  local reset_request_file="${scenario_dir}/reset_request.json"
+  local reset_response_file="${scenario_dir}/reset_response.json"
+  local recover_request_file="${scenario_dir}/recover_request.json"
+  local recover_response_file="${scenario_dir}/recover_response.json"
+  local recover_replay_response_file="${scenario_dir}/recover_replay_response.json"
+  local send_request_file="${scenario_dir}/request.json"
+  local send_response_file="${scenario_dir}/response.json"
+  local before_history_file="${scenario_dir}/history_before.json"
+  local after_history_file="${scenario_dir}/history_after.json"
+  local ws_log_file="${scenario_dir}/ws_${observer_label}.log"
+  local ws_ready_file="${scenario_dir}/ws_${observer_label}.ready"
+  local ws_pid=""
+
+  local ws_wait_seconds="${QA_WS_WAIT_SECONDS_R2:-${QA_WS_WAIT_SECONDS:-10}}"
+  local ws_ready_timeout_seconds="${QA_WS_READY_TIMEOUT_SECONDS_R2:-${QA_WS_READY_TIMEOUT_SECONDS:-12}}"
+  local ws_ready_attempts="${QA_WS_READY_ATTEMPTS_R2:-${QA_WS_READY_ATTEMPTS:-5}}"
+  local ws_ready_retry_sleep_seconds="${QA_WS_READY_RETRY_SLEEP_SECONDS:-1}"
+  local ws_post_ready_delay_seconds="${QA_WS_POST_READY_DELAY_SECONDS_R2:-${QA_WS_POST_READY_DELAY_SECONDS:-1}}"
+  local listener_attempt=1
+  local listener_ready="false"
+
+  mkdir -p "${scenario_dir}"
+
+  local recovery_ref="qa-${scenario_id}-$(date -u +%Y%m%dT%H%M%S)"
+  local rejoin_token="qa-${scenario_id}-rejoin"
+
+  jq -n \
+    --arg conversation_type "${conversation_type}" \
+    --arg conversation_id "${conversation_id}" \
+    '{
+      conversation_type: $conversation_type,
+      conversation_id: $conversation_id
+    }' > "${reset_request_file}"
+
+  jq -n \
+    --arg conversation_type "${conversation_type}" \
+    --arg conversation_id "${conversation_id}" \
+    --arg recovery_ref "${recovery_ref}" \
+    --arg rejoin_token "${rejoin_token}" \
+    --arg recovery_reason "qa_matrix_rejoin" \
+    '{
+      conversation_type: $conversation_type,
+      conversation_id: $conversation_id,
+      recovery_ref: $recovery_ref,
+      rejoin_token: $rejoin_token,
+      recovery_reason: $recovery_reason
+    }' > "${recover_request_file}"
+
+  jq -n \
+    --arg conversation_type "${conversation_type}" \
+    --arg conversation_id "${conversation_id}" \
+    --arg body "${message_body}" \
+    --arg sender "${actor_label}" \
+    '{
+      conversation_type: $conversation_type,
+      conversation_id: $conversation_id,
+      body: $body,
+      sender: $sender
+    }' > "${send_request_file}"
+
+  local before_count
+  before_count="$(_qa_message_count \
+    "${base_url}" \
+    "${history_token}" \
+    "${history_conversation_id}" \
+    "${before_history_file}")"
+
+  local reset_status
+  reset_status="$(
+    curl -sS \
+      --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+      --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
+      -o "${reset_response_file}" \
+      -w "%{http_code}" \
+      -X POST \
+      "${base_url}/api/test/conversation_security/reset_state" \
+      -H "Authorization: Bearer ${actor_token}" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${reset_request_file}" || true
+  )"
+  if [[ -z "${reset_status}" || "${reset_status}" == "000" ]]; then
+    reset_status="-1"
+  fi
+
+  local recover_status
+  recover_status="$(
+    curl -sS \
+      --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+      --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
+      -o "${recover_response_file}" \
+      -w "%{http_code}" \
+      -X POST \
+      "${base_url}/api/test/conversation_security/recover" \
+      -H "Authorization: Bearer ${actor_token}" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${recover_request_file}" || true
+  )"
+  if [[ -z "${recover_status}" || "${recover_status}" == "000" ]]; then
+    recover_status="-1"
+  fi
+
+  local recover_replay_status
+  recover_replay_status="$(
+    curl -sS \
+      --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+      --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
+      -o "${recover_replay_response_file}" \
+      -w "%{http_code}" \
+      -X POST \
+      "${base_url}/api/test/conversation_security/recover" \
+      -H "Authorization: Bearer ${actor_token}" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${recover_request_file}" || true
+  )"
+  if [[ -z "${recover_replay_status}" || "${recover_replay_status}" == "000" ]]; then
+    recover_replay_status="-1"
+  fi
+
+  rm -f "${ws_ready_file}"
+
+  while ((listener_attempt <= ws_ready_attempts)); do
+    _qa_spawn_ws_listener \
+      "${ws_base_url}&token=${observer_token}" \
+      "${ws_topic}" \
+      "${ws_log_file}" \
+      "${ws_wait_seconds}" \
+      "${ws_ready_file}"
+    ws_pid="${_qa_ws_listener_pid}"
+
+    if _qa_wait_for_files "${ws_ready_timeout_seconds}" "${ws_ready_file}"; then
+      if [[ -n "${ws_pid}" ]] && ! kill -0 "${ws_pid}" 2>/dev/null; then
+        rm -f "${ws_ready_file}"
+        ws_pid=""
+        listener_attempt=$((listener_attempt + 1))
+
+        if ((listener_attempt <= ws_ready_attempts)); then
+          sleep "${ws_ready_retry_sleep_seconds}"
+          continue
+        fi
+
+        break
+      fi
+
+      listener_ready="true"
+      break
+    fi
+
+    if [[ -n "${ws_pid}" ]]; then
+      kill "${ws_pid}" 2>/dev/null || true
+      wait "${ws_pid}" || true
+      ws_pid=""
+    fi
+
+    rm -f "${ws_ready_file}"
+    listener_attempt=$((listener_attempt + 1))
+
+    if ((listener_attempt <= ws_ready_attempts)); then
+      sleep "${ws_ready_retry_sleep_seconds}"
+    fi
+  done
+
+  if [[ "${listener_ready}" != "true" ]]; then
+    local status="BLOCKED"
+    local severity="S2"
+    local notes="ws_listener_not_ready_after_${ws_ready_attempts}_attempts"
+    local ws_parity="blocked"
+    local reset_status_json=0
+    local recover_status_json=0
+    local recover_replay_status_json=0
+
+    if [[ "${reset_status}" =~ ^[0-9]+$ ]]; then
+      reset_status_json="${reset_status}"
+    fi
+    if [[ "${recover_status}" =~ ^[0-9]+$ ]]; then
+      recover_status_json="${recover_status}"
+    fi
+    if [[ "${recover_replay_status}" =~ ^[0-9]+$ ]]; then
+      recover_replay_status_json="${recover_replay_status}"
+    fi
+
+    jq -n \
+      --arg scenario_id "${scenario_id}" \
+      --arg status "${status}" \
+      --arg severity "${severity}" \
+      --arg actor "${actor_label}" \
+      --arg observer_actor "${observer_label}" \
+      --arg conversation_type "${conversation_type}" \
+      --arg conversation_id "${conversation_id}" \
+      --arg ws_parity "${ws_parity}" \
+      --arg notes "${notes}" \
+      --argjson reset_status "${reset_status_json}" \
+      --argjson recover_status "${recover_status_json}" \
+      --argjson recover_replay_status "${recover_replay_status_json}" \
+      --argjson send_status "-1" \
+      --argjson before_count "${before_count}" \
+      --argjson after_count "${before_count}" \
+      --argjson replay_idempotent "false" \
+      --argjson observer_has_new_msg "false" \
+      '{
+        scenario_id: $scenario_id,
+        status: $status,
+        severity: $severity,
+        actor: $actor,
+        observer_actor: $observer_actor,
+        conversation_type: $conversation_type,
+        conversation_id: $conversation_id,
+        expected_statuses: ["reset:200", "recover:200", "recover_replay:200", "send_after_recover:200"],
+        reset_status: $reset_status,
+        recover_status: $recover_status,
+        recover_replay_status: $recover_replay_status,
+        send_status: $send_status,
+        before_count: $before_count,
+        after_count: $after_count,
+        ws_parity: $ws_parity,
+        replay_idempotent: $replay_idempotent,
+        observer_has_new_msg: $observer_has_new_msg,
+        notes: $notes
+      }' > "${scenario_dir}/assert.json"
+
+    printf '%s,%s,%s,%s,%s,%s,%s,"%s"\n' \
+      "${scenario_id}" \
+      "${status}" \
+      "blocked" \
+      "${before_count}" \
+      "${before_count}" \
+      "${ws_parity}" \
+      "${severity}" \
+      "${notes};reset_status=${reset_status};recover_status=${recover_status};replay_status=${recover_replay_status}" \
+      >> "${matrix_csv}"
+
+    return
+  fi
+
+  sleep "${ws_post_ready_delay_seconds}"
+
+  local send_status
+  send_status="$(
+    curl -sS \
+      --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+      --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
+      -o "${send_response_file}" \
+      -w "%{http_code}" \
+      -X POST \
+      "${base_url}/api/test/broadcast" \
+      -H "Authorization: Bearer ${actor_token}" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${send_request_file}" || true
+  )"
+  if [[ -z "${send_status}" || "${send_status}" == "000" ]]; then
+    send_status="-1"
+  fi
+
+  if [[ -n "${ws_pid}" ]]; then
+    wait "${ws_pid}" || true
+  fi
+
+  local after_count
+  after_count="$(_qa_message_count \
+    "${base_url}" \
+    "${history_token}" \
+    "${history_conversation_id}" \
+    "${after_history_file}")"
+
+  local replay_idempotent="false"
+  if jq -e '.idempotent == true' "${recover_replay_response_file}" >/dev/null 2>&1; then
+    replay_idempotent="true"
+  fi
+
+  local observer_has_new_msg="false"
+  if grep -Fq '"new_msg"' "${ws_log_file}" &&
+    grep -Fq "${message_body}" "${ws_log_file}"; then
+    observer_has_new_msg="true"
+  fi
+
+  local status="PASS"
+  local severity="none"
+  local notes="ok"
+  local ws_parity="pass"
+
+  if [[ "${reset_status}" != "200" ]]; then
+    status="FAIL"
+    severity="S1"
+    notes="unexpected_reset_status"
+  fi
+
+  if [[ "${recover_status}" != "200" ]]; then
+    status="FAIL"
+    if [[ "${severity}" == "none" ]]; then
+      severity="S1"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="unexpected_recover_status"
+    else
+      notes="${notes};unexpected_recover_status"
+    fi
+  fi
+
+  if [[ "${recover_replay_status}" != "200" ]]; then
+    status="FAIL"
+    if [[ "${severity}" == "none" ]]; then
+      severity="S1"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="unexpected_recover_replay_status"
+    else
+      notes="${notes};unexpected_recover_replay_status"
+    fi
+  fi
+
+  if [[ "${replay_idempotent}" != "true" ]]; then
+    status="FAIL"
+    if [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+      severity="S1"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="recover_replay_not_idempotent"
+    else
+      notes="${notes};recover_replay_not_idempotent"
+    fi
+  fi
+
+  if [[ "${send_status}" != "200" ]]; then
+    status="FAIL"
+    if [[ "${severity}" == "none" ]]; then
+      severity="S1"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="unexpected_send_status"
+    else
+      notes="${notes};unexpected_send_status"
+    fi
+  fi
+
+  if [[ "${before_count}" == "-1" || "${after_count}" == "-1" ]]; then
+    status="FAIL"
+    if [[ "${severity}" == "none" ]]; then
+      severity="S2"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="history_count_unavailable"
+    else
+      notes="${notes};history_count_unavailable"
+    fi
+  else
+    local delta
+    delta=$((after_count - before_count))
+    if [[ "${delta}" -ne 1 ]]; then
+      status="FAIL"
+      if [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+        severity="S1"
+      fi
+      if [[ "${notes}" == "ok" ]]; then
+        notes="persistence_delta_mismatch"
+      else
+        notes="${notes};persistence_delta_mismatch"
+      fi
+    fi
+  fi
+
+  if [[ "${observer_has_new_msg}" != "true" ]]; then
+    status="FAIL"
+    ws_parity="fail"
+    if [[ "${severity}" == "none" || "${severity}" == "S2" ]]; then
+      severity="S1"
+    fi
+    if [[ "${notes}" == "ok" ]]; then
+      notes="observer_ws_missing_new_msg"
+    else
+      notes="${notes};observer_ws_missing_new_msg"
+    fi
+  fi
+
+  local reset_status_json=0
+  local recover_status_json=0
+  local recover_replay_status_json=0
+  local send_status_json=0
+  if [[ "${reset_status}" =~ ^[0-9]+$ ]]; then
+    reset_status_json="${reset_status}"
+  fi
+  if [[ "${recover_status}" =~ ^[0-9]+$ ]]; then
+    recover_status_json="${recover_status}"
+  fi
+  if [[ "${recover_replay_status}" =~ ^[0-9]+$ ]]; then
+    recover_replay_status_json="${recover_replay_status}"
+  fi
+  if [[ "${send_status}" =~ ^[0-9]+$ ]]; then
+    send_status_json="${send_status}"
+  fi
+
+  jq -n \
+    --arg scenario_id "${scenario_id}" \
+    --arg status "${status}" \
+    --arg severity "${severity}" \
+    --arg actor "${actor_label}" \
+    --arg observer_actor "${observer_label}" \
+    --arg conversation_type "${conversation_type}" \
+    --arg conversation_id "${conversation_id}" \
+    --arg ws_parity "${ws_parity}" \
+    --arg notes "${notes}" \
+    --argjson reset_status "${reset_status_json}" \
+    --argjson recover_status "${recover_status_json}" \
+    --argjson recover_replay_status "${recover_replay_status_json}" \
+    --argjson send_status "${send_status_json}" \
+    --argjson before_count "${before_count}" \
+    --argjson after_count "${after_count}" \
+    --argjson replay_idempotent "$([[ "${replay_idempotent}" == "true" ]] && echo "true" || echo "false")" \
+    --argjson observer_has_new_msg "$([[ "${observer_has_new_msg}" == "true" ]] && echo "true" || echo "false")" \
+    '{
+      scenario_id: $scenario_id,
+      status: $status,
+      severity: $severity,
+      actor: $actor,
+      observer_actor: $observer_actor,
+      conversation_type: $conversation_type,
+      conversation_id: $conversation_id,
+      expected_statuses: ["reset:200", "recover:200", "recover_replay:200", "send_after_recover:200"],
+      reset_status: $reset_status,
+      recover_status: $recover_status,
+      recover_replay_status: $recover_replay_status,
+      send_status: $send_status,
+      before_count: $before_count,
+      after_count: $after_count,
+      ws_parity: $ws_parity,
+      replay_idempotent: $replay_idempotent,
+      observer_has_new_msg: $observer_has_new_msg,
+      notes: $notes
+    }' > "${scenario_dir}/assert.json"
+
+  printf '%s,%s,%s,%s,%s,%s,%s,"%s"\n' \
+    "${scenario_id}" \
+    "${status}" \
+    "${send_status}" \
+    "${before_count}" \
+    "${after_count}" \
+    "${ws_parity}" \
+    "${severity}" \
+    "${notes};reset_status=${reset_status};recover_status=${recover_status};replay_status=${recover_replay_status}" \
+    >> "${matrix_csv}"
+}
+
 function _qa_array_to_json {
   if [[ "$#" -eq 0 ]]; then
     echo "[]"
@@ -562,6 +1826,66 @@ function _qa_array_to_json {
   fi
 
   printf '%s\n' "$@" | jq -R . | jq -s .
+}
+
+function _qa_compose_ps_safe {
+  if timeout 15 docker compose ps; then
+    return 0
+  fi
+
+  echo "Warning: docker compose ps timed out; falling back to docker ps." >&2
+  docker ps \
+    --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+}
+
+function _qa_acquire_run_lock {
+  local lock_dir="$1"
+  local stale_seconds="${QA_RUN_LOCK_STALE_SECONDS:-120}"
+  mkdir -p "$(dirname "${lock_dir}")"
+
+  if mkdir "${lock_dir}" 2>/dev/null; then
+    printf '%s\n' "$$" > "${lock_dir}/pid"
+    _qa_active_run_lock_dir="${lock_dir}"
+    return 0
+  fi
+
+  local existing_pid
+  existing_pid="$(cat "${lock_dir}/pid" 2>/dev/null || true)"
+
+  if [[ -z "${existing_pid}" ]]; then
+    local now_epoch
+    now_epoch="$(date +%s)"
+    local lock_epoch
+    lock_epoch="$(stat -c %Y "${lock_dir}" 2>/dev/null || echo "${now_epoch}")"
+    local lock_age=$((now_epoch - lock_epoch))
+
+    # A lock without pid is likely in-flight acquisition. Treat as active unless stale.
+    if ((lock_age < stale_seconds)); then
+      return 1
+    fi
+  fi
+
+  if [[ -n "${existing_pid}" && "${existing_pid}" =~ ^[0-9]+$ ]] &&
+    kill -0 "${existing_pid}" 2>/dev/null; then
+    return 1
+  fi
+
+  rm -rf "${lock_dir}" 2>/dev/null || true
+
+  if mkdir "${lock_dir}" 2>/dev/null; then
+    printf '%s\n' "$$" > "${lock_dir}/pid"
+    _qa_active_run_lock_dir="${lock_dir}"
+    return 0
+  fi
+
+  return 1
+}
+
+function _qa_release_run_lock {
+  if [[ -n "${_qa_active_run_lock_dir:-}" ]]; then
+    rm -rf "${_qa_active_run_lock_dir}" 2>/dev/null || true
+    unset _qa_active_run_lock_dir
+  fi
 }
 
 function qa:messaging:preflight {
@@ -583,13 +1907,13 @@ function qa:messaging:preflight {
       echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       echo "cwd=$(pwd)"
       echo "docker_compose_ps_start"
-      docker compose ps
+      _qa_compose_ps_safe
       echo "docker_compose_ps_end"
     } | tee "${log_file}"
   else
     echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "cwd=$(pwd)"
-    docker compose ps
+    _qa_compose_ps_safe
   fi
 
   if [[ -n "${log_file}" ]]; then
@@ -623,8 +1947,25 @@ function _qa_messaging_run {
   local project_root
   project_root="$(_qa_project_root)"
 
-  local run_id="${QA_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
-  local output_root="${project_root}/.tmp/_qa_messaging/${run_id}"
+  local run_id_base="${QA_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
+  local run_id="${run_id_base}"
+  local output_root=""
+
+  if [[ -z "${QA_RUN_ID:-}" ]]; then
+    run_id="${run_id_base}_${mode}"
+  fi
+
+  output_root="${project_root}/.tmp/_qa_messaging/${run_id}"
+
+  if [[ -z "${QA_RUN_ID:-}" ]]; then
+    local attempt=1
+    while [[ -e "${output_root}" ]]; do
+      run_id="${run_id_base}_${mode}_${attempt}"
+      output_root="${project_root}/.tmp/_qa_messaging/${run_id}"
+      attempt=$((attempt + 1))
+    done
+  fi
+
   local base_url
   base_url="$(_qa_base_url)"
   local ws_base_url
@@ -633,7 +1974,34 @@ function _qa_messaging_run {
   local matrix_csv="${output_root}/matrix_results.csv"
   local summary_file="${output_root}/summary.md"
   local gate_report="${output_root}/gate_report.json"
+  local run_lock_dir="${project_root}/.tmp/_qa_messaging/.active_run_lock"
 
+  if ! _qa_acquire_run_lock "${run_lock_dir}"; then
+    local blocked_output_root="${project_root}/.tmp/_qa_messaging/${run_id}_blocked_$$"
+    local blocked_attempt=1
+    while [[ -e "${blocked_output_root}" ]]; do
+      blocked_output_root="${project_root}/.tmp/_qa_messaging/${run_id}_blocked_${$}_${blocked_attempt}"
+      blocked_attempt=$((blocked_attempt + 1))
+    done
+    local blocked_gate_report="${blocked_output_root}/gate_report.json"
+    mkdir -p "${blocked_output_root}"
+    jq -n \
+      --arg run_id "${run_id}" \
+      --arg mode "${mode}" \
+      --arg started_at "${started_at:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
+      --arg ended_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg outcome "BLOCKED" \
+      --arg reason "qa_run_already_active" \
+      '{
+        run_id: $run_id,
+        mode: $mode,
+        started_at: $started_at,
+        ended_at: $ended_at,
+        outcome: $outcome,
+        reason: $reason
+      }' > "${blocked_gate_report}"
+    return 2
+  fi
   mkdir -p "${output_root}"
   printf 'scenario_id,status,http_status,before_count,after_count,ws_parity,severity,notes\n' > "${matrix_csv}"
 
@@ -656,6 +2024,7 @@ function _qa_messaging_run {
         outcome: $outcome,
         reason: $reason
       }' > "${gate_report}"
+    _qa_release_run_lock
     return 2
   fi
 
@@ -675,15 +2044,16 @@ function _qa_messaging_run {
         outcome: $outcome,
         reason: $reason
       }' > "${gate_report}"
+    _qa_release_run_lock
     return 2
   fi
 
   local seed_file="${output_root}/seed_matrix.json"
 
-  local a_user_id
   local a_tab1_token
   local a_tab2_token
   local a_dev2_token
+  local a_dev2_device_id
   local b_token
   local c_token
   local outsider_token
@@ -696,11 +2066,12 @@ function _qa_messaging_run {
   local group_topic
   local family_topic
   local self_sender_topic
+  local self_receiver_topic
 
-  a_user_id="$(jq -r '.actors.a_tab1.id' "${seed_file}")"
   a_tab1_token="$(jq -r '.actors.a_tab1.access_token' "${seed_file}")"
   a_tab2_token="$(jq -r '.actors.a_tab2.access_token' "${seed_file}")"
   a_dev2_token="$(jq -r '.actors.a_dev2.access_token' "${seed_file}")"
+  a_dev2_device_id="$(jq -r '.actors.a_dev2.device_id' "${seed_file}")"
   b_token="$(jq -r '.actors.b.access_token' "${seed_file}")"
   c_token="$(jq -r '.actors.c.access_token' "${seed_file}")"
   outsider_token="$(jq -r '.actors.outsider.access_token' "${seed_file}")"
@@ -712,12 +2083,14 @@ function _qa_messaging_run {
   direct_topic="$(jq -r '.conversations.direct.topic' "${seed_file}")"
   group_topic="$(jq -r '.conversations.group.topic' "${seed_file}")"
   family_topic="$(jq -r '.conversations.family.topic' "${seed_file}")"
-  self_sender_topic="message:self:${a_user_id}"
+  self_sender_topic="$(jq -r '.conversations.self_sender.topic' "${seed_file}")"
+  self_receiver_topic="$(jq -r '.conversations.self_receiver.topic' "${seed_file}")"
 
   local -a required_fields=(
     "${a_tab1_token}"
     "${a_tab2_token}"
     "${a_dev2_token}"
+    "${a_dev2_device_id}"
     "${b_token}"
     "${c_token}"
     "${outsider_token}"
@@ -726,6 +2099,11 @@ function _qa_messaging_run {
     "${direct_id}"
     "${group_id}"
     "${family_id}"
+    "${self_sender_topic}"
+    "${self_receiver_topic}"
+    "${direct_topic}"
+    "${group_topic}"
+    "${family_topic}"
   )
 
   local field
@@ -746,6 +2124,7 @@ function _qa_messaging_run {
           outcome: $outcome,
           reason: $reason
         }' > "${gate_report}"
+      _qa_release_run_lock
       return 2
     fi
   done
@@ -761,11 +2140,18 @@ function _qa_messaging_run {
   printf 'elapsed_seconds=%s\n' "${canonical_elapsed}" > "${output_root}/canonical_flow_timing.txt"
 
   local coverage_status="SKIP"
+  local recovery_contract_status="SKIP"
   if [[ "${mode}" == "deep" ]]; then
     coverage_status="PASS"
     if ! elixir:test:coverage test/famichat_web/integration/canonical_messaging_flow_test.exs \
       > "${output_root}/canonical_flow_coverage.txt" 2>&1; then
       coverage_status="FAIL"
+    fi
+
+    recovery_contract_status="PASS"
+    if ! elixir:test test/famichat_web/integration/recovery_rejoin_security_flow_test.exs \
+      > "${output_root}/recovery_rejoin_contract.txt" 2>&1; then
+      recovery_contract_status="FAIL"
     fi
   fi
 
@@ -803,7 +2189,9 @@ function _qa_messaging_run {
     "${base_url}" \
     "${ws_base_url}" \
     "${output_root}" \
-    "${matrix_csv}"
+    "${matrix_csv}" \
+    "${b_token}" \
+    "${self_receiver_topic}"
 
   _qa_run_http_matrix_scenario \
     "D1" \
@@ -837,7 +2225,9 @@ function _qa_messaging_run {
     "${base_url}" \
     "${ws_base_url}" \
     "${output_root}" \
-    "${matrix_csv}"
+    "${matrix_csv}" \
+    "${b_token}" \
+    "${direct_topic}"
 
   _qa_run_http_matrix_scenario \
     "G1" \
@@ -871,7 +2261,9 @@ function _qa_messaging_run {
     "${base_url}" \
     "${ws_base_url}" \
     "${output_root}" \
-    "${matrix_csv}"
+    "${matrix_csv}" \
+    "${c_token}" \
+    "${group_topic}"
 
   _qa_run_http_matrix_scenario \
     "F1" \
@@ -905,6 +2297,45 @@ function _qa_messaging_run {
     "${base_url}" \
     "${ws_base_url}" \
     "${output_root}" \
+    "${matrix_csv}" \
+    "${b_token}" \
+    "${family_topic}"
+
+  _qa_run_revoked_device_scenario \
+    "R1" \
+    "A-tab1" \
+    "${a_tab1_token}" \
+    "A-dev2" \
+    "${a_dev2_token}" \
+    "${a_dev2_device_id}" \
+    "B" \
+    "${b_token}" \
+    "direct" \
+    "${direct_id}" \
+    "${direct_topic}" \
+    "${body_prefix}-r1-revoked" \
+    "${a_tab1_token}" \
+    "${direct_id}" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
+    "${matrix_csv}"
+
+  _qa_run_recovery_rejoin_scenario \
+    "R2" \
+    "A-tab1" \
+    "${a_tab1_token}" \
+    "B" \
+    "${b_token}" \
+    "direct" \
+    "${direct_id}" \
+    "${direct_topic}" \
+    "${body_prefix}-r2-recovery" \
+    "${a_tab1_token}" \
+    "${direct_id}" \
+    "${base_url}" \
+    "${ws_base_url}" \
+    "${output_root}" \
     "${matrix_csv}"
 
   local -a scenario_files=(
@@ -916,6 +2347,8 @@ function _qa_messaging_run {
     "${output_root}/G2/assert.json"
     "${output_root}/F1/assert.json"
     "${output_root}/F2/assert.json"
+    "${output_root}/R1/assert.json"
+    "${output_root}/R2/assert.json"
   )
 
   local scenario_results
@@ -923,6 +2356,7 @@ function _qa_messaging_run {
 
   local -a critical_failures=()
   local -a warning_failures=()
+  local -a blocked_failures=()
   local scenario_file
   for scenario_file in "${scenario_files[@]}"; do
     local scenario_status
@@ -930,7 +2364,9 @@ function _qa_messaging_run {
     scenario_status="$(jq -r '.status' "${scenario_file}")"
     scenario_severity="$(jq -r '.severity' "${scenario_file}")"
 
-    if [[ "${scenario_status}" == "FAIL" ]]; then
+    if [[ "${scenario_status}" == "BLOCKED" ]]; then
+      blocked_failures+=("$(jq -r '.scenario_id' "${scenario_file}")")
+    elif [[ "${scenario_status}" == "FAIL" ]]; then
       if [[ "${scenario_severity}" == "S0" || "${scenario_severity}" == "S1" ]]; then
         critical_failures+=("$(jq -r '.scenario_id' "${scenario_file}")")
       else
@@ -950,8 +2386,14 @@ function _qa_messaging_run {
     global_warnings+=("canonical_flow_coverage")
   fi
 
+  if [[ "${recovery_contract_status}" == "FAIL" ]]; then
+    global_failures+=("recovery_rejoin_contract")
+  fi
+
   local outcome="PASS"
-  if [[ "${#critical_failures[@]}" -gt 0 || "${#global_failures[@]}" -gt 0 ]]; then
+  if [[ "${#blocked_failures[@]}" -gt 0 ]]; then
+    outcome="BLOCKED"
+  elif [[ "${#critical_failures[@]}" -gt 0 || "${#global_failures[@]}" -gt 0 ]]; then
     outcome="FAIL"
   elif [[ "${#warning_failures[@]}" -gt 0 || "${#global_warnings[@]}" -gt 0 ]]; then
     outcome="WARN"
@@ -959,11 +2401,13 @@ function _qa_messaging_run {
 
   local critical_json
   local warning_json
+  local blocked_json
   local global_failures_json
   local global_warnings_json
 
   critical_json="$(_qa_array_to_json "${critical_failures[@]}")"
   warning_json="$(_qa_array_to_json "${warning_failures[@]}")"
+  blocked_json="$(_qa_array_to_json "${blocked_failures[@]}")"
   global_failures_json="$(_qa_array_to_json "${global_failures[@]}")"
   global_warnings_json="$(_qa_array_to_json "${global_warnings[@]}")"
 
@@ -977,10 +2421,12 @@ function _qa_messaging_run {
     --arg outcome "${outcome}" \
     --arg canonical_flow "${canonical_status}" \
     --arg coverage "${coverage_status}" \
+    --arg recovery_rejoin_contract "${recovery_contract_status}" \
     --argjson canonical_flow_elapsed_seconds "${canonical_elapsed}" \
     --argjson scenarios "${scenario_results}" \
     --argjson critical_failures "${critical_json}" \
     --argjson warning_failures "${warning_json}" \
+    --argjson blocked_failures "${blocked_json}" \
     --argjson global_failures "${global_failures_json}" \
     --argjson global_warnings "${global_warnings_json}" \
     '{
@@ -994,9 +2440,11 @@ function _qa_messaging_run {
       canonical_flow: $canonical_flow,
       canonical_flow_elapsed_seconds: $canonical_flow_elapsed_seconds,
       canonical_flow_coverage: $coverage,
+      recovery_rejoin_contract: $recovery_rejoin_contract,
       scenarios: $scenarios,
       critical_failures: $critical_failures,
       warning_failures: $warning_failures,
+      blocked_failures: $blocked_failures,
       global_failures: $global_failures,
       global_warnings: $global_warnings
     }' > "${gate_report}"
@@ -1009,6 +2457,7 @@ function _qa_messaging_run {
     echo "- canonical_flow: \`${canonical_status}\`"
     echo "- canonical_flow_elapsed_seconds: \`${canonical_elapsed}\`"
     echo "- canonical_flow_coverage: \`${coverage_status}\`"
+    echo "- recovery_rejoin_contract: \`${recovery_contract_status}\`"
     echo "- base_url: \`${base_url}\`"
     echo "- ws_base_url: \`${ws_base_url}\`"
     echo ""
@@ -1016,6 +2465,9 @@ function _qa_messaging_run {
     echo "- seed: \`seed_matrix.json\`"
     echo "- matrix: \`matrix_results.csv\`"
     echo "- gate report: \`gate_report.json\`"
+    if [[ "${mode}" == "deep" ]]; then
+      echo "- recovery contract: \`recovery_rejoin_contract.txt\`"
+    fi
   } > "${summary_file}"
 
   if [[ "${#critical_failures[@]}" -gt 0 ]]; then
@@ -1036,18 +2488,26 @@ function _qa_messaging_run {
   echo "Artifacts: ${output_root}"
   echo "Gate report: ${gate_report}"
 
+  if [[ "${outcome}" == "BLOCKED" ]]; then
+    _qa_release_run_lock
+    return 2
+  fi
+
   if [[ "${outcome}" == "FAIL" ]]; then
+    _qa_release_run_lock
     return 1
   fi
+
+  _qa_release_run_lock
 }
 
 function qa:messaging:fast {
-  # Live probe matrix for self/direct/group/family + isolation + WS/HTTP parity.
+  # Live probe matrix for S1..F2 + R1 + R2 (revocation + recovery/rejoin).
   _qa_messaging_run fast "${@}"
 }
 
 function qa:messaging:deep {
-  # Full live probe matrix plus canonical-flow coverage capture.
+  # Full live probe matrix plus canonical-flow and recovery-contract artifacts.
   _qa_messaging_run deep "${@}"
 }
 

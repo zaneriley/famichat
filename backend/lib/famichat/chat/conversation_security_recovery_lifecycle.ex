@@ -20,6 +20,7 @@ defmodule Famichat.Chat.ConversationSecurityRecoveryLifecycle do
 
   @snapshot_atom_keys Enum.map(@snapshot_keys, &String.to_atom/1)
   @max_recovery_ref_length 128
+  @max_recovery_stale_retries 3
   @state_protocol "mls"
 
   @spec recover_conversation_security_state(
@@ -65,26 +66,22 @@ defmodule Famichat.Chat.ConversationSecurityRecoveryLifecycle do
   end
 
   defp continue_recovery(recovery, attrs) do
-    with {:ok, state_lock_version} <-
-           load_state_lock_for_recovery(recovery.conversation_id),
-         request <- build_join_request(recovery.conversation_id, attrs),
-         {:ok, payload} <- MLS.join_from_welcome(request),
-         {:ok, snapshot} <- extract_snapshot(payload),
-         {:ok, recovered_epoch} <- extract_epoch(payload),
-         {:ok, _persisted} <-
-           persist_recovered_state(
+    with {:ok, payload, recovered_epoch} <-
+           recover_state_with_stale_retry(
              recovery.conversation_id,
-             snapshot,
-             recovered_epoch,
-             state_lock_version
+             attrs,
+             @max_recovery_stale_retries
            ),
          {:ok, completed} <-
-           ConversationSecurityRecoveryStore.mark_completed(recovery.id, %{
-             recovered_epoch: recovered_epoch,
-             audit_id: fetch(payload, "audit_id"),
-             group_state_ref: fetch(payload, "group_state_ref"),
-             recovery_reason: recovery_reason(attrs)
-           }) do
+           ConversationSecurityRecoveryStore.mark_completed(
+             recovery.id,
+             %{
+               recovered_epoch: recovered_epoch,
+               audit_id: fetch(payload, "audit_id"),
+               group_state_ref: fetch(payload, "group_state_ref"),
+               recovery_reason: recovery_reason(attrs)
+             }
+           ) do
       {:ok, to_result(completed, false)}
     else
       {:error, code, details} ->
@@ -98,6 +95,54 @@ defmodule Famichat.Chat.ConversationSecurityRecoveryLifecycle do
         {:error, code, details}
     end
   end
+
+  defp recover_state_with_stale_retry(
+         conversation_id,
+         attrs,
+         attempts_remaining
+       )
+       when attempts_remaining >= 1 do
+    case recover_state_once(conversation_id, attrs) do
+      {:ok, payload, recovered_epoch} ->
+        {:ok, payload, recovered_epoch}
+
+      {:error, code, details} = error ->
+        if stale_retryable?(code, details) and attempts_remaining > 1 do
+          recover_state_with_stale_retry(
+            conversation_id,
+            attrs,
+            attempts_remaining - 1
+          )
+        else
+          error
+        end
+    end
+  end
+
+  defp recover_state_once(conversation_id, attrs) do
+    with {:ok, state_lock_version} <-
+           load_state_lock_for_recovery(conversation_id),
+         request <- build_join_request(conversation_id, attrs),
+         {:ok, payload} <- MLS.join_from_welcome(request),
+         {:ok, snapshot} <- extract_snapshot(payload),
+         {:ok, recovered_epoch} <- extract_epoch(payload),
+         {:ok, _persisted} <-
+           persist_recovered_state(
+             conversation_id,
+             snapshot,
+             recovered_epoch,
+             state_lock_version
+           ) do
+      {:ok, payload, recovered_epoch}
+    end
+  end
+
+  defp stale_retryable?(:storage_inconsistent, details) when is_map(details) do
+    reason = Map.get(details, :reason) || Map.get(details, "reason")
+    reason in [:lock_version_mismatch, :concurrent_insert]
+  end
+
+  defp stale_retryable?(_code, _details), do: false
 
   defp handle_existing_recovery(recovery) do
     case recovery.status do

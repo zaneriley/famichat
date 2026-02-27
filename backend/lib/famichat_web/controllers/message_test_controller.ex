@@ -10,7 +10,9 @@ defmodule FamichatWeb.MessageTestController do
   """
   use FamichatWeb, :controller
 
+  alias Famichat.Chat
   alias Famichat.Chat.{Conversation, ConversationAccess, Message, Self}
+  alias Famichat.Chat.ConversationSecurityStateStore
   alias FamichatWeb.MessagingDispatch
   alias Famichat.Repo
 
@@ -30,6 +32,143 @@ defmodule FamichatWeb.MessageTestController do
   Canonical secure test broadcast endpoint.
   """
   def broadcast(conn, params), do: handle_broadcast(conn, params)
+
+  @doc """
+  Test-only recovery endpoint for live QA matrix scenarios.
+  """
+  def recover_conversation_security_state(
+        %{assigns: %{current_user_id: user_id}} = conn,
+        params
+      ) do
+    with {:ok, request} <- normalize_conversation_target(params),
+         {:ok, conversation} <- fetch_conversation(request, user_id),
+         {:ok, recovery_ref, recovery_attrs} <-
+           normalize_recovery_request(params),
+         {:ok, result} <-
+           Chat.recover_conversation_security_state(
+             conversation.id,
+             recovery_ref,
+             recovery_attrs
+           ) do
+      json(conn, %{
+        status: "success",
+        action: "recover_conversation_security_state",
+        conversation_id: conversation.id,
+        recovery_ref: result.recovery_ref,
+        recovery_id: result.recovery_id,
+        recovered_epoch: result.recovered_epoch,
+        idempotent: result.idempotent
+      })
+    else
+      {:error, :validation, details} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{
+          status: "error",
+          error: "invalid_request",
+          details: details
+        })
+
+      {:error, :forbidden} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{status: "error", error: "forbidden"})
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{status: "error", error: "not_found"})
+
+      {:error, :recovery_in_progress, details} ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{
+          status: "error",
+          error: "recovery_in_progress",
+          details: %{reason: mls_error_reason(details)}
+        })
+
+      {:error, :recovery_failed, details} ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{
+          status: "error",
+          error: "recovery_failed",
+          details: %{reason: mls_error_reason(details)}
+        })
+
+      {:error, code, details} when is_atom(code) and is_map(details) ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{
+          status: "error",
+          error: "recovery_failed",
+          code: Atom.to_string(code),
+          details: %{reason: mls_error_reason(details)}
+        })
+    end
+  end
+
+  def recover_conversation_security_state(conn, _params) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: "unauthorized"})
+  end
+
+  @doc """
+  Test-only endpoint to clear conversation security state for recovery drills.
+  """
+  def reset_conversation_security_state(
+        %{assigns: %{current_user_id: user_id}} = conn,
+        params
+      ) do
+    with {:ok, request} <- normalize_conversation_target(params),
+         {:ok, conversation} <- fetch_conversation(request, user_id),
+         :ok <- ConversationSecurityStateStore.delete(conversation.id) do
+      json(conn, %{
+        status: "success",
+        action: "reset_conversation_security_state",
+        conversation_id: conversation.id
+      })
+    else
+      {:error, :validation, details} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{
+          status: "error",
+          error: "invalid_request",
+          details: details
+        })
+
+      {:error, :forbidden} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{status: "error", error: "forbidden"})
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{status: "error", error: "not_found"})
+
+      {:error, code, details} when is_atom(code) and is_map(details) ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{
+          status: "error",
+          error: "invalid_request",
+          details: %{
+            reason: mls_error_reason(details),
+            code: Atom.to_string(code)
+          }
+        })
+    end
+  end
+
+  def reset_conversation_security_state(conn, _params) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: "unauthorized"})
+  end
 
   @doc """
   Temporary compatibility alias for one sprint.
@@ -94,6 +233,31 @@ defmodule FamichatWeb.MessageTestController do
           error: "not_found"
         })
 
+      {:error, :recovery_required, details} ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{
+          status: "error",
+          error: "recovery_required",
+          action: "recover_conversation_security_state",
+          details: %{
+            reason: mls_error_reason(details)
+          }
+        })
+
+      {:error, :conversation_security_blocked, code, details} ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{
+          status: "error",
+          error: "conversation_security_blocked",
+          code: to_string(code),
+          action: security_block_action(code),
+          details: %{
+            reason: mls_error_reason(details)
+          }
+        })
+
       {:error, :message_too_large} ->
         conn
         |> put_status(413)
@@ -125,6 +289,51 @@ defmodule FamichatWeb.MessageTestController do
     params
     |> canonicalize_params()
     |> validate_params()
+  end
+
+  defp normalize_conversation_target(params) do
+    canonical = canonicalize_params(params)
+
+    details =
+      %{}
+      |> validate_conversation_type(canonical)
+      |> validate_conversation_id(canonical)
+
+    if details == %{} do
+      {:ok,
+       %{
+         conversation_type:
+           Map.fetch!(@type_map, Map.get(canonical, "conversation_type")),
+         conversation_type_string: Map.get(canonical, "conversation_type"),
+         conversation_id: Map.get(canonical, "conversation_id")
+       }}
+    else
+      {:error, :validation, details}
+    end
+  end
+
+  defp normalize_recovery_request(params) when is_map(params) do
+    recovery_ref = non_empty_param(params, "recovery_ref")
+    rejoin_token = non_empty_param(params, "rejoin_token")
+    welcome = non_empty_param(params, "welcome")
+    recovery_reason = non_empty_param(params, "recovery_reason")
+
+    details =
+      %{}
+      |> maybe_put_missing("recovery_ref", recovery_ref)
+      |> maybe_put_missing_rejoin_material(rejoin_token, welcome)
+
+    if details == %{} do
+      attrs =
+        %{}
+        |> maybe_put_value("rejoin_token", rejoin_token)
+        |> maybe_put_value("welcome", welcome)
+        |> maybe_put_value("recovery_reason", recovery_reason)
+
+      {:ok, recovery_ref, attrs}
+    else
+      {:error, :validation, details}
+    end
   end
 
   defp canonicalize_params(params) do
@@ -430,6 +639,17 @@ defmodule FamichatWeb.MessageTestController do
   defp map_send_error({:error, :conversation_not_found}),
     do: {:error, :not_found}
 
+  defp map_send_error(
+         {:error, {:mls_encryption_failed, :recovery_required, details}}
+       ) do
+    {:error, :recovery_required, details}
+  end
+
+  defp map_send_error({:error, {:mls_encryption_failed, code, details}})
+       when is_atom(code) do
+    {:error, :conversation_security_blocked, code, details}
+  end
+
   defp map_send_error({:error, %Ecto.Changeset{} = changeset}) do
     if message_too_large_changeset?(changeset) do
       {:error, :message_too_large}
@@ -467,6 +687,37 @@ defmodule FamichatWeb.MessageTestController do
     default_if_nil(Map.get(params, "encryption_flag"), false)
   end
 
+  defp non_empty_param(params, key) do
+    value = Map.get(params, key) || Map.get(params, String.to_atom(key))
+
+    case value do
+      binary when is_binary(binary) ->
+        trimmed = String.trim(binary)
+        if trimmed == "", do: nil, else: trimmed
+
+      _ ->
+        nil
+    end
+  end
+
+  defp maybe_put_missing(details, _key, value) when is_binary(value),
+    do: details
+
+  defp maybe_put_missing(details, key, _value) do
+    Map.put(details, key, "must be a non-empty string")
+  end
+
+  defp maybe_put_missing_rejoin_material(details, rejoin_token, welcome)
+       when is_binary(rejoin_token) or is_binary(welcome),
+       do: details
+
+  defp maybe_put_missing_rejoin_material(details, _rejoin_token, _welcome) do
+    Map.put(details, "rejoin_token", "rejoin_token or welcome is required")
+  end
+
+  defp maybe_put_value(map, _key, nil), do: map
+  defp maybe_put_value(map, key, value), do: Map.put(map, key, value)
+
   defp has_key?(params, key) when is_map(params), do: Map.has_key?(params, key)
 
   defp first_non_nil(nil, second), do: second
@@ -485,4 +736,17 @@ defmodule FamichatWeb.MessageTestController do
         false
     end)
   end
+
+  defp mls_error_reason(details) when is_map(details) do
+    case Map.get(details, :reason) || Map.get(details, "reason") do
+      reason when is_atom(reason) -> Atom.to_string(reason)
+      reason when is_binary(reason) -> reason
+      _ -> "unspecified"
+    end
+  end
+
+  defp mls_error_reason(_details), do: "unspecified"
+
+  defp security_block_action(:pending_proposals), do: "wait_for_pending_commit"
+  defp security_block_action(_code), do: "retry_later"
 end

@@ -9,6 +9,7 @@ defmodule Famichat.Auth.Sessions do
     deps: [
       Famichat,
       Famichat.Accounts,
+      Famichat.Chat,
       Famichat.Auth.Households,
       Famichat.Auth.Identity,
       Famichat.Auth.RateLimit,
@@ -28,11 +29,14 @@ defmodule Famichat.Auth.Sessions do
   alias Famichat.Auth.Sessions.DeviceStore
   alias Famichat.Auth.Sessions.RefreshRotation
   alias Famichat.Auth.RateLimit
+  alias Famichat.Chat
   alias Famichat.Repo
 
   @access_kind :access
   @refresh_kind :session_refresh
   @refresh_ttl Policy.default_ttl(@refresh_kind)
+  @client_revocation_reason "auth_device_revoked"
+  @user_revocation_reason "auth_user_revoked"
 
   @spec start_session(User.t(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
@@ -149,6 +153,7 @@ defmodule Famichat.Auth.Sessions do
           |> UserDevice.changeset(%{revoked_at: DateTime.utc_now()})
           |> Repo.update()
 
+        stage_client_revocation(user_id, device_id)
         telemetry(:revoke, %{user_id: user_id, device_id: device_id})
         {:ok, :revoked}
 
@@ -171,16 +176,48 @@ defmodule Famichat.Auth.Sessions do
     end
   end
 
+  @spec device_access_state(Ecto.UUID.t(), String.t()) ::
+          :ok
+          | {:error,
+             :invalid
+             | :device_not_found
+             | :revoked
+             | :trust_required
+             | :trust_expired}
+  def device_access_state(user_id, device_id)
+      when is_binary(user_id) and is_binary(device_id) do
+    with {:ok, device} <- DeviceStore.fetch(device_id),
+         :ok <- ensure_device_owner(device, user_id),
+         :ok <- ensure_not_revoked(device),
+         :ok <- ensure_trust_active(device, allow_nil: true) do
+      :ok
+    else
+      {:error, :device_not_found} ->
+        {:error, :device_not_found}
+
+      {:error, :revoked} ->
+        {:error, :revoked}
+
+      {:error, :trust_required} ->
+        {:error, :trust_required}
+
+      {:error, :trust_expired} ->
+        {:error, :trust_expired}
+
+      {:error, _reason} ->
+        {:error, :invalid}
+
+      _ ->
+        {:error, :invalid}
+    end
+  end
+
+  def device_access_state(_user_id, _device_id), do: {:error, :invalid}
+
   @spec device_active?(Ecto.UUID.t(), String.t()) :: boolean()
   def device_active?(user_id, device_id)
       when is_binary(user_id) and is_binary(device_id) do
-    with {:ok, device} <- DeviceStore.fetch(device_id),
-         :ok <- ensure_device_matches(device, user_id),
-         :ok <- ensure_trust_active(device, allow_nil: true) do
-      true
-    else
-      _ -> false
-    end
+    device_access_state(user_id, device_id) == :ok
   end
 
   @spec require_reauth?(Ecto.UUID.t(), String.t(), atom()) :: boolean()
@@ -260,6 +297,9 @@ defmodule Famichat.Auth.Sessions do
 
   defp ensure_device_matches(_, _), do: {:error, :invalid}
 
+  defp ensure_device_owner(%UserDevice{user_id: user_id}, user_id), do: :ok
+  defp ensure_device_owner(_device, _user_id), do: {:error, :invalid}
+
   defp rate_limit_refresh(device_id) do
     case RateLimit.check(
            :"session.refresh",
@@ -288,6 +328,69 @@ defmodule Famichat.Auth.Sessions do
     )
   end
 
+  defp stage_client_revocation(user_id, device_id) do
+    revocation_ref = revocation_ref(:client, "#{user_id}:#{device_id}")
+
+    case Chat.stage_client_revocation(device_id, revocation_ref, %{
+           actor_id: user_id,
+           revocation_reason: @client_revocation_reason
+         }) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, code, details} ->
+        Logger.warning(
+          "[Sessions] Failed to stage client revocation",
+          user_id: user_id,
+          device_id: device_id,
+          code: code,
+          details: details
+        )
+
+        :ok
+    end
+  end
+
+  defp stage_user_revocation(user_id) do
+    revoked_device_fingerprint =
+      from(d in UserDevice,
+        where: d.user_id == ^user_id and not is_nil(d.revoked_at),
+        select: d.device_id
+      )
+      |> Repo.all()
+      |> Enum.sort()
+      |> Enum.join(",")
+
+    revocation_ref =
+      revocation_ref(:user, "#{user_id}:#{revoked_device_fingerprint}")
+
+    case Chat.stage_user_revocation(user_id, revocation_ref, %{
+           actor_id: user_id,
+           revocation_reason: @user_revocation_reason
+         }) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, code, details} ->
+        Logger.warning(
+          "[Sessions] Failed to stage user revocation",
+          user_id: user_id,
+          code: code,
+          details: details
+        )
+
+        :ok
+    end
+  end
+
+  defp revocation_ref(scope, subject_material) do
+    digest =
+      :crypto.hash(:sha256, subject_material)
+      |> Base.url_encode64(padding: false)
+
+    "auth:#{scope}:#{digest}"
+  end
+
   @spec revoke_all_for_user(Ecto.UUID.t()) :: :ok
   def revoke_all_for_user(user_id) do
     from(d in UserDevice,
@@ -304,6 +407,7 @@ defmodule Famichat.Auth.Sessions do
       end
     end)
 
+    stage_user_revocation(user_id)
     :ok
   end
 
