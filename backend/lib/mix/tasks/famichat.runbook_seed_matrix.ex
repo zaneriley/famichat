@@ -271,7 +271,7 @@ defmodule Mix.Tasks.Famichat.RunbookSeedMatrix do
             family: conversation_payload(:family, family_conversation.id)
           },
           endpoints: %{
-            broadcast: "/api/test/broadcast",
+            broadcast: "/api/v1/conversations/:id/messages",
             message_history: "/api/v1/conversations/:id/messages",
             websocket: "/socket/websocket?vsn=2.0.0"
           }

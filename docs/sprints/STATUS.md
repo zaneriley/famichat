@@ -4,6 +4,8 @@
 **Sprint**: 9 (MLS E2EE Implementation)
 **Overall Progress**: 40% to MVP
 
+> Reader note: this file contains historical sections from earlier sprints. For API contract decisions, treat `docs/API-DESIGN.md` as authoritative. For live QA gate behavior, treat `docs/runbooks/messaging-qa-runbook.md` + `backend/run` as authoritative.
+
 Terminology authority: [../ia-lexicon.md](../ia-lexicon.md)
 Boundary guardrails: [../ia-boundary-guardrails.md](../ia-boundary-guardrails.md)
 Sprint 9 P0 done-state checklist: [9.3-mls-definition-of-done.md](9.3-mls-definition-of-done.md)
@@ -253,7 +255,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ### Data Model (100% Schema, 90% Logic)
 
-**Database Migrations**: 11 applied
+**Database Migrations**: 23 applied (latest: `20260227010000_create_conversation_security_revocations.exs`)
 1. ✅ `20250125021514_create_users.exs` - Base user schema
 2. ✅ `20250125040001_create_families.exs` - Family grouping
 3. ✅ `20250125122459_create_conversations.exs` - Conversation schema with types
@@ -268,7 +270,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 **Schemas**:
 - ✅ **Accounts.User** ([accounts/user.ex](../../backend/lib/famichat/accounts/user.ex)) - Encrypted email, status enum, Cloak-backed email fingerprint
-- ✅ **Accounts.FamilyMembership** ([accounts/family_membership.ex](../../backend/lib/famichat/accounts/family_membership.ex)) - User ↔ family (role enum)
+- ✅ **Accounts.HouseholdMembership** ([accounts/household_membership.ex](../../backend/lib/famichat/accounts/household_membership.ex)) - User ↔ family (role enum; deprecated alias `FamilyMembership` remains in-module for compatibility)
 - ✅ **Accounts.UserToken** ([accounts/user_token.ex](../../backend/lib/famichat/accounts/user_token.ex)) - Single hashed-token table (invite/magic/pair/reset)
 - ✅ **Accounts.UserDevice** ([accounts/user_device.ex](../../backend/lib/famichat/accounts/user_device.ex)) - Refresh rotation, trust window, revocation
 - ✅ **Accounts.Passkey** ([accounts/passkey.ex](../../backend/lib/famichat/accounts/passkey.ex)) - WebAuthn credential storage, sign_count tracking, enable/disable
@@ -334,7 +336,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 ### Testing Infrastructure ✅ STRONG COVERAGE
 
-**Test Files**: 20 test files
+**Test Files**: 82 test files (`backend/test/**/*_test.exs`)
 - ✅ [conversation_service_test.exs](../../backend/test/famichat/chat/conversation_service_test.exs) - 18KB
 - ✅ [message_channel_test.exs](../../backend/test/famichat_web/channels/message_channel_test.exs) - 42KB (extensive!)
 - ✅ [conversation_visibility_service_test.exs](../../backend/test/famichat/chat/conversation_visibility_service_test.exs)
@@ -367,9 +369,9 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ✅ Environment variables via `.env` file
 
 **Code Quality Tools**:
-- ✅ **Credo** (linting) - Passing
-- ✅ **Dialyzer** (static analysis) - Passing
-- ✅ **Sobelow** (security) - Passing
+- ⚠️ **Credo** (linting) - repo-wide baseline debt remains (targeted story paths are green)
+- ⚠️ **Dialyzer** (static analysis) - repo-wide baseline debt remains (targeted story paths are green)
+- ✅ **Sobelow** (security) - targeted checks passing
 - ✅ **Formatter** with `.formatter.exs` - Configured
 - ✅ **Lefthook** git hooks:
   - Pre-commit: Starts Docker, waits for services, formats staged files
@@ -386,14 +388,16 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 
 **REST Endpoints**:
 - ✅ `GET /api/v1/hello` ([hello_controller.ex:4](../../backend/lib/famichat_web/controllers/hello_controller.ex#L4)) - Health check
-- ✅ `POST /api/test/broadcast` - Canonical secure CLI broadcast verification endpoint (auth required, membership enforced, canonical payload contract)
-- ✅ `POST /api/test/test_events` - Compatibility alias to canonical endpoint with deprecation/sunset headers
+- ✅ `POST /api/v1/conversations/:id/messages` - Canonical production message send endpoint (auth required, membership enforced, broadcasts `new_msg`)
+- ✅ `POST /api/v1/conversations/:id/security/recover` - Canonical production recovery endpoint (idempotent `recovery_ref` contract)
+- ✅ `POST /api/test/broadcast` - Legacy test-harness write endpoint (dev/test only; not product contract)
+- ✅ `POST /api/test/test_events` - Deprecated compatibility alias with deprecation/sunset headers
 - ✅ `GET /up` - Health check endpoint
 - ✅ `GET /up/databases` - Database health check
 
 **LiveView** (Dev/Test only):
+- ✅ `/admin/spike` ([spike_start_live.ex](../../backend/lib/famichat_web/live/spike_start_live.ex)) - throwaway actor-link launcher for manual multi-device messaging drills
 - ✅ `/admin/message` ([message_test_live.ex](../../backend/lib/famichat_web/live/message_test_live.ex)) - Canonical message testing UI (`/admin/message-test` kept as compatibility alias)
-- ✅ `/admin/tailwind-test` ([tailwind_test_live.ex](../../backend/lib/famichat_web/live/tailwind_test_live.ex)) - UI component testing
 - ✅ `/admin/dashboard` - Phoenix LiveDashboard
 
 **WebSocket**:
@@ -434,7 +438,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 - ✅ **7.1.1-7.1.2**: Phoenix Channel module with comprehensive tests
 - ✅ **7.1.3**: Channel routing and authorization integration landed
 - ✅ **7.1.4**: Encryption telemetry validation (join/broadcast assertions with sensitive metadata filtering)
-- ✅ **7.4.2**: Secure canonical CLI broadcast workflow (`/api/test/broadcast`) with `200/401/403/422` contract coverage and no-broadcast guarantees on non-200 paths
+- ✅ **7.4.2**: Secure canonical messaging write workflow (`/api/v1/conversations/:id/messages`) with `201/401/404/409/422` contract coverage and no-broadcast guarantees on non-success paths
 - ✅ **7.9**: Accounts context refactor (single-table token model, passkey-first onboarding, device trust, recovery)
 - ✅ **7.10.1**: Type-immutable conversation schema (separate changesets)
 - ✅ **7.10.8**: Conversation `hidden_by_users` field added
@@ -586,7 +590,7 @@ cd backend && ./run mix test test/famichat/chat/message_service_test.exs
 ## 📈 Metrics & Technical Debt
 
 ### Code Quality Metrics
-- **Test Files**: 20
+- **Test Files**: 82
 - **Source Files**: 49 Elixir modules
 - **Test Coverage**: ⚠️ **UNKNOWN** (not measured - need to run `mix coveralls`)
 - **Linting**: ⚠️ Repo-wide baseline debt remains (Credo)

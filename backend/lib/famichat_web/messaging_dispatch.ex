@@ -26,6 +26,7 @@ defmodule FamichatWeb.MessagingDispatch do
       |> Map.take(@encryption_metadata_fields)
 
     %{
+      "message_id" => message.id,
       "body" => message.content,
       "user_id" => message.sender_id,
       "device_id" => device_id

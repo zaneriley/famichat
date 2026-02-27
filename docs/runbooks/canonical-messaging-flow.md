@@ -8,10 +8,10 @@
 This is the shared proof path for humans and LLMs.
 
 It validates:
-1. Bearer-authenticated sender can call `POST /api/test/broadcast`.
+1. Bearer-authenticated sender can call `POST /api/v1/conversations/:id/messages`.
 2. A real channel subscriber receives `new_msg`.
 3. Sent messages are persisted and visible via `GET /api/v1/conversations/:id/messages`.
-4. Non-happy paths (`401/403/422`) emit no channel message side effects.
+4. Non-happy paths (`401/404/409/422`) emit no channel message side effects.
 5. Revoked connected devices receive explicit `security_state` and do not receive new `new_msg` payloads.
 6. Required recovery states are explicit (`recovery_required`) and recovery/rejoin restores messaging.
 
@@ -33,7 +33,7 @@ cd backend && ./run elixir:test:canonical-flow
 This command executes:
 - auth/session issuance
 - channel subscribe
-- canonical broadcast send
+- canonical message send (`201 Created`)
 - message receive assertion
 - message history persistence assertion
 - non-happy no-broadcast assertions
@@ -126,8 +126,8 @@ Coverage artifact:
 
 ## Source of truth in code
 
-1. Canonical endpoint: `backend/lib/famichat_web/controllers/message_test_controller.ex`
-2. Contract tests (`200/401/403/422` + no-broadcast): `backend/test/famichat_web/controllers/message_test_controller_test.exs`
+1. Canonical send/recovery endpoint: `backend/lib/famichat_web/controllers/api/chat_write_controller.ex`
+2. API contract tests (`201/401/404/409/422` + no-broadcast): `backend/test/famichat_web/integration/api_chat_write_controller_test.exs`
 3. End-to-end runbook integration test: `backend/test/famichat_web/integration/canonical_messaging_flow_test.exs`
 4. Seed task: `backend/lib/mix/tasks/famichat.runbook_seed.ex`
 5. Revoked-device integration contract: `backend/test/famichat_web/integration/revoked_device_security_flow_test.exs`

@@ -1,106 +1,133 @@
-# Famichat - API Design Principles
+# Famichat API Design
 
-**Last Updated**: 2025-10-14
+**Last Updated**: 2026-02-27  
+**Status**: Active (v1, no external users yet, breaking changes allowed)
 
----
+## North Star
 
-## Response Format Standards
+1. Production-first API contracts (`/api/v1`) are the source of truth.
+2. Test-only routes (`/api/test/*`) are harness utilities, never product contracts.
+3. Clients (human, LLM, CLI, alternate frontends) must be able to drive all core messaging/security behavior via stable HTTP + WS contracts.
+4. Error handling must be machine-parseable and stable.
 
-### Uniform Tuple Pattern
-All service functions return simple status tuples:
+## Current Route Surfaces
 
-```elixir
-{:ok, result} | {:error, reason}
+1. `"/api/v1"`: canonical production API.
+2. `"/api/test"`: development/test-only verification helpers, compiled only in `:dev/:test`.
+3. `"/socket"`: real-time channel transport.
+
+## Response Envelope Policy (v1)
+
+### Success
+
+```json
+{
+  "data": {}
+}
 ```
 
-**Benefits**:
-- Predictable pattern matching
-- Clear separation of business logic from telemetry
-- Reduced cognitive overhead
+Optional metadata:
 
-**Examples**:
-```elixir
-# Success
-{:ok, message} = MessageService.send_message(attrs)
-
-# Error
-{:error, :no_shared_family} = ConversationService.create_direct_conversation(user1, user2)
+```json
+{
+  "data": {},
+  "meta": {}
+}
 ```
 
----
+### Error
 
-## Error Handling
-
-### Error Reasons
-Errors use atoms for programmatic handling:
-
-```elixir
-:not_found
-:no_shared_family
-:unauthorized
-:invalid_conversation_type
-:last_admin_cannot_be_removed
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "Optional human-readable summary",
+    "action": "Optional client action hint",
+    "details": {}
+  }
+}
 ```
 
-### Changeset Errors
-Validation errors return changeset:
+Rules:
 
-```elixir
-{:error, %Ecto.Changeset{}} = MessageService.send_message(invalid_attrs)
-```
+1. `error.code` is required and stable.
+2. Never leak `inspect(reason)` or internal exception payloads.
+3. Prefer explicit status-code semantics over overloaded `200` responses.
 
----
+## Status Code Contract
 
-## Telemetry Integration
+1. `200/201`: success.
+2. `204`: idempotent delete/revoke success.
+3. `400`: invalid/missing required parameters.
+4. `401`: authentication failed/expired.
+5. `403`: authenticated but forbidden.
+6. `404`: resource not visible/not found.
+7. `409`: valid request blocked by security lifecycle state.
+8. `413`: payload too large.
+9. `422`: semantically invalid request.
+10. `429`: rate-limited (with `retry-after` header when possible).
 
-### Separation of Concerns
-- Business logic returns simple tuples
-- Telemetry emitted separately via `:telemetry.span/3`
-- No metadata mixed with return values
+## Stable Error Codes (Messaging + Auth)
 
-**Example**:
-```elixir
-def send_message(attrs) do
-  :telemetry.span([:famichat, :message, :send], %{}, fn ->
-    result = do_send_message(attrs)
-    {result, %{status: elem(result, 0)}}
-  end)
-end
-```
+Current/approved set:
 
----
+1. `unauthorized`
+2. `invalid_parameters`
+3. `invalid_request`
+4. `forbidden`
+5. `not_found`
+6. `rate_limited`
+7. `message_too_large`
+8. `recovery_required`
+9. `conversation_security_blocked`
+10. `recovery_in_progress`
+11. `recovery_failed`
+12. `invalid_refresh`
+13. `reauth_required`
+14. `invalid_credentials`
+15. `invalid_challenge`
 
-## API Versioning
+## Production Messaging Contract (Target)
 
-**Current**: No versioning (pre-1.0)
-**Planned**: URL-based versioning (`/api/v1/`, `/api/v2/`)
+Canonical production endpoints:
 
-**Breaking Changes**:
-- Will bump major version
-- Maintain backward compatibility for 1 major version
-- Deprecation warnings before removal
+1. `GET /api/v1/conversations/:id/messages`
+2. `POST /api/v1/conversations/:id/messages`
+3. `POST /api/v1/conversations/:id/security/recover`
 
----
+Important:
 
-## Related Documentation
+1. These routes are the product contract for LLM/CLI and alternate clients.
+2. `POST /api/test/broadcast` is a legacy harness route and not part of the product contract.
 
-- [backend/guides/messaging-implementation.md](../backend/guides/messaging-implementation.md)
-- [backend/guides/telemetry.md](../backend/guides/telemetry.md)
+## WS Contract Alignment
 
----
+1. WS `new_msg` payloads should include stable `message_id`.
+2. WS error payloads should converge on `error.code` and `action` semantics used by HTTP.
+3. `security_state` push events must remain explicit for revoked/recovery-required states.
 
-## Accounts API Notes (Auth Hardening – Oct 2025)
+## Idempotency and Retry
 
-- `POST /api/v1/auth/invites/accept` consumes the one-time invite token and returns the sanitized payload plus a 10‑minute `registration_token` (also mirrored in the `x-test-token` header during tests).
-- `POST /api/v1/auth/invites/complete` now requires a Bearer `registration_token` header; the invite token itself is no longer accepted once consumed.
-- Invite completion still returns a `passkey_register_token`; clients must exchange that token for a WebAuthn registration challenge before enrolling a credential.
-- Usernames are persisted case-preserving but stored alongside a deterministic fingerprint; lookups must remain case-insensitive by routing through `Famichat.Accounts.get_user_by_username/1`.
-- `POST /api/v1/auth/passkeys/register/challenge` accepts either a `register_token` (fresh invite flow) or a trusted session (bearer token) to request a challenge.
-- `POST /api/v1/auth/pairings` (reissue) is intentionally admin-only; document its usage when regenerating QR/admin codes for an outstanding invite.
-- Magic-link redemption records `enrollment_required_since` when a user without active passkeys logs in; registering a passkey clears the state.
-- Magic-link, OTP, and recovery endpoints emit `x-test-token` headers only in `MIX_ENV=test` to keep raw tokens out of fixtures/logs.
-- Passkey challenge endpoints now return WebAuthn-shaped `publicKey` options alongside an opaque `challenge_handle`. The legacy `{challenge, challenge_token}` payload has been removed.
+1. Recovery operations require a caller-provided stable `recovery_ref`.
+2. Revocation/recovery flows should expose replay-safe semantics (`idempotent: true/false` or equivalent).
+3. Future mutation endpoints should accept an `Idempotency-Key` header where retries are expected.
 
----
+## QA and Verification Policy
 
-**Last Updated**: 2025-10-14
+1. Primary product verification should run against `/api/v1` + `/socket`.
+2. `/api/test/*` is allowed for harness bootstrapping but must not be the only proof path for product behavior.
+3. Runbook scenario definitions and runner implementation must stay in lockstep (no doc-only hard gates).
+
+## Near-Term Work (v1 Hardening)
+
+1. Keep QA runner/integration contracts pinned to `/api/v1` routes and remove remaining `/api/test` write-path dependencies.
+2. Close response-envelope drift between auth/chat/read/write paths.
+3. Add cursor-based message catch-up contract (`after`/`has_more`/`next_cursor`) for reconnect continuity.
+4. Normalize bearer-token parsing and 401 payloads across trusted + authenticated plugs.
+
+## Related Docs
+
+1. [Architecture](./ARCHITECTURE.md)
+2. [Current Sprint](./sprints/CURRENT-SPRINT.md)
+3. [Status](./sprints/STATUS.md)
+4. [Messaging QA Runbook](./runbooks/messaging-qa-runbook.md)

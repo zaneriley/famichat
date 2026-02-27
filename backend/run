@@ -319,6 +319,65 @@ function _qa_message_count {
     "${output_file}" 2>/dev/null || echo "-1"
 }
 
+function _qa_message_match_token {
+  local response_file="$1"
+  local fallback_token="$2"
+  local match_token="${fallback_token}"
+  local message_id=""
+
+  if [[ -f "${response_file}" ]]; then
+    message_id="$(
+      jq -r '.data.payload.message_id // .payload.message_id // empty' \
+        "${response_file}" 2>/dev/null || true
+    )"
+  fi
+
+  if [[ -n "${message_id}" && "${message_id}" != "null" ]]; then
+    match_token="${message_id}"
+  fi
+
+  echo "${match_token}"
+}
+
+function _qa_recover_conversation_state {
+  local base_url="$1"
+  local token="$2"
+  local conversation_id="$3"
+  local recovery_ref="$4"
+  local output_file="$5"
+  local request_file="${output_file}.request.json"
+
+  jq -n \
+    --arg recovery_ref "${recovery_ref}" \
+    --arg rejoin_token "${recovery_ref}-rejoin" \
+    --arg recovery_reason "qa_matrix_preseed" \
+    '{
+      recovery_ref: $recovery_ref,
+      rejoin_token: $rejoin_token,
+      recovery_reason: $recovery_reason
+    }' > "${request_file}"
+
+  local status
+  status="$(
+    curl -sS \
+      --connect-timeout "${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}" \
+      --max-time "${QA_CURL_MAX_TIME_SECONDS:-12}" \
+      -o "${output_file}" \
+      -w "%{http_code}" \
+      -X POST \
+      "${base_url}/api/v1/conversations/${conversation_id}/security/recover" \
+      -H "Authorization: Bearer ${token}" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${request_file}" || true
+  )"
+
+  if [[ -z "${status}" || "${status}" == "000" ]]; then
+    status="-1"
+  fi
+
+  echo "${status}"
+}
+
 function _qa_spawn_ws_listener {
   local ws_url="$1"
   local ws_topic="$2"
@@ -729,7 +788,7 @@ function _qa_run_http_matrix_scenario {
       -o "${response_file}" \
       -w "%{http_code}" \
       -X POST \
-      "${base_url}/api/test/broadcast" \
+      "${base_url}/api/v1/conversations/${conversation_id}/messages" \
       -H "Authorization: Bearer ${actor_token}" \
       -H "Content-Type: application/json" \
       --data-binary "@${request_file}" || true
@@ -751,9 +810,11 @@ function _qa_run_http_matrix_scenario {
     "${history_token}" \
     "${history_conversation_id}" \
     "${after_history_file}")"
+  local ws_match_token
+  ws_match_token="$(_qa_message_match_token "${response_file}" "${message_body}")"
 
   local expected_delta=0
-  if [[ "${expected_status_csv}" == *"200"* ]]; then
+  if [[ "${expected_status_csv}" == *"201"* ]]; then
     expected_delta=1
   fi
 
@@ -761,10 +822,12 @@ function _qa_run_http_matrix_scenario {
   local severity="none"
   local notes="ok"
   local ws_parity="not_checked"
+  local ws_match_token
+  ws_match_token="$(_qa_message_match_token "${response_file}" "${message_body}")"
 
   if ! _qa_status_matches "${http_status}" "${expected_status_csv}"; then
     status="FAIL"
-    if [[ "${expected_status_csv}" != *"200"* && "${http_status}" == "200" ]]; then
+    if [[ "${expected_status_csv}" != *"201"* && "${http_status}" =~ ^20[0-9]$ ]]; then
       severity="S0"
     else
       severity="S1"
@@ -834,7 +897,7 @@ function _qa_run_http_matrix_scenario {
   fi
 
   if [[ -n "${ws_token}" && -n "${ws_topic}" ]]; then
-    if grep -Fq '"new_msg"' "${ws_log_file}" && grep -Fq "${message_body}" "${ws_log_file}"; then
+    if grep -Fq '"new_msg"' "${ws_log_file}" && grep -Fq "${ws_match_token}" "${ws_log_file}"; then
       ws_parity="pass"
     else
       ws_parity="fail"
@@ -864,7 +927,7 @@ function _qa_run_http_matrix_scenario {
       else
         notes="${notes};guard_ws_log_missing"
       fi
-    elif grep -Fq '"new_msg"' "${guard_ws_log_file}" && grep -Fq "${message_body}" "${guard_ws_log_file}"; then
+    elif grep -Fq '"new_msg"' "${guard_ws_log_file}" && grep -Fq "${ws_match_token}" "${guard_ws_log_file}"; then
       guard_ws_parity="fail"
       status="FAIL"
       severity="S0"
@@ -1117,7 +1180,7 @@ function _qa_run_revoked_device_scenario {
         revoked_actor: $revoked_actor,
         conversation_type: $conversation_type,
         conversation_id: $conversation_id,
-        expected_statuses: ["revoke:204", "send:200"],
+        expected_statuses: ["revoke:204", "send:201"],
         send_status: $send_status,
         revoke_status: $revoke_status,
         before_count: $before_count,
@@ -1169,7 +1232,7 @@ function _qa_run_revoked_device_scenario {
       -o "${response_file}" \
       -w "%{http_code}" \
       -X POST \
-      "${base_url}/api/test/broadcast" \
+      "${base_url}/api/v1/conversations/${conversation_id}/messages" \
       -H "Authorization: Bearer ${sender_actor_token}" \
       -H "Content-Type: application/json" \
       --data-binary "@${request_file}" || true
@@ -1204,7 +1267,7 @@ function _qa_run_revoked_device_scenario {
     notes="unexpected_revoke_status"
   fi
 
-  if [[ "${send_status}" != "200" ]]; then
+  if [[ "${send_status}" != "201" ]]; then
     status="FAIL"
     if [[ "${severity}" == "none" ]]; then
       severity="S1"
@@ -1244,13 +1307,13 @@ function _qa_run_revoked_device_scenario {
 
   local healthy_has_new_msg="false"
   if grep -Fq '"new_msg"' "${healthy_ws_log_file}" &&
-    grep -Fq "${message_body}" "${healthy_ws_log_file}"; then
+    grep -Fq "${ws_match_token}" "${healthy_ws_log_file}"; then
     healthy_has_new_msg="true"
   fi
 
   local revoked_has_new_msg="false"
   if grep -Fq '"new_msg"' "${revoked_ws_log_file}" &&
-    grep -Fq "${message_body}" "${revoked_ws_log_file}"; then
+    grep -Fq "${ws_match_token}" "${revoked_ws_log_file}"; then
     revoked_has_new_msg="true"
   fi
 
@@ -1337,7 +1400,7 @@ function _qa_run_revoked_device_scenario {
       revoked_actor: $revoked_actor,
       conversation_type: $conversation_type,
       conversation_id: $conversation_id,
-      expected_statuses: ["revoke:204", "send:200"],
+      expected_statuses: ["revoke:204", "send:201"],
       send_status: $send_status,
       revoke_status: $revoke_status,
       before_count: $before_count,
@@ -1471,7 +1534,7 @@ function _qa_run_recovery_rejoin_scenario {
       -o "${recover_response_file}" \
       -w "%{http_code}" \
       -X POST \
-      "${base_url}/api/test/conversation_security/recover" \
+      "${base_url}/api/v1/conversations/${conversation_id}/security/recover" \
       -H "Authorization: Bearer ${actor_token}" \
       -H "Content-Type: application/json" \
       --data-binary "@${recover_request_file}" || true
@@ -1488,7 +1551,7 @@ function _qa_run_recovery_rejoin_scenario {
       -o "${recover_replay_response_file}" \
       -w "%{http_code}" \
       -X POST \
-      "${base_url}/api/test/conversation_security/recover" \
+      "${base_url}/api/v1/conversations/${conversation_id}/security/recover" \
       -H "Authorization: Bearer ${actor_token}" \
       -H "Content-Type: application/json" \
       --data-binary "@${recover_request_file}" || true
@@ -1585,7 +1648,7 @@ function _qa_run_recovery_rejoin_scenario {
         observer_actor: $observer_actor,
         conversation_type: $conversation_type,
         conversation_id: $conversation_id,
-        expected_statuses: ["reset:200", "recover:200", "recover_replay:200", "send_after_recover:200"],
+        expected_statuses: ["reset:200", "recover:200", "recover_replay:200", "send_after_recover:201"],
         reset_status: $reset_status,
         recover_status: $recover_status,
         recover_replay_status: $recover_replay_status,
@@ -1622,7 +1685,7 @@ function _qa_run_recovery_rejoin_scenario {
       -o "${send_response_file}" \
       -w "%{http_code}" \
       -X POST \
-      "${base_url}/api/test/broadcast" \
+      "${base_url}/api/v1/conversations/${conversation_id}/messages" \
       -H "Authorization: Bearer ${actor_token}" \
       -H "Content-Type: application/json" \
       --data-binary "@${send_request_file}" || true
@@ -1643,13 +1706,16 @@ function _qa_run_recovery_rejoin_scenario {
     "${after_history_file}")"
 
   local replay_idempotent="false"
-  if jq -e '.idempotent == true' "${recover_replay_response_file}" >/dev/null 2>&1; then
+  if jq -e '.data.idempotent == true or .idempotent == true' "${recover_replay_response_file}" >/dev/null 2>&1; then
     replay_idempotent="true"
   fi
 
+  local ws_match_token
+  ws_match_token="$(_qa_message_match_token "${send_response_file}" "${message_body}")"
+
   local observer_has_new_msg="false"
   if grep -Fq '"new_msg"' "${ws_log_file}" &&
-    grep -Fq "${message_body}" "${ws_log_file}"; then
+    grep -Fq "${ws_match_token}" "${ws_log_file}"; then
     observer_has_new_msg="true"
   fi
 
@@ -1700,7 +1766,7 @@ function _qa_run_recovery_rejoin_scenario {
     fi
   fi
 
-  if [[ "${send_status}" != "200" ]]; then
+  if [[ "${send_status}" != "201" ]]; then
     status="FAIL"
     if [[ "${severity}" == "none" ]]; then
       severity="S1"
@@ -1794,7 +1860,7 @@ function _qa_run_recovery_rejoin_scenario {
       observer_actor: $observer_actor,
       conversation_type: $conversation_type,
       conversation_id: $conversation_id,
-      expected_statuses: ["reset:200", "recover:200", "recover_replay:200", "send_after_recover:200"],
+      expected_statuses: ["reset:200", "recover:200", "recover_replay:200", "send_after_recover:201"],
       reset_status: $reset_status,
       recover_status: $recover_status,
       recover_replay_status: $recover_replay_status,
@@ -2028,7 +2094,20 @@ function _qa_messaging_run {
     return 2
   fi
 
-  if ! runbook:seed:matrix "$@" | sed -n '/^{/,$p' > "${output_root}/seed_matrix.json"; then
+  local run_id_slug
+  run_id_slug="$(
+    printf '%s' "${run_id}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9'
+  )"
+
+  if ! runbook:seed:matrix \
+    --family-name "Runbook Family ${run_id_slug}" \
+    --outsider-family-name "Runbook Outsider Family ${run_id_slug}" \
+    --sender-username "runbook_sender_${run_id_slug}" \
+    --receiver-username "runbook_receiver_${run_id_slug}" \
+    --third-username "runbook_member_${run_id_slug}" \
+    --outsider-username "runbook_outsider_${run_id_slug}" \
+    --group-name "Runbook Group ${run_id_slug}" \
+    "$@" | sed -n '/^{/,$p' > "${output_root}/seed_matrix.json"; then
     jq -n \
       --arg run_id "${run_id}" \
       --arg mode "${mode}" \
@@ -2129,6 +2208,86 @@ function _qa_messaging_run {
     fi
   done
 
+  local preseed_dir="${output_root}/preseed_recovery"
+  mkdir -p "${preseed_dir}"
+
+  local preseed_self_sender_status
+  local preseed_self_receiver_status
+  local preseed_direct_status
+  local preseed_group_status
+  local preseed_family_status
+
+  preseed_self_sender_status="$(_qa_recover_conversation_state \
+    "${base_url}" \
+    "${a_tab1_token}" \
+    "${self_sender_id}" \
+    "qa-${run_id}-self-sender" \
+    "${preseed_dir}/self_sender.response.json")"
+
+  preseed_self_receiver_status="$(_qa_recover_conversation_state \
+    "${base_url}" \
+    "${b_token}" \
+    "${self_receiver_id}" \
+    "qa-${run_id}-self-receiver" \
+    "${preseed_dir}/self_receiver.response.json")"
+
+  preseed_direct_status="$(_qa_recover_conversation_state \
+    "${base_url}" \
+    "${a_tab1_token}" \
+    "${direct_id}" \
+    "qa-${run_id}-direct" \
+    "${preseed_dir}/direct.response.json")"
+
+  preseed_group_status="$(_qa_recover_conversation_state \
+    "${base_url}" \
+    "${a_tab1_token}" \
+    "${group_id}" \
+    "qa-${run_id}-group" \
+    "${preseed_dir}/group.response.json")"
+
+  preseed_family_status="$(_qa_recover_conversation_state \
+    "${base_url}" \
+    "${a_tab1_token}" \
+    "${family_id}" \
+    "qa-${run_id}-family" \
+    "${preseed_dir}/family.response.json")"
+
+  if [[ "${preseed_self_sender_status}" != "200" ||
+    "${preseed_self_receiver_status}" != "200" ||
+    "${preseed_direct_status}" != "200" ||
+    "${preseed_group_status}" != "200" ||
+    "${preseed_family_status}" != "200" ]]; then
+    jq -n \
+      --arg run_id "${run_id}" \
+      --arg mode "${mode}" \
+      --arg started_at "${started_at}" \
+      --arg ended_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg outcome "BLOCKED" \
+      --arg reason "preseed_recovery_failed" \
+      --argjson self_sender_status "${preseed_self_sender_status}" \
+      --argjson self_receiver_status "${preseed_self_receiver_status}" \
+      --argjson direct_status "${preseed_direct_status}" \
+      --argjson group_status "${preseed_group_status}" \
+      --argjson family_status "${preseed_family_status}" \
+      '{
+        run_id: $run_id,
+        mode: $mode,
+        started_at: $started_at,
+        ended_at: $ended_at,
+        outcome: $outcome,
+        reason: $reason,
+        preseed_recovery_statuses: {
+          self_sender: $self_sender_status,
+          self_receiver: $self_receiver_status,
+          direct: $direct_status,
+          group: $group_status,
+          family: $family_status
+        }
+      }' > "${gate_report}"
+    _qa_release_run_lock
+    return 2
+  fi
+
   local canonical_status="PASS"
   local canonical_elapsed=0
   SECONDS=0
@@ -2164,7 +2323,7 @@ function _qa_messaging_run {
     "self" \
     "${self_sender_id}" \
     "${body_prefix}-s1-self" \
-    "200" \
+    "201" \
     "${a_tab1_token}" \
     "${self_sender_id}" \
     "${a_tab2_token}" \
@@ -2181,7 +2340,7 @@ function _qa_messaging_run {
     "self" \
     "${self_receiver_id}" \
     "${body_prefix}-s2-spoof" \
-    "403" \
+    "403,404" \
     "${b_token}" \
     "${self_receiver_id}" \
     "" \
@@ -2200,7 +2359,7 @@ function _qa_messaging_run {
     "direct" \
     "${direct_id}" \
     "${body_prefix}-d1-direct" \
-    "200" \
+    "201" \
     "${a_tab1_token}" \
     "${direct_id}" \
     "${b_token}" \
@@ -2236,7 +2395,7 @@ function _qa_messaging_run {
     "group" \
     "${group_id}" \
     "${body_prefix}-g1-group" \
-    "200" \
+    "201" \
     "${a_tab1_token}" \
     "${group_id}" \
     "${c_token}" \
@@ -2272,7 +2431,7 @@ function _qa_messaging_run {
     "family" \
     "${family_id}" \
     "${body_prefix}-f1-family" \
-    "200" \
+    "201" \
     "${a_tab1_token}" \
     "${family_id}" \
     "${b_token}" \

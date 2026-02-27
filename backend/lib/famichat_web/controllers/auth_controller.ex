@@ -1,5 +1,6 @@
 defmodule FamichatWeb.AuthController do
   use FamichatWeb, :controller
+  require Logger
 
   alias Famichat.Auth.RateLimit
   alias Famichat.Auth.{Identity, Onboarding, Passkeys, Recovery, Sessions}
@@ -57,9 +58,7 @@ defmodule FamichatWeb.AuthController do
           |> json(%{error: %{code: "missing_household_id"}})
 
         {:error, reason} ->
-          conn
-          |> put_status(:unprocessable_entity)
-          |> json(%{error: %{code: inspect(reason)}})
+          unexpected_error(conn, "issue_invite", reason, "invite_issue_failed")
       end
     end
   end
@@ -79,10 +78,19 @@ defmodule FamichatWeb.AuthController do
         |> json(%{error: %{code: "invalid_invite"}})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(
+          conn,
+          "reissue_pairing",
+          reason,
+          "pairing_reissue_failed"
+        )
     end
+  end
+
+  def reissue_pairing(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
   end
 
   def accept_invite(conn, %{"token" => token}) do
@@ -108,6 +116,12 @@ defmodule FamichatWeb.AuthController do
       {:error, :invalid} ->
         conn |> put_status(:not_found) |> json(%{error: %{code: "invalid"}})
     end
+  end
+
+  def accept_invite(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
   end
 
   def redeem_pairing(conn, %{"token" => token}) do
@@ -136,6 +150,12 @@ defmodule FamichatWeb.AuthController do
         |> put_status(:too_many_requests)
         |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
     end
+  end
+
+  def redeem_pairing(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
   end
 
   def complete_invite(
@@ -169,9 +189,12 @@ defmodule FamichatWeb.AuthController do
             |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
 
           {:error, reason} ->
-            conn
-            |> put_status(:unprocessable_entity)
-            |> json(%{error: %{code: inspect(reason)}})
+            unexpected_error(
+              conn,
+              "complete_invite",
+              reason,
+              "invite_completion_failed"
+            )
         end
 
       {:error, :missing_registration_token} ->
@@ -229,9 +252,12 @@ defmodule FamichatWeb.AuthController do
         conn |> put_status(:gone) |> json(%{error: %{code: "used"}})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(
+          conn,
+          "passkey_register_challenge",
+          reason,
+          "passkey_challenge_failed"
+        )
     end
   end
 
@@ -260,9 +286,12 @@ defmodule FamichatWeb.AuthController do
         |> json(%{error: %{code: "invalid_challenge"}})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(
+          conn,
+          "passkey_register",
+          reason,
+          "passkey_registration_failed"
+        )
     end
   end
 
@@ -282,9 +311,12 @@ defmodule FamichatWeb.AuthController do
         |> json(%{error: %{code: "user_not_found"}})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(
+          conn,
+          "passkey_assert_challenge",
+          reason,
+          "passkey_assert_challenge_failed"
+        )
     end
   end
 
@@ -324,9 +356,12 @@ defmodule FamichatWeb.AuthController do
         |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(
+          conn,
+          "passkey_assert",
+          reason,
+          "passkey_assert_failed"
+        )
     end
   end
 
@@ -393,6 +428,12 @@ defmodule FamichatWeb.AuthController do
     end
   end
 
+  def revoke_device(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
+  end
+
   def issue_magic_link(conn, %{"email" => email}) do
     case Identity.issue_magic_link(email) do
       {:ok, token, _} ->
@@ -412,10 +453,19 @@ defmodule FamichatWeb.AuthController do
         |> json(%{status: "accepted"})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(
+          conn,
+          "issue_magic_link",
+          reason,
+          "magic_link_issue_failed"
+        )
     end
+  end
+
+  def issue_magic_link(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
   end
 
   def redeem_magic_link(conn, %{"token" => token}) do
@@ -437,6 +487,12 @@ defmodule FamichatWeb.AuthController do
     end
   end
 
+  def redeem_magic_link(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
+  end
+
   def issue_otp(conn, %{"email" => email}) do
     case Identity.issue_otp(email) do
       {:ok, code, _} ->
@@ -456,10 +512,14 @@ defmodule FamichatWeb.AuthController do
         |> json(%{status: "accepted"})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(conn, "issue_otp", reason, "otp_issue_failed")
     end
+  end
+
+  def issue_otp(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
   end
 
   def verify_otp(conn, %{"email" => email, "code" => code}) do
@@ -481,6 +541,12 @@ defmodule FamichatWeb.AuthController do
     end
   end
 
+  def verify_otp(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
+  end
+
   def issue_recovery(conn, %{"user_id" => user_id}) do
     admin_id = conn.assigns[:current_user_id]
 
@@ -495,10 +561,19 @@ defmodule FamichatWeb.AuthController do
         conn |> put_status(:forbidden) |> json(%{error: %{code: "forbidden"}})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(
+          conn,
+          "issue_recovery",
+          reason,
+          "recovery_issue_failed"
+        )
     end
+  end
+
+  def issue_recovery(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
   end
 
   def redeem_recovery(conn, %{"token" => token}) do
@@ -515,6 +590,12 @@ defmodule FamichatWeb.AuthController do
       {:error, :expired} ->
         conn |> put_status(:gone) |> json(%{error: %{code: "expired"}})
     end
+  end
+
+  def redeem_recovery(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
   end
 
   defp maybe_ip(conn) do
@@ -541,10 +622,23 @@ defmodule FamichatWeb.AuthController do
         |> json(%{error: %{code: "rate_limited", retry_in: retry}})
 
       {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: %{code: inspect(reason)}})
+        unexpected_error(
+          conn,
+          "respond_with_passkey_challenge",
+          reason,
+          "passkey_challenge_failed"
+        )
     end
+  end
+
+  defp unexpected_error(conn, context, reason, code) do
+    Logger.warning(
+      "[AuthController] #{context} unexpected error: #{inspect(reason)}"
+    )
+
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: %{code: code}})
   end
 
   defp throttle!(conn, bucket, key, limit, interval) do

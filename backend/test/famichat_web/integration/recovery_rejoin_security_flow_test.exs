@@ -7,7 +7,6 @@ defmodule FamichatWeb.RecoveryRejoinSecurityFlowTest do
   import Plug.Conn, only: [put_req_header: 3]
 
   alias Famichat.Auth.Sessions
-  alias Famichat.Chat
   alias Famichat.Chat.ConversationSecurityStateStore
   alias Famichat.Chat.Message
   alias Famichat.ChatFixtures
@@ -81,17 +80,18 @@ defmodule FamichatWeb.RecoveryRejoinSecurityFlowTest do
     blocked_body = "blocked-before-recovery"
 
     blocked_conn =
-      post(sender_conn, "/api/test/broadcast", %{
-        "conversation_type" => "direct",
-        "conversation_id" => conversation.id,
+      post(sender_conn, "/api/v1/conversations/#{conversation.id}/messages", %{
         "body" => blocked_body
       })
 
     blocked_response = json_response(blocked_conn, 409)
-    assert blocked_response["status"] == "error"
-    assert blocked_response["error"] == "recovery_required"
-    assert blocked_response["action"] == "recover_conversation_security_state"
-    assert blocked_response["details"]["reason"] == "missing_group_state"
+    assert blocked_response["error"]["code"] == "recovery_required"
+
+    assert blocked_response["error"]["action"] ==
+             "recover_conversation_security_state"
+
+    assert blocked_response["error"]["details"]["reason"] ==
+             "missing_group_state"
 
     refute_push "new_msg", _
 
@@ -103,49 +103,42 @@ defmodule FamichatWeb.RecoveryRejoinSecurityFlowTest do
 
     recovery_ref = "recovery-ref-#{System.unique_integer([:positive])}"
 
-    assert {:ok, recovered} =
-             Chat.recover_conversation_security_state(
-               conversation.id,
-               recovery_ref,
-               %{
-                 rejoin_token:
-                   "rejoin-token-#{System.unique_integer([:positive])}"
-               }
-             )
+    recovered =
+      sender_conn
+      |> post("/api/v1/conversations/#{conversation.id}/security/recover", %{
+        "recovery_ref" => recovery_ref,
+        "rejoin_token" => "rejoin-token-#{System.unique_integer([:positive])}"
+      })
+      |> json_response(200)
 
-    assert recovered.status == :completed
-    assert recovered.idempotent == false
-    assert recovered.conversation_id == conversation.id
+    assert recovered["data"]["idempotent"] == false
+    assert recovered["data"]["conversation_id"] == conversation.id
 
-    assert {:ok, replayed} =
-             Chat.recover_conversation_security_state(
-               conversation.id,
-               recovery_ref,
-               %{
-                 rejoin_token: "rejoin-token-ignored"
-               }
-             )
+    replayed =
+      sender_conn
+      |> post("/api/v1/conversations/#{conversation.id}/security/recover", %{
+        "recovery_ref" => recovery_ref,
+        "rejoin_token" => "rejoin-token-ignored"
+      })
+      |> json_response(200)
 
-    assert replayed.idempotent == true
-    assert replayed.recovery_id == recovered.recovery_id
+    assert replayed["data"]["idempotent"] == true
+    assert replayed["data"]["recovery_id"] == recovered["data"]["recovery_id"]
 
     recovered_body = "delivered-after-recovery"
 
     recovered_conn =
-      post(sender_conn, "/api/test/broadcast", %{
-        "conversation_type" => "direct",
-        "conversation_id" => conversation.id,
+      post(sender_conn, "/api/v1/conversations/#{conversation.id}/messages", %{
         "body" => recovered_body
       })
 
-    recovered_response = json_response(recovered_conn, 200)
-    assert recovered_response["status"] == "success"
-    assert recovered_response["topic"] == topic
-    assert recovered_response["event_name"] == "new_msg"
-    assert recovered_response["payload"]["body"] == recovered_body
-    assert recovered_response["payload"]["user_id"] == sender.id
+    recovered_response = json_response(recovered_conn, 201)
+    assert recovered_response["data"]["topic"] == topic
+    assert recovered_response["data"]["event_name"] == "new_msg"
+    assert recovered_response["data"]["payload"]["body"] == recovered_body
+    assert recovered_response["data"]["payload"]["user_id"] == sender.id
 
-    expected_payload = recovered_response["payload"]
+    expected_payload = recovered_response["data"]["payload"]
     assert_push "new_msg", ^expected_payload
 
     assert Repo.get_by(Message,
@@ -179,18 +172,15 @@ defmodule FamichatWeb.RecoveryRejoinSecurityFlowTest do
     blocked_body = "blocked-by-pending-commit"
 
     blocked_conn =
-      post(sender_conn, "/api/test/broadcast", %{
-        "conversation_type" => "direct",
-        "conversation_id" => conversation.id,
+      post(sender_conn, "/api/v1/conversations/#{conversation.id}/messages", %{
         "body" => blocked_body
       })
 
     blocked_response = json_response(blocked_conn, 409)
-    assert blocked_response["status"] == "error"
-    assert blocked_response["error"] == "conversation_security_blocked"
-    assert blocked_response["code"] == "pending_proposals"
-    assert blocked_response["action"] == "wait_for_pending_commit"
-    assert blocked_response["details"]["reason"] == "pending_proposals"
+    assert blocked_response["error"]["code"] == "conversation_security_blocked"
+    assert blocked_response["error"]["action"] == "wait_for_pending_commit"
+    assert blocked_response["error"]["details"]["code"] == "pending_proposals"
+    assert blocked_response["error"]["details"]["reason"] == "pending_proposals"
 
     refute_push "new_msg", _
 

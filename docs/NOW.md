@@ -21,10 +21,11 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 1. Real-time channel infrastructure is in place with authenticated joins and telemetry.
 2. Core chat domain flows exist for direct/self/group messaging and conversation membership checks.
 3. Story 7.4.2 is implemented:
-   - Canonical secure endpoint: `POST /api/test/broadcast`
+   - Canonical secure endpoint: `POST /api/v1/conversations/:id/messages`
+   - Canonical recovery endpoint: `POST /api/v1/conversations/:id/security/recover`
    - Compatibility alias: `POST /api/test/test_events` (deprecated path)
    - Auth + membership authorization enforced
-   - Contract outcomes covered (`200/401/403/422`) with no-broadcast guarantees on non-200
+   - Contract outcomes covered (`201/401/404/409/422`) with no-broadcast guarantees on non-success
 4. Accounts/auth foundation is in place (token/session/device/passkey flows), enabling authenticated API and channel behavior.
 5. Sprint 9.2 MLS vertical slice is implemented in backend scope:
    - Real OpenMLS-backed NIF path for `create_group -> create_application_message -> process_incoming`
@@ -80,6 +81,9 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 	    - post-guard-observer hardening verification:
 	      - fast: `.tmp/_qa_messaging/20260227T022941Z_fast` -> PASS
 	      - deep: `.tmp/_qa_messaging/20260227T023121Z_deep` -> PASS
+      - canonical `/api/v1` runner verification after migration:
+        - fast: `.tmp/_qa_messaging/20260227T052825Z_fast` -> PASS
+        - deep: `.tmp/_qa_messaging/20260227T053021Z_deep` -> PASS (`canonical_flow_coverage: PASS`, `recovery_rejoin_contract: PASS`)
 	     - `R1` assertions in both runs: healthy receives `new_msg`, revoked receives no `new_msg`, revoked receives explicit `security_state`.
 	     - `R2` assertions in both runs: `reset_status=200`, `recover_status=200`, replay `recover_status=200`, replay is idempotent, and post-recovery send is delivered/persisted.
 	     - gate semantics now classify unrunnable required scenarios as `BLOCKED` (not ambiguous `FAIL`) and report `blocked_failures` in `gate_report.json`.
@@ -90,6 +94,8 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 	    - transport status normalization maps curl `000` to `-1` sentinel to avoid ambiguous JSON `0` statuses.
 	    - persistence checks now validate message identity in `history_after` (not only count deltas) to reduce false confidence/false failures from background traffic.
 	    - reject-path scenarios now enforce guard-observer WS parity (`guard_ws_parity`) to catch unauthorized fanout leaks explicitly.
+      - matrix WS parity now matches on `message_id` (with body fallback), so MLS ciphertext bodies do not cause false WS failures.
+      - matrix seeding now uses run-scoped families/users and pre-seeded recovery for matrix conversations, preventing stale-state history drift across runs.
 	    - preflight times out hung `docker compose ps` and falls back to `docker ps`.
    - Matrix seed and command path remain available via `runbook:seed:matrix`, `qa:messaging:fast`, and `qa:messaging:deep`.
    - GitHub Actions now executes `qa:messaging:fast` on PR/main and `qa:messaging:deep` nightly (`.github/workflows/messaging-qa.yml`), uploading gate artifacts.
@@ -111,7 +117,7 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
    - Latest deep QA artifact after this wiring: `.tmp/_qa_messaging/20260226T102453Z` (PASS, `R1` PASS, no failed scenarios).
 10. Recovery-required contract is now explicit and end-to-end characterized:
    - Channel sends now return explicit `recovery_required` + `recover_conversation_security_state` action when MLS state is missing.
-   - Canonical HTTP send now returns `409` with explicit `recovery_required` and recovery action instead of generic invalid request.
+   - Canonical HTTP send (`POST /api/v1/conversations/:id/messages`) now returns `409` with explicit `recovery_required` and recovery action instead of generic invalid request.
    - Pending-commit send now returns explicit `409` (`conversation_security_blocked`, `code: pending_proposals`, action `wait_for_pending_commit`) instead of generic invalid request.
    - Integration characterization covers: fail with `recovery_required` -> recover via `Chat.recover_conversation_security_state/3` -> idempotent replay -> send succeeds (`recovery_rejoin_security_flow_test.exs`).
 

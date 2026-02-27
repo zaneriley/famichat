@@ -303,6 +303,52 @@ defmodule FamichatWeb.AuthControllerTest do
     |> json_response(200)
   end
 
+  test "missing required params return 400 invalid_parameters instead of 500",
+       %{
+         conn: conn,
+         admin_session: admin_session
+       } do
+    conn = put_req_header(conn, "content-type", @json)
+
+    assert json_response(post(conn, ~p"/api/v1/auth/invites/accept", %{}), 400) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+
+    assert json_response(post(conn, ~p"/api/v1/auth/pairings/redeem", %{}), 400) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+
+    assert json_response(post(conn, ~p"/api/v1/auth/magic_link", %{}), 400) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+
+    assert json_response(
+             post(conn, ~p"/api/v1/auth/magic_link/redeem", %{}),
+             400
+           ) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+
+    assert json_response(post(conn, ~p"/api/v1/auth/otp/request", %{}), 400) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+
+    assert json_response(post(conn, ~p"/api/v1/auth/otp/verify", %{}), 400) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+
+    assert json_response(post(conn, ~p"/api/v1/auth/recovery/redeem", %{}), 400) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+
+    trusted_conn = auth(conn, admin_session.access_token)
+
+    assert json_response(
+             post(trusted_conn, ~p"/api/v1/auth/pairings", %{}),
+             400
+           ) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+
+    assert json_response(
+             post(trusted_conn, ~p"/api/v1/auth/recovery", %{}),
+             400
+           ) ==
+             %{"error" => %{"code" => "invalid_parameters"}}
+  end
+
   defp auth(conn, token) do
     put_req_header(conn, "authorization", "Bearer #{token}")
   end

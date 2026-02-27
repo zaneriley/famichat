@@ -56,14 +56,16 @@ defmodule FamichatWeb.RevokedDeviceSecurityFlowTest do
              Sessions.revoke_device(sender.id, sender_session.device_id)
 
     conn =
-      post(authed_conn(receiver_session.access_token), "/api/test/broadcast", %{
-        "conversation_type" => "direct",
-        "conversation_id" => conversation.id,
-        "body" => "revoked-visibility-check"
-      })
+      post(
+        authed_conn(receiver_session.access_token),
+        "/api/v1/conversations/#{conversation.id}/messages",
+        %{
+          "body" => "revoked-visibility-check"
+        }
+      )
 
-    response = json_response(conn, 200)
-    assert response["status"] == "success"
+    response = json_response(conn, 201)
+    assert response["data"]["event_name"] == "new_msg"
 
     assert_push "security_state", payload
     assert (payload[:reason] || payload["reason"]) == "device_revoked"

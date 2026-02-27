@@ -201,10 +201,8 @@ defmodule Mix.Tasks.Famichat.RunbookSeed do
             topic: "message:direct:#{conversation.id}"
           },
           broadcast: %{
-            endpoint: "/api/test/broadcast",
+            endpoint: "/api/v1/conversations/:id/messages",
             payload_template: %{
-              conversation_type: "direct",
-              conversation_id: conversation.id,
               body: "runbook hello"
             }
           }

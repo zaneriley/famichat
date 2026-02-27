@@ -2,7 +2,7 @@
 
 **Duration**: Oct 1 - Oct 15, 2025
 **Progress**: ✅ Core channel/auth milestones, 7.4.2 secure CLI broadcast hardening, group-role edge-case coverage, and first-class messaging QA runbook commands are complete
-**Status**: 🟡 Sprint 7 closeout in progress; CI wiring for the new QA fast/deep commands and repo-wide lint/static baseline debt remain open
+**Status**: 🟡 Sprint 7 closeout in progress; CI wiring for `qa:messaging:fast|deep` is active, with remaining closeout focused on API surface hardening and repo-wide lint/static baseline debt
 
 > Scope note (2026-02-25): This file tracks Sprint 7 closeout items only. Active P0 implementation work is Sprint 9 MLS hardening (see `STATUS.md` and `9.2-mls-implementation-redteam-loop.md`).
 > Terminology note: use `conversation security policy` for domain policy wording (see `../ia-lexicon.md` and `../ia-boundary-guardrails.md`).
@@ -15,7 +15,7 @@
 - ✓ 7.1.1-7.1.2: Phoenix Channel module with tests
 - ✓ 7.1.3: Channel routing & authorization (access tokens enforced, EnsureTrusted plug)
 - ✓ 7.1.4: Encryption telemetry validation (join/broadcast sensitive metadata filtering assertions)
-- ✓ 7.4.2: Secure canonical CLI broadcast workflow (`/api/test/broadcast`) with auth, membership checks, contract tests, and no-broadcast guarantees on non-200 paths
+- ✓ 7.4.2: Secure canonical messaging write workflow (`/api/v1/conversations/:id/messages`) with auth, membership checks, contract tests, and no-broadcast guarantees on non-success paths
 - ✓ 7.10.1: Type-immutable conversation schema
 - ✓ 7.10.5-7.10.6: Group role management edge-case tests (last-admin + lock-contention authorization re-checks)
 - ✓ 7.10.8: Conversation hidden_by_users field
@@ -24,9 +24,10 @@
 
 ### 🚧 In Progress
 - 🔄 7.5: End-to-end real-time notification verification automation/CI follow-through (`qa:messaging:fast|deep` are now available)
+- 🔄 Production messaging API contract hardening follow-through (residual `/api/test` docs/deprecation cleanup)
 
 ### ❌ Not Started
-- ⏳ 7.4.1: Dummy UI route / LiveView message display test harness
+- ⏳ 7.4.1: Product-quality UX shell is not started (dev/test LiveView harness exists)
 
 ---
 
@@ -49,6 +50,10 @@
    - `cd backend && ./run qa:messaging:fast` (live matrix + WS/HTTP parity + timing artifacts)
    - `cd backend && ./run qa:messaging:deep` (fast loop + canonical-flow coverage artifact)
    - Matrix seed context: `cd backend && ./run runbook:seed:matrix`
+
+5. **Runbook/API consistency follow-through**
+   - `docs/runbooks/messaging-qa-runbook.md` currently documents continuity (`C1`) as a pilot scenario.
+   - The runner is being aligned so documented hard gates and executable scenarios remain in lockstep.
 
 ### 🔁 Follow-ups Logged from Auth Hardening
 - ✅ Add `enrollment_required_since` marker and set/clear logic after magic-link logins (MAG-03 probation) — migration & state sync landed Oct 13, 2025
@@ -153,10 +158,10 @@ Our implementation uses type-specific creation functions rather than a generic a
 
 ```elixir
 # Instead of generic create_conversation:
-Chat.create_direct_conversation(user1_id, user2_id)
-Chat.create_self_conversation(user_id)
-Chat.create_group_conversation(creator_id, name, initial_member_ids)
-Chat.create_family_conversation(creator_id)
+Famichat.Chat.ConversationService.create_direct_conversation(user1_id, user2_id)
+Famichat.Chat.Self.get_or_create(user_id)
+Famichat.Chat.ConversationService.create_group_conversation(user_id, family_id, name)
+# family conversations use dedicated creation/persistence paths, not a generic Chat.create_family_conversation/1 API
 ```
 
 This provides clearer intent, more predictable validation, and a better developer experience.
@@ -246,7 +251,7 @@ This provides clearer intent, more predictable validation, and a better develope
     - `cd backend && ./run elixir:security-check`
     - `cd backend && ./run elixir:static-analysis`
 - [x] **7.4.2:** Harden the CLI testing endpoint into a secure, canonical broadcast verification workflow.
-  - [x] **Subtask:** Characterize current endpoint behavior and lock baseline tests for `/api/test/broadcast` and `/api/test/test_events`.
+  - [x] **Subtask:** Characterize legacy test endpoint behavior and lock baseline tests for `/api/test/broadcast` and `/api/test/test_events` (superseded by `/api/v1/conversations/:id/messages`).
   - [x] **Subtask (Agent A):** Route/pipeline hardening (`dev/test` scoping, `:api_authenticated`, canonical route + temporary alias route).
   - [x] **Subtask (Agent B):** Implement canonical request/response contract (`conversation_type`, `conversation_id`, `body`) with server-side topic derivation and membership authorization checks.
   - [x] **Subtask (Agent C):** Add contract-level tests for `200/401/403/422`, alias parity + deprecation headers, and no-broadcast guarantees on all non-200 outcomes.
@@ -255,7 +260,7 @@ This provides clearer intent, more predictable validation, and a better develope
     - ✅ `cd backend && ./run elixir:security-check`
     - ⚠️ `cd backend && ./run elixir:lint` (fails on existing repo-wide issues outside 7.4.2)
     - ⚠️ `cd backend && ./run elixir:static-analysis` (fails on existing repo-wide baseline)
-  - **Expected Test:** A token-authenticated `curl` against `POST /api/test/broadcast` emits exactly one expected channel event, and all failure paths prove zero broadcast side effects.
+  - **Expected Test:** A token-authenticated `curl` against `POST /api/v1/conversations/:id/messages` emits exactly one expected channel event, and all failure paths prove zero broadcast side effects.
 - **Final Review 7.4:** Once all subtasks for Story 7.4 have been completed and verified, mark off the Story 7.4 checkbox in this Sprint7.md file.
 
 ### Story 7.5: Verification of Real–Time Notifications

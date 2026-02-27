@@ -84,6 +84,11 @@ defmodule FamichatWeb.Router do
 
     get "/me/conversations", ChatReadController, :index_me_conversations
     get "/conversations/:id/messages", ChatReadController, :index_messages
+    post "/conversations/:id/messages", ChatWriteController, :create_message
+
+    post "/conversations/:id/security/recover",
+         ChatWriteController,
+         :recover_security_state
   end
 
   # Enables LiveDashboard only for development.

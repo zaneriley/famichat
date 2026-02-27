@@ -15,6 +15,13 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
   @endpoint FamichatWeb.Endpoint
 
   setup do
+    previous_enforcement = Application.get_env(:famichat, :mls_enforcement)
+    Application.put_env(:famichat, :mls_enforcement, false)
+
+    on_exit(fn ->
+      restore_env(:mls_enforcement, previous_enforcement)
+    end)
+
     family = ChatFixtures.family_fixture()
 
     sender =
@@ -68,20 +75,17 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
     topic: topic
   } do
     conn =
-      post(sender_conn, "/api/test/broadcast", %{
-        "conversation_type" => "direct",
-        "conversation_id" => conversation.id,
+      post(sender_conn, "/api/v1/conversations/#{conversation.id}/messages", %{
         "body" => "runbook canonical message",
         "topic" => "message:group:spoof-attempt"
       })
 
-    response = json_response(conn, 200)
-    assert response["status"] == "success"
-    assert response["topic"] == topic
-    assert response["event_name"] == "new_msg"
-    assert response["payload"]["body"] == "runbook canonical message"
+    response = json_response(conn, 201)
+    assert response["data"]["topic"] == topic
+    assert response["data"]["event_name"] == "new_msg"
+    assert response["data"]["payload"]["body"] == "runbook canonical message"
 
-    expected_payload = response["payload"]
+    expected_payload = response["data"]["payload"]
     assert_push "new_msg", ^expected_payload
 
     history_conn =
@@ -100,9 +104,7 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
   } do
     conn =
       build_conn()
-      |> post("/api/test/broadcast", %{
-        "conversation_type" => "direct",
-        "conversation_id" => conversation.id,
+      |> post("/api/v1/conversations/#{conversation.id}/messages", %{
         "body" => "should not emit"
       })
 
@@ -115,36 +117,31 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
     conversation: conversation
   } do
     conn =
-      post(outsider_conn, "/api/test/broadcast", %{
-        "conversation_type" => "direct",
-        "conversation_id" => conversation.id,
-        "body" => "should not emit"
-      })
+      post(
+        outsider_conn,
+        "/api/v1/conversations/#{conversation.id}/messages",
+        %{
+          "body" => "should not emit"
+        }
+      )
 
-    assert json_response(conn, 404) == %{
-             "status" => "error",
-             "error" => "not_found"
-           }
+    assert json_response(conn, 404)["error"]["code"] == "not_found"
 
     refute_receive %Phoenix.Socket.Message{event: "new_msg"}, 100
   end
 
   test "invalid payload returns 422 and emits no message", %{
-    sender_conn: sender_conn
+    sender_conn: sender_conn,
+    conversation: conversation
   } do
     conn =
-      post(sender_conn, "/api/test/broadcast", %{
-        "conversation_type" => "invalid",
-        "conversation_id" => "not-a-uuid",
+      post(sender_conn, "/api/v1/conversations/#{conversation.id}/messages", %{
         "body" => " "
       })
 
     response = json_response(conn, 422)
-    assert response["status"] == "error"
-    assert response["error"] == "invalid_request"
-    assert Map.has_key?(response["details"], "conversation_type")
-    assert Map.has_key?(response["details"], "conversation_id")
-    assert Map.has_key?(response["details"], "body")
+    assert response["error"]["code"] == "invalid_request"
+    assert response["error"]["details"]["body"] == "must be a non-empty string"
 
     refute_receive %Phoenix.Socket.Message{event: "new_msg"}, 100
   end
@@ -167,13 +164,15 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
 
     Enum.each(1..burst_limit, fn index ->
       conn =
-        post(sender_conn, "/api/test/broadcast", %{
-          "conversation_type" => "direct",
-          "conversation_id" => conversation.id,
-          "body" => "mixed-http-#{index}"
-        })
+        post(
+          sender_conn,
+          "/api/v1/conversations/#{conversation.id}/messages",
+          %{
+            "body" => "mixed-http-#{index}"
+          }
+        )
 
-      assert json_response(conn, 200)["status"] == "success"
+      assert json_response(conn, 201)["data"]["event_name"] == "new_msg"
     end)
 
     blocked_body = "mixed-ws-over-limit"
@@ -207,4 +206,7 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
       remember_device?: true
     )
   end
+
+  defp restore_env(key, nil), do: Application.delete_env(:famichat, key)
+  defp restore_env(key, value), do: Application.put_env(:famichat, key, value)
 end

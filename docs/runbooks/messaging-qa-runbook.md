@@ -134,10 +134,13 @@ Minimum actor/device set for each deep run:
 | F2 | family | outsider `O` sends to family | none | all | reject (`403/404`) |
 | R1 | revoked | revoked `A-dev2` is subscribed while healthy sender posts | healthy subscribers only | revoked `A-dev2` gets no `new_msg` and receives explicit `security_state` | success |
 | R2 | recovery | reset state, recover with stable `recovery_ref`, replay recovery, then send | authorized members receive post-recovery `new_msg` | no silent recovery failure; replay must be idempotent | success |
+| C1 | continuity (pilot) | sender posts while `A-dev2` offline, `A-dev2` joins later, reads history, then sender posts again | `A-dev2` catches missed message via history and receives later `new_msg` live | no gaps/duplicates in message ids | success |
 
-`S1..F2 + R1 + R2` are hard gates. A run cannot pass without all 10 rows executed with artifacts.
+`S1..F2 + R1 + R2` are hard gates. A run cannot pass without all 10 rows executed with artifacts. `C1` is tracked as a pilot scenario until runner support is fully wired.
 `qa:messaging:deep` also records `recovery_rejoin_contract.txt` as an additional integration guardrail.
 Reject-path scenarios (`S2`, `D2`, `G2`, `F2`) now include a guard observer and must show `guard_ws_parity: pass`.
+Runner determinism hardening:
+`qa:messaging:*` seeds run-scoped users/families (`<run_id>`-suffixed) and pre-seeds conversation recovery for matrix conversations before probes, so stale prior-message state does not poison history/read assertions.
 
 ## 7. Probe Command Patterns
 
@@ -148,10 +151,10 @@ BASE_URL="${QA_BASE_URL:-http://localhost:9000}"
 A_TOKEN="$(jq -r '.actors.a_tab1.access_token' "$ROOT/seed_matrix.json")"
 CONV_ID="$(jq -r '.conversations.direct.id' "$ROOT/seed_matrix.json")"
 
-curl -sS -X POST "$BASE_URL/api/test/broadcast" \
+curl -sS -X POST "$BASE_URL/api/v1/conversations/$CONV_ID/messages" \
   -H "Authorization: Bearer $A_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"conversation_type\":\"direct\",\"conversation_id\":\"$CONV_ID\",\"body\":\"qa-$RUN_ID-d1\"}" \
+  -d "{\"body\":\"qa-$RUN_ID-d1\"}" \
   | tee "$ROOT/D1_response.json"
 ```
 
@@ -248,6 +251,7 @@ Additional fields are present for specialized scenarios:
 1. `S2`/`D2`/`G2`/`F2`: `guard_ws_parity` must remain `pass` (`fail` means unauthorized fanout leak)
 2. `R1`: `revoke_status`, `healthy_has_new_msg`, `revoked_has_new_msg`, `revoked_has_security_state`
 3. `R2`: `reset_status`, `recover_status`, `recover_replay_status`, `replay_idempotent`, `observer_has_new_msg`
+4. `C1` (pilot): `late_join_history_has_first`, `late_join_live_has_second`, `message_id_continuity`
 
 ## 10. Gate Decision and Severity
 
