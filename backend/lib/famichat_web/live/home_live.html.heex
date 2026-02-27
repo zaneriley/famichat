@@ -43,6 +43,13 @@
       · MLS enforcement:
       <span class="font-mono"><%= if @mls_enforcement_enabled, do: "on", else: "off" %></span>
     </p>
+    <%= if not @mls_enforcement_enabled do %>
+      <p class="mt-1">
+        MLS is disabled in this runtime. To test MLS paths in the spike, set
+        <span class="font-mono">FAMICHAT_MLS_ENFORCEMENT=true</span>
+        and restart the app.
+      </p>
+    <% end %>
     <%= if @recovery_last_status do %>
       <p class="mt-1">
         Recovery:

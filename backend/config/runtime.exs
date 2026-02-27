@@ -59,6 +59,20 @@ config :famichat, :github_token, System.get_env("GITHUB_TOKEN")
 config :famichat,
   github_webhook_secret: System.get_env("GITHUB_WEBHOOK_SECRET")
 
+case System.get_env("FAMICHAT_MLS_ENFORCEMENT") do
+  nil ->
+    :ok
+
+  value ->
+    enabled? =
+      value
+      |> String.trim()
+      |> String.downcase()
+      |> then(&(&1 in ["1", "true", "yes", "on"]))
+
+    config :famichat, mls_enforcement: enabled?
+end
+
 vault_key_base64 =
   case {config_env(), System.get_env("FAMICHAT_VAULT_KEY")} do
     {:prod, nil} ->

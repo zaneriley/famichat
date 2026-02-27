@@ -159,7 +159,27 @@ defmodule FamichatWeb.HomeLive do
     if socket.assigns.channel_joined do
       {:noreply, push_event(socket, "disconnect_channel", %{})}
     else
-      {:noreply, push_event(socket, "connect_channel", %{})}
+      case Sessions.device_access_state(
+             socket.assigns.user_id,
+             socket.assigns.device_id
+           ) do
+        :ok ->
+          {:noreply, push_event(socket, "connect_channel", %{})}
+
+        {:error, reason} ->
+          reason_text = reason_to_string(reason)
+
+          {:noreply,
+           socket
+           |> assign(
+             channel_joined: false,
+             topic: nil,
+             security_reason: reason_text,
+             security_action: security_action_for_reason(reason_text),
+             error_message: "Cannot connect: #{message_error_text(reason_text)}"
+           )
+           |> put_system_notice("Connection blocked: #{reason_text}.")}
+      end
     end
   end
 
@@ -309,11 +329,21 @@ defmodule FamichatWeb.HomeLive do
   def handle_event("socket_error", %{"reason" => reason}, socket) do
     Logger.error("Socket error: #{inspect(reason)}")
 
+    reason_text = reason_to_string(reason)
+    error_text =
+      if reason_text == "connection_error" and
+           socket.assigns.security_reason == "revoked" do
+        "This device is revoked. Open a fresh link from /admin/spike."
+      else
+        "Socket error: #{reason_text}"
+      end
+
     {:noreply,
      assign(
        socket,
        channel_joined: false,
-       error_message: "Socket error: #{reason_to_string(reason)}"
+       topic: nil,
+       error_message: error_text
      )}
   end
 
@@ -332,6 +362,7 @@ defmodule FamichatWeb.HomeLive do
      assign(
        socket,
        channel_joined: false,
+       topic: nil,
        error_message: "Failed to join: #{reason_to_string(reason)}"
      )}
   end
@@ -534,6 +565,9 @@ defmodule FamichatWeb.HomeLive do
   defp message_error_text("device_revoked"),
     do: "This device is revoked. Open a fresh actor link."
 
+  defp message_error_text("revoked"),
+    do: "This device is revoked. Open a fresh actor link."
+
   defp message_error_text("pending_proposals"),
     do: "Conversation is waiting for pending commit to finish."
 
@@ -543,6 +577,7 @@ defmodule FamichatWeb.HomeLive do
     do: "recover_conversation_security_state"
 
   defp security_action_for_reason("device_revoked"), do: "reauth_required"
+  defp security_action_for_reason("revoked"), do: "reauth_required"
   defp security_action_for_reason("pending_proposals"), do: "wait_for_pending_commit"
   defp security_action_for_reason(_), do: nil
 
