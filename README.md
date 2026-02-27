@@ -1,242 +1,114 @@
 # Famichat
 
-Secure, Self-Hosted Family Communication Platform
+Private, self-hosted messaging platform for families and neighborhoods.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Project Status: Alpha](https://img.shields.io/badge/Project%20Status-Alpha-orange)](https://en.wikipedia.org/wiki/Software_release_life_cycle#Alpha)
 
-**A self-hosted, white-label video and chat application designed to create a secure and intimate digital space for families.**
+## Status (2026-02-27)
 
-## Project Status (2025-10-05)
+- Alpha.
+- Backend/API and cryptographic lifecycle correctness are the current focus.
+- MLS-first E2EE direction is accepted (ADR 010).
+- LiveView chat screens are a design and QA spike harness, not a final product client UX.
+- Not production-ready for broad user rollout.
 
-**Phase**: Alpha Development
-**Progress**: ████████░░░░░░░░░░░░ 40% to MVP
-**Current Sprint**: Sprint 7 - Real-Time Messaging (30% complete)
+## Product Direction
 
-### Quick Health Check
-- **Backend Core**: 70% complete (messaging + account flows; encryption pending)
-- **Frontend (LiveView)**: 40% complete (messaging UI in progress)
-- **Infrastructure**: 50% complete (dev ready, prod missing)
-- **Critical Blocker**: End-to-end encryption (Signal) still unimplemented
+1. Secure, private messaging with fail-closed behavior.
+2. Neighborhood-scale group communication with family intimacy.
+3. Canonical backend contracts that can be driven by humans, LLM tools, CLI, and alternate frontends.
+4. Fast feedback loops via repeatable QA gates and adversarial tests.
 
-## Navigation
+## What Works Now
 
-### Daily Work
-- **[STATUS.md](STATUS.md)** - Comprehensive current state (**READ THIS FOR DETAILED STATUS**)
-- **[CURRENT-SPRINT.md](CURRENT-SPRINT.md)** - Sprint 7 tasks (**YOUR DAILY FILE**)
-- **[ROADMAP.md](ROADMAP.md)** - Timeline & sprint history
+1. Auth and session/device lifecycle APIs.
+2. Real-time messaging across self/direct/group/family conversation types.
+3. Canonical v1 messaging read/write/recover endpoints.
+4. Explicit revoked-device and recovery-required semantics.
+5. MLS-backed vertical slice with persisted conversation security state.
+6. Repeatable messaging QA gates (`qa:messaging:fast`, `qa:messaging:deep`) with artifacts.
 
-### Development
-- **[backend/README.md](backend/README.md)** - Backend setup & commands
-- **[backend/guides/](backend/guides/)** - Technical implementation guides
-  - [Messaging Implementation](backend/guides/messaging-implementation.md)
-  - [Telemetry & Performance](backend/guides/telemetry.md)
-  - [Conversation Types](backend/guides/overview.md)
+## What Is Still In Progress
 
-### Deep Dives
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design decisions
-- **[docs/VISION.md](docs/VISION.md)** - Product vision & goals
-- **[docs/ENCRYPTION.md](docs/ENCRYPTION.md)** - Security architecture
-- **[docs/PERFORMANCE.md](docs/PERFORMANCE.md)** - Performance budgets & optimization
-- **[docs/API-DESIGN.md](docs/API-DESIGN.md)** - API principles & patterns
-- **[docs/ASH.md](docs/ASH.md)** - What Ash is, why we may use it, and adoption guardrails
-- **[docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md)** - Unresolved architectural decisions
-- **[docs/design/](docs/design/)** - UI/UX specifications
-- **[docs/decisions/](docs/decisions/)** - Architecture Decision Records (ADRs)
+1. Deeper MLS lifecycle semantics for commit/update/add/remove under churn.
+2. Remaining key lifecycle hardening for production trust posture.
+3. Multi-node/state-distribution strategy.
+4. Final user-facing product UX (current LiveView is intentionally disposable).
+5. Repo-wide lint/static baseline cleanup outside the current MLS slice.
 
-## Quick Start
+## Quick Start (Local)
 
-```bash
-# Start backend
-cd backend && docker-compose up
+Prerequisites:
 
-# Run tests
-cd backend && ./run mix test
+- Docker and Docker Compose
+- Node.js (used by websocket probe tooling in QA runbooks)
 
-# Check current sprint tasks
-cat CURRENT-SPRINT.md
-```
+Commands:
 
-## Key Metrics (Latest)
-
-- **Tests**: 98/98 passing
-- **Coverage**: Unknown (needs measurement)
-- **Backend files**: 49 Elixir modules
-- **Migrations**: 9 applied
-- **Performance**: All operations < 200ms budget
-
-## What Works vs What Doesn't
-
-### Working
-- Text messaging (send/retrieve with pagination)
-- Conversations (direct, self, group with role management)
-- Real-time channels (Phoenix Channels configured)
-- Telemetry & monitoring (all critical paths instrumented)
-- Conversation hiding/visibility management
-
-### Missing (Critical Blockers)
-- **User authentication** (CRITICAL - no login/registration! Sprint 8)
-- **Actual encryption** (CRITICAL - messages stored in plaintext! Sprint 9)
-  - Encryption metadata infrastructure exists
-  - No Signal Protocol implementation yet (Rust NIF + libsignal-client)
-- **Production deployment** (no prod config)
-
-### In Progress (Sprint 7)
-- Channel routing & authorization
-- Broadcast testing
-- Client integration documentation
-- Encryption serialization tests
-
-## Documentation Structure
-
-```
-/
-├── README.md                    # ← You are here
-├── STATUS.md                    # Detailed current state
-├── CURRENT-SPRINT.md            # Active sprint tasks
-├── ROADMAP.md                   # Sprint timeline
-│
-├── /backend/
-│   ├── README.md               # Backend setup (see below for quick commands)
-│   └── /guides/                # Technical implementation guides
-│       ├── messaging-implementation.md
-│       ├── telemetry.md
-│       └── overview.md
-│
-├── /docs/
-│   ├── ARCHITECTURE.md         # System design
-│   ├── VISION.md               # Product vision
-│   ├── API-DESIGN.md           # API patterns
-│   ├── ENCRYPTION.md           # Security model
-│   ├── PERFORMANCE.md          # Performance budgets & optimization
-│   ├── OPEN-QUESTIONS.md       # Unresolved architectural decisions
-│   │
-│   ├── /design/                # UI/UX specs
-│   │   ├── information-architecture.md
-│   │   └── onboarding-flows.md
-│   │
-│   ├── /decisions/             # Architecture Decision Records
-│   │   ├── 001-conversation-types.md
-│   │   ├── 002-encryption-approach.md
-│   │   ├── 003-telemetry-strategy.md
-│   │   ├── 004-refresh-token-rotation.md
-│   │   └── 005-encryption-metadata-schema.md
-│   │
-│   └── /sprints/               # Sprint archive
-│       ├── sprints-01-02-foundation.md
-│       └── sprints-03-06-messaging.md
-│
-└── /project-docs/archive/      # Historical docs
-```
-
-## Tech Stack
-
-- **Backend**: Phoenix 1.7, Elixir 1.13+
-- **Database**: PostgreSQL 16
-- **Real-time**: Phoenix Channels (WebSocket)
-- **Frontend**: Phoenix LiveView (web UI for Layers 0-3)
-- **Infrastructure**: Docker, Docker Compose
-- **Quality**: Credo, Sobelow, Dialyzer, ExCoveralls
-- **Future**: Native mobile app (deferred until Layer 4)
-
-## Current Focus
-
-**This Week**:
-1. Complete Sprint 7 channel authorization (Story 7.1.3)
-2. Start Accounts context (Story 7.9) - CRITICAL for auth
-3. Measure test coverage
-
-**Next Sprints**:
-- **Sprint 8 (2 weeks)**: Authentication + LiveView messaging UI
-- **Sprint 9 (3 weeks)**: Signal Protocol E2EE implementation (server-side Rust NIF)
-- **Sprint 10 (2 weeks)**: Layer 0 dogfooding with encryption enabled
-
-## Getting Started Guide
-
-### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/)
-- [Lefthook](https://github.com/evilmartians/lefthook) for Git hooks management
-
-### Setup Steps
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-user/famichat.git
-   cd famichat
-   ```
-
-2. **Set up Lefthook for Git hooks:**
-   ```bash
-   # Download for your platform from: https://github.com/evilmartians/lefthook/releases
-   # Initialize in the repository
-   lefthook install
-   ```
-
-3. **Start the Docker containers:**
-   ```bash
-   docker-compose up --build
-   ```
-
-4. **Verify the Backend:**
-   Open [http://localhost:8001](http://localhost:8001) - should see "Hello from Famichat!"
-
-### Development Commands
-
-**Backend (Phoenix/Elixir)**:
 ```bash
 cd backend
 
-./run mix test              # Run tests
-./run iex -S mix           # Interactive console
-./run mix format           # Format code
-./run mix credo            # Code analysis
-./run mix ecto.migrate     # Run migrations
+# Start local stack
+docker compose up -d --remove-orphans
+
+# See available task runner commands
+./run help
+
+# Focused backend verification
+./run qa:messaging:fast
+./run qa:messaging:deep
+./run docs:boundary-check
 ```
 
-**Frontend (Phoenix LiveView)**:
-Open [http://localhost:8001](http://localhost:8001) in your browser to view the LiveView UI.
+Local manual spike routes:
 
-### Git Hooks (Lefthook)
+1. `http://localhost:9000/admin/spike` (actor-link launcher)
+2. `http://localhost:9000/en` (throwaway chat harness over real backend paths)
 
-- **Pre-commit**: Starts Docker, waits for services, formats staged files
-- **Pre-push**: Runs format checks, linting, tests (allows push even if fails)
-- **Configuration**: See `.lefthook.yml` files
+Note: Port can differ if you changed `backend/.env` (`DOCKER_WEB_PORT_FORWARD` / `PORT`).
 
-## Architecture Overview
+## Canonical API Surfaces
 
+1. `GET /api/v1/conversations/:id/messages`
+2. `POST /api/v1/conversations/:id/messages`
+3. `POST /api/v1/conversations/:id/security/recover`
+4. `/socket` (Phoenix channel transport)
+
+`/api/test/*` routes exist only as dev/test harness helpers and are not the product contract.
+
+## Read These Docs First
+
+1. [Current reality and priorities](docs/NOW.md)
+2. [Current sprint](docs/sprints/CURRENT-SPRINT.md)
+3. [Sprint and program status](docs/sprints/STATUS.md)
+4. [Messaging QA runbook](docs/runbooks/messaging-qa-runbook.md)
+5. [API design and contract direction](docs/API-DESIGN.md)
+6. [Product vision](docs/VISION.md)
+7. [E2EE architecture](docs/ENCRYPTION.md)
+8. [ADR 010: MLS-first direction](docs/decisions/010-mls-first-for-neighborhood-scale.md)
+9. [ADR 006: Signal direction (deprecated)](docs/decisions/006-signal-protocol-for-e2ee.md)
+
+## Repo Structure
+
+```text
+.
+├── backend/
+│   ├── run
+│   ├── lib/
+│   ├── test/
+│   └── infra/mls_nif/
+├── docs/
+│   ├── NOW.md
+│   ├── API-DESIGN.md
+│   ├── ENCRYPTION.md
+│   ├── VISION.md
+│   ├── runbooks/
+│   ├── sprints/
+│   └── decisions/
+└── README.md
 ```
-+---------------------+      WebSocket/Phoenix Channels     +---------------------+
-| Phoenix LiveView UI | <-----------------------------------> | Phoenix Backend     |
-| (Web Browser)       |                                     +---------------------+
-+---------------------+                                         |
-      |                                                         | Controllers, Channels,
-      | LiveView Hooks                                          | Services, Telemetry
-      | WebSocket events                                        |
-      v                                                         v
-                                                         +---------------------+
-                                                         | PostgreSQL Database |
-                                                         +---------------------+
-                                                                 ^
-                                                                 | (Metadata, Text, Media Refs)
-                                                                 |
-                                                         +---------------------+
-                                                         | Object Storage      |
-                                                         | AWS S3, MinIO, etc. |
-                                                         +---------------------+
-                                                                 ^
-                                                                 | (Rich Media - future)
-```
 
-## Additional Resources
+## License
 
-- **Detailed Status**: See [STATUS.md](STATUS.md) for comprehensive implementation status
-- **API Documentation**: Run `mix docs` in backend/ directory
-- **Sprint Planning**: See [ROADMAP.md](ROADMAP.md) for timeline
-- **Architecture Decisions**: See [docs/decisions/](docs/decisions/) for ADRs
-- **Design Specs**: See [docs/design/](docs/design/) for UI/UX documentation
-
----
-
-**Last Updated**: 2025-10-05
-**License**: MIT
-**Status**: Alpha - Not production ready
+MIT
