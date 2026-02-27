@@ -16,9 +16,17 @@ defmodule FamichatWeb.HomeLiveTest do
 
       assert render(view) =~ "Actor:"
       assert render(view) =~ "alice"
-      assert render(view) =~ "History is loaded from storage on page load"
+      assert render(view) =~ "/admin/spike"
+      assert render(view) =~ "Device:"
       assert has_element?(view, "#message-input:not([disabled])")
-      refute has_element?(view, "[data-role='switch-self']")
+    end
+
+    test "uses deterministic device id from query for shareable actor links", %{
+      conn: conn
+    } do
+      {:ok, view, _html} = live(conn, "/en?user=alice&device=device-2")
+
+      assert render(view) =~ "spike-alice-device-2"
     end
   end
 end

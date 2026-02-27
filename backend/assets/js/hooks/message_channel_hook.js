@@ -122,6 +122,13 @@ const MessageChannelHook = {
         // This implements the client ACK mechanism required by Story 7.5.2.3
         this.sendAcknowledgment(messageId);
       });
+
+      this.channel.on("security_state", (payload) => {
+        this.pushEvent("security_state_update", {
+          reason: payload.reason || "unknown",
+          action: payload.action || null,
+        });
+      });
     } catch (error) {
       console.error("[MessageChannel] Error during connect:", error);
       this.pushEvent("socket_error", { reason: "initialization_error" });

@@ -1,51 +1,66 @@
 <div
   id="kitchen-table-chat"
-  class="ac-canvas flex flex-col h-[100dvh] w-full md:max-w-xl mx-auto relative overflow-hidden md:border-x-2 md:border-[var(--color-brown-200)] md:shadow-2xl"
+  class="ac-canvas flex h-[100dvh] w-full flex-col overflow-hidden md:mx-auto md:max-w-3xl md:border-x-2 md:border-[var(--color-brown-200)] md:shadow-2xl"
   phx-hook="MessageChannel"
   data-conversation-type={@conversation_type}
   data-conversation-id={@conversation_id}
   data-user-id={@user_id}
   data-auth-token={@auth_token || "guest-token"}
 >
-  <!-- Header -->
-  <header class="ac-header flex items-center justify-between p-md pb-sm z-10 shrink-0">
-    <div class="flex items-center gap-sm">
-      <div class="flex flex-col">
-        <h1 class="text-lg font-bold text-[var(--text-base)] leading-none">
-          The Kitchen
-        </h1>
-        <span class="text-[var(--text-muted)] text-xs">
-          Actor: <span class="font-mono"><%= @test_username %></span>
-        </span>
-      </div>
+  <header class="ac-header flex items-center justify-between gap-sm p-md">
+    <div class="flex flex-col gap-1">
+      <h1 class="text-lg font-bold text-[var(--text-base)] leading-none">
+        Spike Chat
+      </h1>
+      <p class="text-xs text-[var(--text-muted)]">
+        Actor: <span class="font-mono"><%= @test_username %></span>
+        · Device:
+        <span class="font-mono"><%= @device_id || "none" %></span>
+      </p>
     </div>
-    <div class="flex items-center gap-sm">
-      <button
-        phx-click="connect-channel"
-        class={[
-          "ac-primary-button text-xs px-3 py-2 rounded-full",
-          if(@channel_joined,
-            do: "bg-[var(--signal-error)]",
-            else: "bg-[var(--signal-success)]"
-          )
-        ]}
-      >
-        <%= if @channel_joined, do: "Disconnect", else: "Connect" %>
-      </button>
-    </div>
+    <button
+      phx-click="connect-channel"
+      class={[
+        "ac-primary-button rounded-full px-3 py-2 text-xs",
+        if(@channel_joined,
+          do: "bg-[var(--signal-error)]",
+          else: "bg-[var(--signal-success)]"
+        )
+      ]}
+    >
+      <%= if @channel_joined, do: "Disconnect", else: "Connect" %>
+    </button>
   </header>
 
-  <div class="px-md pb-sm flex items-center justify-between gap-sm">
-    <span class="text-xs font-medium text-[var(--text-base)]">Family chat</span>
-    <span class="text-[10px] text-[var(--text-muted)]">
-      <%= if @channel_joined, do: "Connected", else: "Disconnected" %>
-    </span>
-  </div>
+  <section class="px-md pb-sm text-xs text-[var(--text-muted)]">
+    <p>
+      Use <a href="/admin/spike" class="underline">/admin/spike</a> to open/share actor links.
+      This is a throwaway design-spike harness over real backend paths.
+    </p>
+    <p class="mt-1">
+      Topic status:
+      <span class="font-mono"><%= @topic || "not_joined" %></span>
+      · MLS enforcement:
+      <span class="font-mono"><%= if @mls_enforcement_enabled, do: "on", else: "off" %></span>
+    </p>
+    <%= if @recovery_last_status do %>
+      <p class="mt-1">
+        Recovery:
+        <span class="font-mono"><%= @recovery_last_status %></span>
+      </p>
+    <% end %>
+  </section>
 
-  <div class="px-md pb-sm text-[10px] text-[var(--text-muted)]">
-    History is loaded from storage on page load. Connect enables live send/receive.
-    Use `?user=alice` / `?user=bob` in separate tabs for cross-user QA.
-  </div>
+  <%= if @security_reason not in [nil, ""] do %>
+    <div class="mx-md mb-sm rounded-md border border-[var(--signal-warning)] bg-white px-3 py-2 text-xs text-[var(--text-base)]">
+      <strong>Security state:</strong>
+      <span class="font-mono"><%= @security_reason %></span>
+      <%= if @security_action not in [nil, ""] do %>
+        · action:
+        <span class="font-mono"><%= @security_action %></span>
+      <% end %>
+    </div>
+  <% end %>
 
   <%= if @error_message do %>
     <div
@@ -55,58 +70,107 @@
       <%= @error_message %>
     </div>
   <% end %>
-  <!-- Messages Area -->
-  <div
-    id="messages-scroll-container"
-    class="flex-grow overflow-y-auto p-md flex flex-col gap-md pb-xl"
-    phx-update="stream"
-  >
-    <div id="messages-date-separator" class="text-center my-md">
-      <span class="ac-date-badge text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
-        Today
-      </span>
+
+  <section class="mx-md mb-sm grid grid-cols-1 gap-2 rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3 text-xs md:grid-cols-2">
+    <div class="flex items-end gap-2">
+      <div class="min-w-0 grow">
+        <label class="mb-1 block text-[var(--text-muted)]">Revoke device id</label>
+        <input
+          type="text"
+          class="ac-text-input w-full"
+          value={@revoke_target}
+          phx-keyup="update-revoke-target"
+          phx-debounce="150"
+          name="value"
+          placeholder="spike-zane-device-2"
+        />
+      </div>
+      <button class="ac-primary-button whitespace-nowrap px-3 py-2" phx-click="revoke-target-device">
+        Revoke
+      </button>
     </div>
 
+    <div class="flex items-end gap-2">
+      <div class="min-w-0 grow">
+        <label class="mb-1 block text-[var(--text-muted)]">Recovery ref</label>
+        <input
+          type="text"
+          class="ac-text-input w-full"
+          value={@recovery_ref}
+          phx-keyup="update-recovery-ref"
+          phx-debounce="150"
+          name="value"
+          placeholder="spike-recovery-..."
+        />
+      </div>
+      <button
+        class="ac-primary-button whitespace-nowrap px-3 py-2"
+        phx-click="recover-conversation-security-state"
+      >
+        Recover
+      </button>
+    </div>
+
+    <div class="flex gap-2 md:col-span-2">
+      <button
+        class="ac-primary-button px-3 py-2"
+        phx-click="reset-conversation-security-state"
+      >
+        Reset Security State
+      </button>
+      <button class="ac-primary-button px-3 py-2" phx-click="reload-history">
+        Reload History
+      </button>
+    </div>
+  </section>
+
+  <div
+    id="messages-scroll-container"
+    class="flex grow flex-col gap-md overflow-y-auto p-md pb-xl"
+    phx-update="stream"
+  >
     <%= for {dom_id, message} <- @streams.messages do %>
       <div
         id={dom_id}
         class={[
-          "flex flex-col max-w-[85%]",
-          if(message.outgoing,
-            do: "self-end items-end",
-            else: "self-start items-start"
-          )
+          "flex max-w-[92%] flex-col",
+          cond do
+            message.system_message -> "self-center items-center"
+            message.outgoing -> "self-end items-end"
+            true -> "self-start items-start"
+          end
         ]}
       >
-        <div class="flex items-baseline gap-2 mb-1">
-          <span class="text-[var(--text-base)] font-bold text-sm">
+        <div class="mb-1 flex items-baseline gap-2">
+          <span class="text-sm font-bold text-[var(--text-base)]">
             <%= message.sender_name %>
           </span>
-          <span class="text-[var(--text-muted)] text-xs">
-            <%= Calendar.strftime(message.timestamp, "%H:%M") %>
+          <span class="text-xs text-[var(--text-muted)]">
+            <%= Calendar.strftime(message.timestamp, "%H:%M:%S") %>
           </span>
         </div>
         <div class={[
           "ac-chat-bubble",
-          if(message.outgoing,
-            do: "ac-chat-bubble-outgoing",
-            else: "ac-chat-bubble-incoming"
-          )
+          cond do
+            message.system_message -> "rounded-md border border-[var(--color-brown-200)] bg-white/70 px-3 py-2"
+            message.outgoing -> "ac-chat-bubble-outgoing"
+            true -> "ac-chat-bubble-incoming"
+          end
         ]}>
-          <p class="text-[var(--text-base)] leading-relaxed">
+          <p class="leading-relaxed text-[var(--text-base)]">
             <%= message.body %>
           </p>
         </div>
       </div>
     <% end %>
   </div>
-  <!-- Input Area -->
-  <div class="ac-input-area p-md shrink-0 z-10 pb-xl">
-    <div class="flex items-center gap-sm relative">
+
+  <div class="ac-input-area shrink-0 p-md pb-xl">
+    <div class="relative flex items-center gap-sm">
       <input
         type="text"
         id="message-input"
-        class="ac-text-input flex-grow"
+        class="ac-text-input grow"
         placeholder="Type a message..."
         value={@current_message}
         phx-keyup="update-message"
@@ -120,23 +184,6 @@
         disabled={!@channel_joined or String.trim(@current_message || "") == ""}
       >
         <Heroicons.paper_airplane solid class="h-5 w-5" />
-      </button>
-    </div>
-
-    <div class="flex items-center justify-between mt-sm px-1">
-      <div class="flex items-center gap-md">
-        <button class="ac-icon-button text-[var(--text-muted)] hover:text-[var(--signal-primary)] transition-colors">
-          <Heroicons.paper_clip solid class="h-6 w-6" />
-        </button>
-        <button class="ac-icon-button text-[var(--text-muted)] hover:text-[var(--signal-primary)] transition-colors">
-          <Heroicons.camera solid class="h-6 w-6" />
-        </button>
-        <button class="ac-icon-button text-[var(--text-muted)] hover:text-[var(--signal-primary)] transition-colors">
-          <Heroicons.microphone solid class="h-6 w-6" />
-        </button>
-      </div>
-      <button class="ac-icon-button text-[var(--signal-primary)] hover:scale-110 transition-transform">
-        <Heroicons.envelope_open solid class="h-6 w-6" />
       </button>
     </div>
   </div>

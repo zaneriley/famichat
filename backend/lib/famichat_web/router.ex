@@ -112,6 +112,7 @@ defmodule FamichatWeb.Router do
       pipe_through [:admin]
 
       live_session :admin, on_mount: {FamichatWeb.LiveHelpers, :admin} do
+        live "/spike", SpikeStartLive, :index
         # Canonical message QA route
         live "/message", MessageTestLive, :index
         # Compatibility alias retained for existing links/scripts

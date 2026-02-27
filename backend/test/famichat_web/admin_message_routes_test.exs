@@ -5,6 +5,9 @@ defmodule FamichatWeb.AdminMessageRoutesTest do
     test "serves canonical /admin/message and compatibility alias", %{
       conn: conn
     } do
+      spike = get(conn, "/admin/spike")
+      assert html_response(spike, 200) =~ "Design Spike Launcher"
+
       canonical = get(conn, "/admin/message")
       assert html_response(canonical, 200) =~ "message-test"
 
