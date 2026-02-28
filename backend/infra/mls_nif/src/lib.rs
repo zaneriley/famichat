@@ -2,9 +2,9 @@
 
 use openmls::prelude::{
     tls_codec::Deserialize as _, tls_codec::Serialize as _, BasicCredential, Ciphersuite,
-    CreateMessageError, CredentialWithKey, GroupId, KeyPackage, MlsGroup, MlsGroupCreateConfig,
-    MlsGroupJoinConfig, MlsGroupStateError, MlsMessageBodyIn, MlsMessageIn, OpenMlsProvider as _,
-    ProcessedMessageContent, StagedWelcome,
+    CreateMessageError, CredentialWithKey, GroupId, KeyPackage, LeafNodeIndex, MlsGroup,
+    MlsGroupCreateConfig, MlsGroupJoinConfig, MlsGroupStateError, MlsMessageBodyIn, MlsMessageIn,
+    OpenMlsProvider as _, ProcessedMessageContent, StagedWelcome,
 };
 use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::OpenMlsRustCrypto;
@@ -447,9 +447,168 @@ pub fn mls_add(params: &Payload) -> MlsResult {
 }
 
 pub fn mls_remove(params: &Payload) -> MlsResult {
-    lifecycle_ok("mls_remove", params, |payload| {
-        payload.insert("staged".to_owned(), "true".to_owned());
+    let operation = "mls_remove";
+    with_required_group(operation, params, |group_id| {
+        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
+            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
+            e.into_inner()
+        });
+
+        if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
+            if let Some(restored) =
+                restore_group_session_from_snapshot(&group_id, params, operation)?
+            {
+                guard.insert(group_id.clone(), restored);
+            }
+        }
+
+        let session = guard.get_mut(&group_id).ok_or_else(|| {
+            MlsError::with_code(
+                ErrorCode::StorageInconsistent,
+                operation,
+                "missing_group_state",
+            )
+        })?;
+
+        // Determine which leaf index to remove.
+        let leaf_index = determine_remove_target(params, operation)?;
+
+        // Atomically propose and commit the removal.
+        // Returns (commit_out, Option<welcome_out>, Option<group_info>).
+        let (commit_out, _welcome_opt, _group_info_opt) = session
+            .sender
+            .group
+            .remove_members(
+                &session.sender.provider,
+                &session.sender.signer,
+                &[leaf_index],
+            )
+            .map_err(|e| {
+                let mut details = Payload::new();
+                details.insert("operation".to_owned(), operation.to_owned());
+                details.insert("reason".to_owned(), format!("{e:?}"));
+                MlsError {
+                    code: ErrorCode::CommitRejected,
+                    details,
+                }
+            })?;
+
+        // Serialize the commit message to return as commit_ciphertext.
+        let commit_bytes = commit_out.tls_serialize_detached().map_err(|_| {
+            MlsError::with_code(ErrorCode::CryptoFailure, operation, "serialize_failed")
+        })?;
+        let commit_ciphertext = encode_hex(&commit_bytes);
+
+        // The sender's group is now in PendingCommit state; merge it to advance epoch.
+        session
+            .sender
+            .group
+            .merge_pending_commit(&session.sender.provider)
+            .map_err(|_| {
+                MlsError::with_code(
+                    ErrorCode::CommitRejected,
+                    operation,
+                    "merge_pending_commit_failed",
+                )
+            })?;
+
+        // Have the recipient process and merge the commit so their group state reflects
+        // the removal. RFC §12.4.2: the removed member must NOT continue sending, but
+        // we CAN process the commit on the co-located recipient session to update
+        // is_active(). We deserialize the commit bytes and feed them to the recipient.
+        let recipient_removed = {
+            let mut slice = commit_bytes.as_slice();
+            let msg_in = MlsMessageIn::tls_deserialize(&mut slice).map_err(|_| {
+                MlsError::with_code(
+                    ErrorCode::CryptoFailure,
+                    operation,
+                    "recipient_commit_deserialize_failed",
+                )
+            })?;
+            let protocol_message = msg_in.try_into_protocol_message().map_err(|_| {
+                MlsError::with_code(
+                    ErrorCode::CryptoFailure,
+                    operation,
+                    "recipient_commit_protocol_message_failed",
+                )
+            })?;
+            let processed = session
+                .recipient
+                .group
+                .process_message(&session.recipient.provider, protocol_message)
+                .map_err(|_| {
+                    MlsError::with_code(
+                        ErrorCode::CommitRejected,
+                        operation,
+                        "recipient_commit_process_failed",
+                    )
+                })?;
+            match processed.into_content() {
+                ProcessedMessageContent::StagedCommitMessage(staged_commit) => {
+                    session
+                        .recipient
+                        .group
+                        .merge_staged_commit(&session.recipient.provider, *staged_commit)
+                        .map_err(|_| {
+                            MlsError::with_code(
+                                ErrorCode::CommitRejected,
+                                operation,
+                                "recipient_merge_staged_commit_failed",
+                            )
+                        })?;
+                }
+                _ => {
+                    return Err(MlsError::with_code(
+                        ErrorCode::CommitRejected,
+                        operation,
+                        "recipient_unexpected_message_type",
+                    ));
+                }
+            }
+            // After merging, the removed member's group is Inactive.
+            !session.recipient.group.is_active()
+        };
+
+        // Read epoch from sender's group after the operation.
+        let epoch = session.sender.group.epoch().as_u64().to_string();
+
+        let snapshot = build_group_session_snapshot(session, operation)?;
+
+        let mut payload = Payload::new();
+        payload.insert("group_id".to_owned(), group_id);
+        payload.insert("epoch".to_owned(), epoch);
+        payload.insert("commit_ciphertext".to_owned(), commit_ciphertext);
+        payload.insert(
+            "recipient_removed".to_owned(),
+            recipient_removed.to_string(),
+        );
+        payload.insert("status".to_owned(), "ok".to_owned());
+        payload.extend(snapshot);
+        Ok(payload)
     })
+}
+
+fn determine_remove_target(params: &Payload, operation: &str) -> Result<LeafNodeIndex, MlsError> {
+    if let Some(leaf_index_str) = non_empty(params, "leaf_index") {
+        let index: u32 = leaf_index_str.parse().map_err(|_| {
+            MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_leaf_index")
+        })?;
+        return Ok(LeafNodeIndex::new(index));
+    }
+    match non_empty(params, "remove_target").as_deref() {
+        Some("recipient") => Ok(LeafNodeIndex::new(1)),
+        Some("sender") => Ok(LeafNodeIndex::new(0)),
+        Some(_) => Err(MlsError::with_code(
+            ErrorCode::InvalidInput,
+            operation,
+            "unknown_remove_target",
+        )),
+        None => Err(MlsError::with_code(
+            ErrorCode::InvalidInput,
+            operation,
+            "missing_remove_target",
+        )),
+    }
 }
 
 pub fn merge_staged_commit(params: &Payload) -> MlsResult {
@@ -1444,7 +1603,7 @@ fn mls_add_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     encode_result(env, mls_add(&payload))
 }
 
-#[rustler::nif(name = "mls_remove")]
+#[rustler::nif(name = "mls_remove", schedule = "DirtyCpu")]
 fn mls_remove_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     let payload = payload_from_nif(params);
     encode_result(env, mls_remove(&payload))
@@ -1662,14 +1821,100 @@ mod tests {
 
     #[test]
     fn lifecycle_operations_return_contract_shape() {
-        let operations = [mls_commit, mls_update, mls_add, mls_remove];
+        // mls_commit, mls_update, mls_add are still lifecycle stubs; mls_remove is now real.
+        let stub_operations = [mls_commit, mls_update, mls_add];
 
-        for operation in operations {
+        for operation in stub_operations {
             let result = operation(&payload(&[("group_id", "group-1")]))
                 .expect("lifecycle call should succeed");
             assert_eq!(result.get("group_id"), Some(&"group-1".to_owned()));
             assert_eq!(result.get("status"), Some(&"ok".to_owned()));
         }
+    }
+
+    #[test]
+    fn mls_remove_requires_group_state_and_remove_target() {
+        // Without group state, mls_remove must fail closed.
+        let group_id = unique_group_id("group-remove-missing");
+        let error = mls_remove(&payload(&[
+            ("group_id", &group_id),
+            ("remove_target", "recipient"),
+        ]))
+        .expect_err("mls_remove without group state must fail");
+        assert_eq!(error.code, ErrorCode::StorageInconsistent);
+        assert_eq!(
+            error.details.get("reason"),
+            Some(&"missing_group_state".to_owned())
+        );
+    }
+
+    #[test]
+    fn mls_remove_real_removes_recipient_and_advances_epoch() {
+        let group_id = unique_group_id("group-real-remove");
+
+        let group = create_group(&payload(&[
+            ("group_id", &group_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect("group must be created");
+
+        let epoch_before: u64 = group
+            .get("epoch")
+            .expect("epoch in group payload")
+            .parse()
+            .expect("epoch parses as u64");
+
+        // Build the remove payload using the session snapshot from create_group.
+        let mut remove_params = Payload::new();
+        remove_params.insert("group_id".to_owned(), group_id.clone());
+        remove_params.insert("remove_target".to_owned(), "recipient".to_owned());
+        for key in [
+            "session_sender_storage",
+            "session_recipient_storage",
+            "session_sender_signer",
+            "session_recipient_signer",
+            "session_cache",
+        ] {
+            if let Some(value) = group.get(key) {
+                remove_params.insert(key.to_owned(), value.clone());
+            }
+        }
+
+        let remove_result = mls_remove(&remove_params).expect("mls_remove must succeed");
+
+        let epoch_after: u64 = remove_result
+            .get("epoch")
+            .expect("epoch in remove payload")
+            .parse()
+            .expect("epoch parses as u64");
+
+        assert_eq!(
+            epoch_after,
+            epoch_before + 1,
+            "epoch must advance by 1 after remove"
+        );
+
+        let commit_ciphertext = remove_result
+            .get("commit_ciphertext")
+            .expect("commit_ciphertext in remove payload");
+        assert!(
+            !commit_ciphertext.is_empty(),
+            "commit_ciphertext must be non-empty"
+        );
+
+        let recipient_removed = remove_result
+            .get("recipient_removed")
+            .expect("recipient_removed in remove payload");
+        assert_eq!(recipient_removed, "true", "recipient must be removed");
+
+        assert_eq!(
+            remove_result.get("status"),
+            Some(&"ok".to_owned()),
+            "status must be ok"
+        );
     }
 
     #[test]

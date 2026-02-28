@@ -87,11 +87,12 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
   end
 
   test "lifecycle operation aliases return ok and include operation labels" do
+    # mls_remove is now a real implementation (not a stub) and requires group state.
+    # It is tested separately in the mls_remove spirit tests describe block.
     for operation <- [
           &MLS.mls_commit/1,
           &MLS.mls_update/1,
-          &MLS.mls_add/1,
-          &MLS.mls_remove/1
+          &MLS.mls_add/1
         ] do
       assert {:ok, payload} = operation.(%{group_id: "group-nif-2", epoch: 2})
       assert fetch(payload, "group_id") == "group-nif-2"
@@ -467,6 +468,165 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
     assert Map.has_key?(payload, "epoch") or Map.has_key?(payload, :epoch)
     assert Map.has_key?(payload, "session_sender_storage") or
              Map.has_key?(payload, :session_sender_storage)
+  end
+
+  describe "mls_remove spirit tests" do
+    setup do
+      group_id = "group-remove-spirit-#{System.unique_integer([:positive])}"
+
+      {:ok, group_payload} =
+        MLS.create_group(%{
+          group_id: group_id,
+          ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"
+        })
+
+      %{group_id: group_id, group_payload: group_payload}
+    end
+
+    test "epoch advances after mls_remove", %{group_id: group_id, group_payload: group_payload} do
+      epoch_before = String.to_integer(Map.get(group_payload, "epoch") || Map.get(group_payload, :epoch))
+
+      assert {:ok, remove_payload} =
+               MLS.mls_remove(
+                 Map.merge(group_payload, %{
+                   "group_id" => group_id,
+                   "remove_target" => "recipient"
+                 })
+               )
+
+      remove_epoch =
+        String.to_integer(Map.get(remove_payload, "epoch") || Map.get(remove_payload, :epoch))
+
+      assert remove_epoch == epoch_before + 1,
+             "epoch must advance by exactly 1 after remove, got #{remove_epoch} expected #{epoch_before + 1}"
+
+      assert {:ok, msg_payload} =
+               MLS.create_application_message(
+                 Map.merge(remove_payload, %{
+                   "group_id" => group_id,
+                   "body" => "post-remove message"
+                 })
+               )
+
+      msg_epoch =
+        String.to_integer(Map.get(msg_payload, "epoch") || Map.get(msg_payload, :epoch))
+
+      assert msg_epoch == remove_epoch,
+             "create_application_message epoch must equal mls_remove epoch"
+    end
+
+    test "removed member cannot send after mls_remove", %{
+      group_id: group_id,
+      group_payload: group_payload
+    } do
+      assert {:ok, remove_payload} =
+               MLS.mls_remove(
+                 Map.merge(group_payload, %{
+                   "group_id" => group_id,
+                   "remove_target" => "recipient"
+                 })
+               )
+
+      # Attempt to send as the removed member — must fail
+      # The removed member's session snapshot is in remove_payload under recipient keys
+      assert {:error, _code, _details} =
+               MLS.create_application_message(%{
+                 "group_id" => group_id,
+                 "body" => "should fail",
+                 "session_sender_storage" =>
+                   Map.get(remove_payload, "session_recipient_storage") ||
+                     Map.get(remove_payload, :session_recipient_storage),
+                 "session_sender_signer" =>
+                   Map.get(remove_payload, "session_recipient_signer") ||
+                     Map.get(remove_payload, :session_recipient_signer),
+                 "session_recipient_storage" =>
+                   Map.get(remove_payload, "session_sender_storage") ||
+                     Map.get(remove_payload, :session_sender_storage),
+                 "session_recipient_signer" =>
+                   Map.get(remove_payload, "session_sender_signer") ||
+                     Map.get(remove_payload, :session_sender_signer),
+                 "session_cache" =>
+                   Map.get(remove_payload, "session_cache") ||
+                     Map.get(remove_payload, :session_cache)
+               })
+    end
+
+    test "group size decreases after mls_remove", %{
+      group_id: group_id,
+      group_payload: group_payload
+    } do
+      {:ok, before_payload} =
+        MLS.list_member_credentials(
+          Map.merge(group_payload, %{"group_id" => group_id})
+        )
+
+      before_count =
+        (Map.get(before_payload, "credentials") || Map.get(before_payload, :credentials))
+        |> String.split(",", trim: true)
+        |> length()
+
+      assert before_count == 2
+
+      assert {:ok, remove_payload} =
+               MLS.mls_remove(
+                 Map.merge(group_payload, %{
+                   "group_id" => group_id,
+                   "remove_target" => "recipient"
+                 })
+               )
+
+      {:ok, after_payload} =
+        MLS.list_member_credentials(
+          Map.merge(remove_payload, %{"group_id" => group_id})
+        )
+
+      after_count =
+        (Map.get(after_payload, "credentials") || Map.get(after_payload, :credentials))
+        |> String.split(",", trim: true)
+        |> length()
+
+      assert after_count == 1, "group must have 1 member after remove, got #{after_count}"
+    end
+
+    test "commit_ciphertext is non-empty in remove payload", %{
+      group_id: group_id,
+      group_payload: group_payload
+    } do
+      assert {:ok, remove_payload} =
+               MLS.mls_remove(
+                 Map.merge(group_payload, %{
+                   "group_id" => group_id,
+                   "remove_target" => "recipient"
+                 })
+               )
+
+      commit_ciphertext = Map.get(remove_payload, "commit_ciphertext", "")
+      assert byte_size(commit_ciphertext) > 0,
+             "commit_ciphertext must be non-empty; lifecycle_ok stub never calls remove_members()"
+    end
+
+    test "replay of mls_remove fails when using post-remove snapshot", %{
+      group_id: group_id,
+      group_payload: group_payload
+    } do
+      assert {:ok, remove_payload} =
+               MLS.mls_remove(
+                 Map.merge(group_payload, %{
+                   "group_id" => group_id,
+                   "remove_target" => "recipient"
+                 })
+               )
+
+      # Attempt remove again using the post-remove snapshot — recipient is already gone
+      # from the ratchet tree so remove_members will fail with an invalid leaf index.
+      assert {:error, _code, _details} =
+               MLS.mls_remove(
+                 Map.merge(remove_payload, %{
+                   "group_id" => group_id,
+                   "remove_target" => "recipient"
+                 })
+               )
+    end
   end
 
   defp fetch(payload, key) do
