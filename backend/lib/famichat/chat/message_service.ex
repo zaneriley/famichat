@@ -534,7 +534,8 @@ defmodule Famichat.Chat.MessageService do
     attrs = %{
       protocol: @mls_state_protocol,
       state: snapshot,
-      epoch: epoch
+      epoch: epoch,
+      pending_commit: Map.get(state, :mls_pending_commit)
     }
 
     case ConversationSecurityStateStore.upsert(
@@ -1304,7 +1305,8 @@ defmodule Famichat.Chat.MessageService do
       attrs = %{
         protocol: @mls_state_protocol,
         state: final_snapshot,
-        epoch: final_epoch || initial_epoch || 0
+        epoch: final_epoch || initial_epoch || 0,
+        pending_commit: Map.get(state, :mls_pending_commit)
       }
 
       case ConversationSecurityStateStore.upsert(

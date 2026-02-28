@@ -161,7 +161,7 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
     end
   end
 
-  defp decode_state_payload(ciphertext) when is_binary(ciphertext) do
+  defp decode_state_payload("vault_term_v1", ciphertext) when is_binary(ciphertext) do
     try do
       with decrypted when is_binary(decrypted) <- Vault.decrypt!(ciphertext),
            decoded <- :erlang.binary_to_term(decrypted, [:safe]),
@@ -179,20 +179,27 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
     end
   end
 
-  defp decode_state_payload(_ciphertext) do
+  defp decode_state_payload("vault_term_v1", _ciphertext) do
     {:error, :state_decode_failed,
      %{reason: :state_decode_failed, operation: :load}}
   end
 
-  defp decode_optional_state_payload(nil), do: {:ok, nil}
+  defp decode_state_payload(_unknown_format, _ciphertext) do
+    {:error, :state_decode_failed, %{reason: :unknown_state_format}}
+  end
 
-  defp decode_optional_state_payload(ciphertext),
-    do: decode_state_payload(ciphertext)
+  defp decode_optional_state_payload(nil, _format), do: {:ok, nil}
+
+  defp decode_optional_state_payload(ciphertext, format),
+    do: decode_state_payload(format, ciphertext)
 
   defp decode_record(%ConversationSecurityState{} = record) do
-    with {:ok, state} <- decode_state_payload(record.state_ciphertext),
+    pending_format =
+      record.pending_commit_format || record.state_format
+
+    with {:ok, state} <- decode_state_payload(record.state_format, record.state_ciphertext),
          {:ok, pending_commit} <-
-           decode_optional_state_payload(record.pending_commit_ciphertext) do
+           decode_optional_state_payload(record.pending_commit_ciphertext, pending_format) do
       {:ok,
        %{
          conversation_id: record.conversation_id,

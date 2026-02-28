@@ -178,13 +178,10 @@ pub fn create_group(params: &Payload) -> MlsResult {
     let session_snapshot = build_group_session_snapshot(&session, "create_group")?;
     let epoch = session.sender.group.epoch().as_u64().to_string();
 
-    let mut guard = group_sessions().lock().map_err(|_| {
-        MlsError::with_code(
-            ErrorCode::StorageInconsistent,
-            "create_group",
-            "lock_poisoned",
-        )
-    })?;
+    let mut guard = group_sessions().lock().unwrap_or_else(|e| {
+        eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
+        e.into_inner()
+    });
     guard.insert(parsed.group_id.clone(), session);
     drop(guard);
 
@@ -211,9 +208,10 @@ pub fn join_from_welcome(params: &Payload) -> MlsResult {
             let group_id =
                 non_empty(params, "group_id").unwrap_or_else(|| format!("rejoin:{}", token));
 
-            let mut guard = group_sessions().lock().map_err(|_| {
-                MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
-            })?;
+            let mut guard = group_sessions().lock().unwrap_or_else(|e| {
+                eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
+                e.into_inner()
+            });
 
             if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
                 if let Some(restored) =
@@ -280,9 +278,10 @@ pub fn process_incoming(params: &Payload) -> MlsResult {
 
     match (group_id, ciphertext) {
         (Some(group_id), Some(ciphertext)) => {
-            let mut guard = group_sessions().lock().map_err(|_| {
-                MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
-            })?;
+            let mut guard = group_sessions().lock().unwrap_or_else(|e| {
+                eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
+                e.into_inner()
+            });
 
             let should_restore =
                 has_complete_session_snapshot(params) || !guard.contains_key(&group_id);
@@ -489,9 +488,10 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
     with_required_group(operation, params, |group_id| {
         let body = params.get("body").cloned().unwrap_or_default();
 
-        let mut guard = group_sessions().lock().map_err(|_| {
-            MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
-        })?;
+        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
+            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
+            e.into_inner()
+        });
 
         if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
             if let Some(restored) =
@@ -538,9 +538,10 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
 pub fn export_group_info(params: &Payload) -> MlsResult {
     let operation = "export_group_info";
     with_required_group(operation, params, |group_id| {
-        let mut guard = group_sessions().lock().map_err(|_| {
-            MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
-        })?;
+        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
+            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
+            e.into_inner()
+        });
 
         if !guard.contains_key(&group_id) {
             if let Some(restored) =
@@ -940,9 +941,14 @@ fn restore_group_session_from_snapshot(
 
     let sender_provider = OpenMlsRustCrypto::default();
     {
-        let mut values = sender_provider.storage().values.write().map_err(|_| {
-            MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
-        })?;
+        let mut values = sender_provider
+            .storage()
+            .values
+            .write()
+            .unwrap_or_else(|e| {
+                eprintln!("[mls_nif] WARN: sender storage RwLock was poisoned; recovering guard");
+                e.into_inner()
+            });
         *values = sender_storage;
     }
 
@@ -975,9 +981,16 @@ fn restore_group_session_from_snapshot(
 
     let recipient_provider = OpenMlsRustCrypto::default();
     {
-        let mut values = recipient_provider.storage().values.write().map_err(|_| {
-            MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
-        })?;
+        let mut values = recipient_provider
+            .storage()
+            .values
+            .write()
+            .unwrap_or_else(|e| {
+                eprintln!(
+                    "[mls_nif] WARN: recipient storage RwLock was poisoned; recovering guard"
+                );
+                e.into_inner()
+            });
         *values = recipient_storage;
     }
 
@@ -1118,7 +1131,7 @@ fn serialize_message_cache(cache: &HashMap<String, CachedMessage>) -> String {
             format!(
                 "{}:{}:{}",
                 encode_hex(message_id.as_bytes()),
-                encode_hex(cached_message.ciphertext.as_bytes()),
+                &cached_message.ciphertext,
                 encode_hex(cached_message.plaintext.as_bytes())
             )
         })
@@ -1172,12 +1185,7 @@ fn deserialize_message_cache(
         .map_err(|_| {
             MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
         })?;
-        let ciphertext = String::from_utf8(decode_hex(ciphertext_hex).map_err(|_| {
-            MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
-        })?)
-        .map_err(|_| {
-            MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
-        })?;
+        let ciphertext = ciphertext_hex.to_owned();
         let plaintext = String::from_utf8(decode_hex(plaintext_hex).map_err(|_| {
             MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
         })?)
@@ -1329,19 +1337,19 @@ fn create_key_package_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> 
     encode_result(env, create_key_package(&payload))
 }
 
-#[rustler::nif(name = "create_group")]
+#[rustler::nif(name = "create_group", schedule = "DirtyCpu")]
 fn create_group_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     let payload = payload_from_nif(params);
     encode_result(env, create_group(&payload))
 }
 
-#[rustler::nif(name = "join_from_welcome")]
+#[rustler::nif(name = "join_from_welcome", schedule = "DirtyCpu")]
 fn join_from_welcome_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     let payload = payload_from_nif(params);
     encode_result(env, join_from_welcome(&payload))
 }
 
-#[rustler::nif(name = "process_incoming")]
+#[rustler::nif(name = "process_incoming", schedule = "DirtyCpu")]
 fn process_incoming_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     let payload = payload_from_nif(params);
     encode_result(env, process_incoming(&payload))
@@ -1389,13 +1397,13 @@ fn clear_pending_commit_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -
     encode_result(env, clear_pending_commit(&payload))
 }
 
-#[rustler::nif(name = "create_application_message")]
+#[rustler::nif(name = "create_application_message", schedule = "DirtyCpu")]
 fn create_application_message_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     let payload = payload_from_nif(params);
     encode_result(env, create_application_message(&payload))
 }
 
-#[rustler::nif(name = "export_group_info")]
+#[rustler::nif(name = "export_group_info", schedule = "DirtyCpu")]
 fn export_group_info_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     let payload = payload_from_nif(params);
     encode_result(env, export_group_info(&payload))
@@ -1612,5 +1620,61 @@ mod tests {
             ErrorCode::UnsupportedCapability.as_str(),
             "unsupported_capability"
         );
+    }
+
+    // F3: session_cache double-encoding fix — ciphertext stored/retrieved verbatim,
+    // not passed through encode_hex/decode_hex. serialize_message_cache uses
+    // &cached_message.ciphertext directly; deserialize_message_cache uses
+    // ciphertext_hex.to_owned() directly.
+    #[test]
+    fn session_cache_roundtrip() {
+        let mut cache = HashMap::new();
+        cache.insert(
+            "msg-abc".to_owned(),
+            CachedMessage {
+                ciphertext: "deadbeef".to_owned(),
+                plaintext: "hello world".to_owned(),
+            },
+        );
+        cache.insert(
+            "msg-xyz".to_owned(),
+            CachedMessage {
+                ciphertext: "cafebabe".to_owned(),
+                plaintext: "second message".to_owned(),
+            },
+        );
+
+        let serialized = serialize_message_cache(&cache);
+        let deserialized =
+            deserialize_message_cache(&serialized, "test").expect("deserialize must succeed");
+
+        assert_eq!(deserialized.len(), 2);
+        let entry = deserialized
+            .get("msg-abc")
+            .expect("msg-abc must be present");
+        assert_eq!(
+            entry.ciphertext, "deadbeef",
+            "ciphertext must not be double-encoded"
+        );
+        assert_eq!(entry.plaintext, "hello world");
+
+        let entry2 = deserialized
+            .get("msg-xyz")
+            .expect("msg-xyz must be present");
+        assert_eq!(entry2.ciphertext, "cafebabe");
+
+        // Round-trip stability: serializing again must produce the same output
+        let reserialized = serialize_message_cache(&deserialized);
+        assert_eq!(reserialized, serialized, "round-trip must be stable");
+    }
+
+    #[test]
+    fn session_cache_empty_roundtrip() {
+        let cache: HashMap<String, CachedMessage> = HashMap::new();
+        let serialized = serialize_message_cache(&cache);
+        assert!(serialized.is_empty());
+        let deserialized = deserialize_message_cache(&serialized, "test")
+            .expect("empty cache deserialize must succeed");
+        assert!(deserialized.is_empty());
     }
 }

@@ -71,6 +71,32 @@ defmodule Famichat.Chat.ConversationSecurityStateStoreTest do
     assert details[:reason] == :lock_version_mismatch
   end
 
+  test "load fails closed when state_format is unknown" do
+    conversation = conversation_fixture(%{conversation_type: :direct})
+
+    assert {:ok, _persisted} =
+             ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{state: snapshot_payload(), epoch: 0, protocol: "mls"},
+               nil
+             )
+
+    {count, _rows} =
+      Repo.update_all(
+        from(s in ConversationSecurityState,
+          where: s.conversation_id == ^conversation.id
+        ),
+        set: [state_format: "unknown_format_v99"]
+      )
+
+    assert count == 1
+
+    assert {:error, :state_decode_failed, details} =
+             ConversationSecurityStateStore.load(conversation.id)
+
+    assert details[:reason] == :unknown_state_format
+  end
+
   test "load fails closed when persisted state ciphertext is tampered" do
     conversation = conversation_fixture(%{conversation_type: :direct})
 

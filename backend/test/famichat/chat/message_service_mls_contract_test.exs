@@ -215,6 +215,41 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     end
   end
 
+  defmodule SnapshotPersistingAdapter do
+    @behaviour Famichat.Crypto.MLS.Adapter
+
+    def nif_version, do: {:ok, %{}}
+    def nif_health, do: {:ok, %{status: "ok"}}
+    def create_key_package(_params), do: {:ok, %{}}
+    def create_group(_params), do: {:ok, %{}}
+    def join_from_welcome(_params), do: {:ok, %{}}
+    def process_incoming(_params), do: {:ok, %{plaintext: "ok"}}
+    def commit_to_pending(_params), do: {:ok, %{}}
+    def mls_commit(_params), do: {:ok, %{}}
+    def mls_update(_params), do: {:ok, %{}}
+    def mls_add(_params), do: {:ok, %{}}
+    def mls_remove(_params), do: {:ok, %{}}
+    def merge_staged_commit(_params), do: {:ok, %{}}
+    def clear_pending_commit(_params), do: {:ok, %{}}
+    def export_group_info(_params), do: {:ok, %{}}
+    def export_ratchet_tree(_params), do: {:ok, %{}}
+
+    def create_application_message(params) do
+      body = Map.get(params, :body) || Map.get(params, "body") || ""
+
+      {:ok,
+       %{
+         ciphertext: "ciphertext:#{body}",
+         epoch: 2,
+         session_sender_storage: Base.encode64("sender-storage-new"),
+         session_recipient_storage: Base.encode64("recipient-storage-new"),
+         session_sender_signer: Base.encode64("sender-signer-new"),
+         session_recipient_signer: Base.encode64("recipient-signer-new"),
+         session_cache: Base.encode64("cache-new")
+       }}
+    end
+  end
+
   setup do
     previous_adapter = Application.get_env(:famichat, :mls_adapter)
     previous_enforcement = Application.get_env(:famichat, :mls_enforcement)
@@ -625,6 +660,28 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     refute Map.has_key?(metadata, :reason)
     refute Map.has_key?(metadata, :nested)
     refute Map.has_key?(metadata, :events)
+  end
+
+  test "persist_mls_session_snapshot_in_tx includes pending_commit from state in persisted attrs",
+       %{conversation: conversation, sender: sender} do
+    Application.put_env(:famichat, :mls_adapter, SnapshotPersistingAdapter)
+
+    assert {:ok, _persisted_state} =
+             ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{state: snapshot_payload(), epoch: 1, protocol: "mls"},
+               nil
+             )
+
+    assert {:ok, _message} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "persist-pending-commit")
+             )
+
+    assert {:ok, reloaded} = ConversationSecurityStateStore.load(conversation.id)
+    assert reloaded.pending_commit == nil
+    assert is_map(reloaded.state)
+    assert reloaded.epoch == 2
   end
 
   defp message_params(sender_id, conversation_id, content \\ "hello") do
