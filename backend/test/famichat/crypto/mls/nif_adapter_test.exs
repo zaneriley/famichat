@@ -66,12 +66,20 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
 
     assert fetch(decrypted_payload, "plaintext") == "hello from nif"
 
-    assert {:ok, merge_payload} =
-             MLS.merge_staged_commit(%{
+    assert {:ok, remove_payload} =
+             MLS.mls_remove(%{
                group_id: "group-nif-1",
-               staged_commit_validated: true,
-               epoch: 1
+               remove_target: "recipient"
              })
+
+    assert {:ok, merge_payload} =
+             MLS.merge_staged_commit(
+               Map.merge(remove_payload, %{
+                 group_id: "group-nif-1",
+                 commit_ciphertext: remove_payload["commit_ciphertext"],
+                 staged_commit_validated: true
+               })
+             )
 
     assert fetch(merge_payload, "merged") == "true"
   end
@@ -626,6 +634,128 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
                    "remove_target" => "recipient"
                  })
                )
+    end
+  end
+
+  describe "merge_staged_commit spirit tests" do
+    setup do
+      group_id = "group-merge-spirit-#{System.unique_integer([:positive])}"
+
+      {:ok, group_payload} =
+        MLS.create_group(%{
+          group_id: group_id,
+          ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"
+        })
+
+      {:ok, remove_payload} =
+        MLS.mls_remove(
+          Map.merge(group_payload, %{
+            group_id: group_id,
+            remove_target: "recipient"
+          })
+        )
+
+      %{group_id: group_id, remove_payload: remove_payload}
+    end
+
+    test "merge_staged_commit advances recipient to sender epoch", %{
+      group_id: group_id,
+      remove_payload: remove_payload
+    } do
+      remove_epoch = String.to_integer(remove_payload["epoch"])
+
+      assert {:ok, merge_payload} =
+               MLS.merge_staged_commit(
+                 Map.merge(remove_payload, %{
+                   group_id: group_id,
+                   commit_ciphertext: remove_payload["commit_ciphertext"],
+                   staged_commit_validated: true
+                 })
+               )
+
+      merge_epoch = String.to_integer(merge_payload["epoch"])
+
+      assert merge_epoch == remove_epoch,
+             "merge epoch must equal remove epoch: got #{merge_epoch} expected #{remove_epoch}"
+    end
+
+    test "merge_staged_commit returns all 5 snapshot keys", %{
+      group_id: group_id,
+      remove_payload: remove_payload
+    } do
+      assert {:ok, merge_payload} =
+               MLS.merge_staged_commit(
+                 Map.merge(remove_payload, %{
+                   group_id: group_id,
+                   commit_ciphertext: remove_payload["commit_ciphertext"],
+                   staged_commit_validated: true
+                 })
+               )
+
+      for key <- ~w[session_sender_storage session_recipient_storage session_sender_signer session_recipient_signer session_cache] do
+        assert Map.has_key?(merge_payload, key), "missing snapshot key: #{key}"
+
+        if key == "session_cache" do
+          assert byte_size(merge_payload[key] || "") >= 0, "snapshot key #{key} must be present"
+        else
+          assert byte_size(merge_payload[key]) > 0, "snapshot key #{key} must be non-empty"
+        end
+      end
+    end
+
+    test "merge_staged_commit without staged_commit_validated fails closed", %{
+      group_id: group_id,
+      remove_payload: remove_payload
+    } do
+      assert {:error, _code, details} =
+               MLS.merge_staged_commit(
+                 Map.merge(remove_payload, %{
+                   group_id: group_id,
+                   commit_ciphertext: remove_payload["commit_ciphertext"]
+                   # No staged_commit_validated
+                 })
+               )
+
+      assert Map.get(details, :reason) == :staged_commit_not_validated or
+               Map.get(details, "reason") == "staged_commit_not_validated"
+    end
+
+    test "merge_staged_commit without commit_ciphertext fails closed", %{
+      group_id: group_id,
+      remove_payload: remove_payload
+    } do
+      # Explicitly remove commit_ciphertext to ensure the guard triggers.
+      params_without_ciphertext =
+        remove_payload
+        |> Map.merge(%{group_id: group_id, staged_commit_validated: true})
+        |> Map.delete("commit_ciphertext")
+        |> Map.delete(:commit_ciphertext)
+
+      assert {:error, _code, _details} = MLS.merge_staged_commit(params_without_ciphertext)
+    end
+
+    test "merge epoch matches export_group_info epoch", %{
+      group_id: group_id,
+      remove_payload: remove_payload
+    } do
+      assert {:ok, merge_payload} =
+               MLS.merge_staged_commit(
+                 Map.merge(remove_payload, %{
+                   group_id: group_id,
+                   commit_ciphertext: remove_payload["commit_ciphertext"],
+                   staged_commit_validated: true
+                 })
+               )
+
+      # export_group_info reads group.epoch().as_u64() from live OpenMLS object
+      assert {:ok, info_payload} =
+               MLS.export_group_info(Map.merge(merge_payload, %{group_id: group_id}))
+
+      merge_epoch = String.to_integer(merge_payload["epoch"])
+      info_epoch = String.to_integer(info_payload["epoch"])
+
+      assert merge_epoch == info_epoch,
+             "merge epoch #{merge_epoch} must equal export_group_info epoch #{info_epoch}"
     end
   end
 

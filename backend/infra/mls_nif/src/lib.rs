@@ -622,12 +622,130 @@ pub fn merge_staged_commit(params: &Payload) -> MlsResult {
         ));
     }
 
+    let commit_ciphertext = non_empty(params, "commit_ciphertext").ok_or_else(|| {
+        MlsError::with_code(
+            ErrorCode::InvalidInput,
+            operation,
+            "missing_commit_ciphertext",
+        )
+    })?;
+
     with_required_group(operation, params, |group_id| {
+        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
+            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
+            e.into_inner()
+        });
+
+        if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
+            if let Some(restored) =
+                restore_group_session_from_snapshot(&group_id, params, operation)?
+            {
+                guard.insert(group_id.clone(), restored);
+            }
+        }
+
+        let session = guard.get_mut(&group_id).ok_or_else(|| {
+            MlsError::with_code(
+                ErrorCode::StorageInconsistent,
+                operation,
+                "missing_group_state",
+            )
+        })?;
+
+        // If the recipient's group is already inactive, the commit was already processed
+        // by the sender-side operation (e.g. mls_remove processes the commit inline).
+        // In the two-actor co-located model, skip re-processing and return current state.
+        if !session.recipient.group.is_active() {
+            let epoch = session.sender.group.epoch().as_u64().to_string();
+            let snapshot = build_group_session_snapshot(session, operation)?;
+
+            let mut payload = Payload::new();
+            payload.insert("group_id".to_owned(), group_id);
+            payload.insert("epoch".to_owned(), epoch);
+            payload.insert("recipient_active".to_owned(), "false".to_owned());
+            payload.insert("merged".to_owned(), "true".to_owned());
+            payload.insert("status".to_owned(), "ok".to_owned());
+            payload.extend(snapshot);
+            return Ok(payload);
+        }
+
+        // Decode the commit ciphertext produced by mls_remove (or another commit operation).
+        let commit_bytes = decode_hex(&commit_ciphertext).map_err(|_| {
+            MlsError::with_code(
+                ErrorCode::InvalidInput,
+                operation,
+                "invalid_commit_ciphertext",
+            )
+        })?;
+
+        let mut slice = commit_bytes.as_slice();
+        let mls_message = MlsMessageIn::tls_deserialize(&mut slice).map_err(|_| {
+            MlsError::with_code(
+                ErrorCode::InvalidInput,
+                operation,
+                "malformed_commit_ciphertext",
+            )
+        })?;
+
+        let protocol_message = mls_message.try_into_protocol_message().map_err(|_| {
+            MlsError::with_code(
+                ErrorCode::InvalidInput,
+                operation,
+                "unsupported_message_type",
+            )
+        })?;
+
+        // Process the commit on the recipient's group to get a StagedCommit.
+        let processed = session
+            .recipient
+            .group
+            .process_message(&session.recipient.provider, protocol_message)
+            .map_err(|e| {
+                MlsError::with_code(
+                    ErrorCode::CryptoFailure,
+                    operation,
+                    &format!("process_commit_failed: {:?}", e),
+                )
+            })?;
+
+        // Extract and merge the staged commit — recipient side only.
+        // Do NOT call merge_pending_commit here; that is the sender's responsibility.
+        match processed.into_content() {
+            ProcessedMessageContent::StagedCommitMessage(staged_commit) => {
+                session
+                    .recipient
+                    .group
+                    .merge_staged_commit(&session.recipient.provider, *staged_commit)
+                    .map_err(|e| {
+                        MlsError::with_code(
+                            ErrorCode::CryptoFailure,
+                            operation,
+                            &format!("merge_staged_commit_failed: {:?}", e),
+                        )
+                    })?;
+            }
+            _ => {
+                return Err(MlsError::with_code(
+                    ErrorCode::InvalidInput,
+                    operation,
+                    "not_a_commit_message",
+                ));
+            }
+        }
+
+        let recipient_active = session.recipient.group.is_active();
+        // Epoch is authoritative from the sender's group.
+        let epoch = session.sender.group.epoch().as_u64().to_string();
+
+        let snapshot = build_group_session_snapshot(session, operation)?;
+
         let mut payload = Payload::new();
         payload.insert("group_id".to_owned(), group_id);
+        payload.insert("epoch".to_owned(), epoch);
+        payload.insert("recipient_active".to_owned(), recipient_active.to_string());
         payload.insert("merged".to_owned(), "true".to_owned());
-        payload.insert("pending_commit".to_owned(), "false".to_owned());
-        payload.insert("epoch".to_owned(), next_epoch(params));
+        payload.insert("status".to_owned(), "ok".to_owned());
+        payload.extend(snapshot);
         Ok(payload)
     })
 }
@@ -728,6 +846,10 @@ pub fn export_group_info(params: &Payload) -> MlsResult {
         );
 
         if let Some(session) = guard.get(&group_id) {
+            payload.insert(
+                "epoch".to_owned(),
+                session.sender.group.epoch().as_u64().to_string(),
+            );
             payload.extend(build_group_session_snapshot(session, operation)?);
         }
 
@@ -1609,7 +1731,7 @@ fn mls_remove_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a>
     encode_result(env, mls_remove(&payload))
 }
 
-#[rustler::nif(name = "merge_staged_commit")]
+#[rustler::nif(name = "merge_staged_commit", schedule = "DirtyCpu")]
 fn merge_staged_commit_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     let payload = payload_from_nif(params);
     encode_result(env, merge_staged_commit(&payload))
@@ -1914,6 +2036,112 @@ mod tests {
             remove_result.get("status"),
             Some(&"ok".to_owned()),
             "status must be ok"
+        );
+    }
+
+    #[test]
+    fn merge_staged_commit_real_processes_recipient_commit_after_remove() {
+        let group_id = unique_group_id("group-merge-staged");
+
+        let group = create_group(&payload(&[
+            ("group_id", &group_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect("group must be created");
+
+        // Build remove params with snapshot.
+        let mut remove_params = Payload::new();
+        remove_params.insert("group_id".to_owned(), group_id.clone());
+        remove_params.insert("remove_target".to_owned(), "recipient".to_owned());
+        for key in [
+            "session_sender_storage",
+            "session_recipient_storage",
+            "session_sender_signer",
+            "session_recipient_signer",
+            "session_cache",
+        ] {
+            if let Some(value) = group.get(key) {
+                remove_params.insert(key.to_owned(), value.clone());
+            }
+        }
+
+        let remove_result = mls_remove(&remove_params).expect("mls_remove must succeed");
+
+        let remove_epoch: u64 = remove_result
+            .get("epoch")
+            .expect("epoch in remove payload")
+            .parse()
+            .expect("epoch parses as u64");
+
+        let commit_ciphertext = remove_result
+            .get("commit_ciphertext")
+            .expect("commit_ciphertext in remove payload")
+            .clone();
+
+        // Build merge params from the post-remove snapshot.
+        let mut merge_params = Payload::new();
+        merge_params.insert("group_id".to_owned(), group_id.clone());
+        merge_params.insert("staged_commit_validated".to_owned(), "true".to_owned());
+        merge_params.insert("commit_ciphertext".to_owned(), commit_ciphertext);
+        for key in [
+            "session_sender_storage",
+            "session_recipient_storage",
+            "session_sender_signer",
+            "session_recipient_signer",
+            "session_cache",
+        ] {
+            if let Some(value) = remove_result.get(key) {
+                merge_params.insert(key.to_owned(), value.clone());
+            }
+        }
+
+        let merge_result =
+            merge_staged_commit(&merge_params).expect("merge_staged_commit must succeed");
+
+        // Epoch must equal the remove epoch (not advance further).
+        let merge_epoch: u64 = merge_result
+            .get("epoch")
+            .expect("epoch in merge payload")
+            .parse()
+            .expect("epoch parses as u64");
+
+        assert_eq!(
+            merge_epoch, remove_epoch,
+            "merge epoch must equal remove epoch"
+        );
+
+        // All 5 snapshot keys must be present.
+        for key in [
+            "session_sender_storage",
+            "session_recipient_storage",
+            "session_sender_signer",
+            "session_recipient_signer",
+            "session_cache",
+        ] {
+            assert!(
+                merge_result.contains_key(key),
+                "missing snapshot key: {}",
+                key
+            );
+        }
+
+        assert_eq!(
+            merge_result.get("status"),
+            Some(&"ok".to_owned()),
+            "status must be ok"
+        );
+        assert_eq!(
+            merge_result.get("merged"),
+            Some(&"true".to_owned()),
+            "merged must be true"
+        );
+        assert_eq!(
+            merge_result.get("recipient_active"),
+            Some(&"false".to_owned()),
+            "recipient_active must be false after removal"
         );
     }
 
