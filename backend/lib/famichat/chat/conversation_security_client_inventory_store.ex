@@ -3,6 +3,7 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStore do
   Chat-owned persistence boundary for durable client key-package inventory.
   """
   import Ecto.Query, warn: false
+  require Logger
 
   alias Famichat.Chat.ConversationSecurityClientInventory
   alias Famichat.Repo
@@ -225,9 +226,13 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStore do
 
     {:ok, ciphertext}
   rescue
-    _ ->
+    e in [RuntimeError, ArgumentError] ->
       {:error, :state_encode_failed,
        %{reason: :state_encode_failed, operation: :upsert}}
+
+    e ->
+      Logger.error("Unexpected exception in encode_payload: #{inspect(e)}")
+      reraise e, __STACKTRACE__
   end
 
   defp decode_payload(ciphertext) when is_binary(ciphertext) do
@@ -242,9 +247,13 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStore do
          %{reason: :state_decode_failed, operation: :load}}
     end
   rescue
-    _ ->
+    e in [RuntimeError, ArgumentError] ->
       {:error, :state_decode_failed,
        %{reason: :state_decode_failed, operation: :load}}
+
+    e ->
+      Logger.error("Unexpected exception in decode_payload: #{inspect(e)}")
+      reraise e, __STACKTRACE__
   end
 
   defp decode_payload(_ciphertext) do

@@ -131,9 +131,9 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert completed_pending.committed_epoch == 4
   end
 
-  test "merge_pending_commit does not auto-seal active revocations for non-remove operations",
+  test "merge_pending_commit rejects non-remove operations when active revocations exist",
        %{conversation: conversation} do
-    assert {:ok, {:started, in_progress}} =
+    assert {:ok, {:started, _in_progress}} =
              ConversationSecurityRevocationStore.start_or_load(
                conversation.id,
                "revocation-non-remove-in-progress",
@@ -161,30 +161,11 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
 
     assert staged.pending_commit["operation"] == "mls_add"
 
-    assert {:ok, merged} =
+    assert {:error, :commit_rejected, details} =
              ConversationSecurityLifecycle.merge_pending_commit(conversation.id)
 
-    assert merged.epoch == 4
-    assert merged.pending_commit == nil
-
-    assert {:ok, still_in_progress} =
-             ConversationSecurityRevocationStore.load_by_ref(
-               conversation.id,
-               "revocation-non-remove-in-progress"
-             )
-
-    assert still_in_progress.status == :in_progress
-    assert still_in_progress.committed_epoch == nil
-    assert still_in_progress.id == in_progress.id
-
-    assert {:ok, still_pending} =
-             ConversationSecurityRevocationStore.load_by_ref(
-               conversation.id,
-               "revocation-non-remove-pending"
-             )
-
-    assert still_pending.status == :pending_commit
-    assert still_pending.committed_epoch == nil
+    assert details[:reason] == :operation_type_mismatch
+    assert details[:pending_operation] == "mls_add"
   end
 
   test "concurrent merge winners seal remove revocations once",
@@ -236,7 +217,7 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert completed.committed_epoch == 4
   end
 
-  test "active revocations remain pending across non-remove merge and seal on later remove merge",
+  test "merge_pending_commit rejects non-remove commit and allows subsequent remove to seal revocations",
        %{conversation: conversation} do
     assert {:ok, {:started, revocation}} =
              ConversationSecurityRevocationStore.start_or_load(
@@ -257,10 +238,10 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
                :mls_add
              )
 
-    assert {:ok, merged_add} =
+    assert {:error, :commit_rejected, details} =
              ConversationSecurityLifecycle.merge_pending_commit(conversation.id)
 
-    assert merged_add.epoch == 4
+    assert details[:reason] == :operation_type_mismatch
 
     assert {:ok, still_pending} =
              ConversationSecurityRevocationStore.load_by_ref(
@@ -271,6 +252,9 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert still_pending.status == :pending_commit
     assert still_pending.committed_epoch == nil
 
+    assert {:ok, _cleared} =
+             ConversationSecurityLifecycle.clear_pending_commit(conversation.id)
+
     assert {:ok, _staged_remove} =
              ConversationSecurityLifecycle.stage_pending_commit(
                conversation.id,
@@ -280,7 +264,7 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert {:ok, merged_remove} =
              ConversationSecurityLifecycle.merge_pending_commit(conversation.id)
 
-    assert merged_remove.epoch == 5
+    assert merged_remove.epoch == 4
 
     assert {:ok, completed} =
              ConversationSecurityRevocationStore.load_by_ref(
@@ -289,7 +273,7 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
              )
 
     assert completed.status == :completed
-    assert completed.committed_epoch == 5
+    assert completed.committed_epoch == 4
   end
 
   test "clear_pending_commit is idempotent and keeps state usable",
@@ -352,9 +336,24 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert {:error, :commit_rejected, details} =
              ConversationSecurityLifecycle.merge_pending_commit(conversation.id)
 
-    assert details[:reason] == :invalid_staged_epoch
+    assert details[:reason] == :epoch_too_low
     assert details[:current_epoch] == 3
     assert details[:staged_epoch] == 1
+  end
+
+  test "merge_pending_commit fails closed when staged epoch is too high",
+       %{conversation: conversation} do
+    put_pending_commit!(
+      conversation.id,
+      %{"operation" => "mls_commit", "staged_epoch" => 6}
+    )
+
+    assert {:error, :commit_rejected, details} =
+             ConversationSecurityLifecycle.merge_pending_commit(conversation.id)
+
+    assert details[:reason] == :epoch_too_high
+    assert details[:current_epoch] == 3
+    assert details[:staged_epoch] == 6
   end
 
   test "merge_pending_commit fails closed on tampered pending operation",
@@ -1054,6 +1053,78 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
                attrs,
                state.lock_version
              )
+  end
+
+  describe "epoch-0 boundary (initial group state)" do
+    test "stage and merge first commit on epoch-0 group succeeds with merge_epoch == 1" do
+      fresh_conversation = conversation_fixture(%{conversation_type: :direct})
+
+      assert {:ok, persisted} =
+               ConversationSecurityStateStore.upsert(
+                 fresh_conversation.id,
+                 %{state: snapshot_payload(), epoch: 0, protocol: "mls"},
+                 nil
+               )
+
+      assert persisted.epoch == 0
+
+      assert {:ok, staged} =
+               ConversationSecurityLifecycle.stage_pending_commit(
+                 fresh_conversation.id,
+                 :mls_commit
+               )
+
+      assert staged.epoch == 0
+      assert staged.pending_commit["staged_epoch"] == 1
+
+      assert {:ok, merged} =
+               ConversationSecurityLifecycle.merge_pending_commit(fresh_conversation.id)
+
+      assert merged.epoch == 1
+      assert merged.pending_commit == nil
+    end
+
+    test "merge_pending_commit fails on epoch-0 group when staged_epoch == 0" do
+      fresh_conversation = conversation_fixture(%{conversation_type: :direct})
+
+      assert {:ok, _persisted} =
+               ConversationSecurityStateStore.upsert(
+                 fresh_conversation.id,
+                 %{state: snapshot_payload(), epoch: 0, protocol: "mls"},
+                 nil
+               )
+
+      put_pending_commit!(
+        fresh_conversation.id,
+        %{"operation" => "mls_commit", "staged_epoch" => 0}
+      )
+
+      assert {:error, :commit_rejected, details} =
+               ConversationSecurityLifecycle.merge_pending_commit(fresh_conversation.id)
+
+      assert details[:reason] == :epoch_too_low
+      assert details[:current_epoch] == 0
+      assert details[:staged_epoch] == 0
+    end
+  end
+
+  describe "non-remove operations with no active revocations" do
+    test "non-remove commit succeeds when no active revocations exist",
+         %{conversation: conversation} do
+      assert {:ok, staged} =
+               ConversationSecurityLifecycle.stage_pending_commit(
+                 conversation.id,
+                 :mls_add
+               )
+
+      assert staged.pending_commit["operation"] == "mls_add"
+
+      assert {:ok, merged} =
+               ConversationSecurityLifecycle.merge_pending_commit(conversation.id)
+
+      assert merged.epoch == 4
+      assert merged.pending_commit == nil
+    end
   end
 
   defp restore_env(key, nil), do: Application.delete_env(:famichat, key)

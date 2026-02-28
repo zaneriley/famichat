@@ -1,6 +1,6 @@
 # Famichat NOW
 
-**Last Updated**: 2026-02-27
+**Last Updated**: 2026-02-28
 
 Use [ia-lexicon.md](ia-lexicon.md) for canonical naming (`conversation security state`, `conversation security policy`) and ownership language.
 Enforcement guardrail: [ia-boundary-guardrails.md](ia-boundary-guardrails.md) (`cd backend && ./run docs:boundary-check`).
@@ -14,7 +14,7 @@ Continuity memory:
 
 ## One-line reality
 
-Famichat has a solid backend messaging foundation and now includes a real OpenMLS-backed Rust NIF vertical slice with fail-closed gates, encrypted MLS snapshot persistence, and adversarial tests, but it is not production-ready for real family usage yet.
+Famichat has a solid backend messaging foundation and now includes a real OpenMLS-backed Rust NIF vertical slice with fail-closed gates, encrypted MLS snapshot persistence, adversarial tests, and complete MLS Remove support (real `mls_remove` NIF + `merge_staged_commit` NIF + credential binding + revocation sealing), but it is not production-ready for real family usage yet.
 
 ## What works today
 
@@ -121,6 +121,13 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
      - a later remove merge seals previously-active revocations with the later epoch
      (`conversation_security_lifecycle_test.exs`).
    - Latest deep QA artifact after this wiring: `.tmp/_qa_messaging/20260226T102453Z` (PASS, `R1` PASS, no failed scenarios).
+10. MLS Remove is now fully implemented across Phases 0-3 (complete as of 2026-02-28):
+   - Phase 0 (NIF skeleton + contract): `mls_remove` NIF wired with correct contract shape, error codes, and Rust unit tests covering remove-requires-group-state invariant.
+   - Phase 1 (real OpenMLS remove): `mls_remove` NIF executes a real OpenMLS `remove_members` + `merge_pending_commit`, returning updated group state and new epoch; `mls_remove_real_removes_recipient_and_advances_epoch` Rust test passes.
+   - Phase 2 (merge_staged_commit NIF + credential binding): `merge_staged_commit` NIF processes the recipient's commit after a remove, verifying epoch advancement; credential binding ties `mls_remove` to `ConversationSecurityRevocationJournal` entries; `merge_staged_commit_real_processes_recipient_commit_after_remove` Rust test passes.
+   - Phase 3 (spirit tests): All Elixir spirit tests pass - revocation lifecycle sealing, credential binding to revocation journal entries, and full `conversation_security_revocation_lifecycle_test.exs` coverage.
+   - Final verification (2026-02-28): 42 MLS crypto tests (pass), 61 conversation security + MLS contract tests (pass), 15 Rust NIF tests (pass), docs boundary check (pass), qa:messaging:fast 10/10 (PASS), qa:messaging:deep 10/10 (PASS, canonical_flow_coverage: PASS, recovery_rejoin_contract: PASS).
+   - QA artifacts: `.tmp/_qa_messaging/20260228T085731Z_fast` (PASS), `.tmp/_qa_messaging/20260228T085913Z_deep` (PASS).
 10. Recovery-required contract is now explicit and end-to-end characterized:
    - Channel sends now return explicit `recovery_required` + `recover_conversation_security_state` action when MLS state is missing.
    - Canonical HTTP send (`POST /api/v1/conversations/:id/messages`) now returns `409` with explicit `recovery_required` and recovery action instead of generic invalid request.
@@ -129,7 +136,7 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 
 ## What is still not done
 
-1. Key lifecycle and identity binding are still incomplete for production trust posture (revocation sealing/commit semantics remain open), while client-inventory durability/rotation/telemetry and rejoin recovery durability are now in place.
+1. Key lifecycle and identity binding are now substantially complete for the core revocation path (MLS Remove Phases 0-3 done, revocation sealing wired, `mls_remove` and `merge_staged_commit` NIFs real); remaining production trust gaps are multi-device key distribution and cross-node consistency.
 2. Commit/update/add/remove lifecycle handling needs deeper OpenMLS-backed semantics (pending-commit payload integrity and epoch transition assertions under churn).
 3. Multi-node/state-distribution strategy is still undefined for strict cross-node consistency and restart behavior.
 4. End-to-end confidence on backend gates is now supported by a serialized burn-in pass set (`3x fast + 2x deep`, all PASS); remaining closure is user-facing UX proof, not backend gate determinism.
@@ -149,8 +156,8 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 
 ## Top 3 next tasks (highest ROI)
 
-1. Complete deeper OpenMLS lifecycle semantics for commit/update/add/remove (payload integrity constraints and epoch transition assertions under churn).
-2. Complete remaining key lifecycle hardening (revocation strategy and device/user removal semantics).
+1. Finalize operational rollout gates (canonical flow timing budget, MLS failure-rate telemetry threshold, coverage snapshot capture) - Sprint 9.3 section C items remaining open.
+2. Complete multi-node/state-distribution strategy for strict cross-node consistency and restart behavior.
 3. Finalize required-check enforcement + escalation ownership for the QA workflow, and keep repeatability evidence fresh in artifacts.
 
 ## Deferred TODO (Do Not Lose)

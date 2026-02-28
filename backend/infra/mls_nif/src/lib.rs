@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use dashmap::DashMap;
 use openmls::prelude::{
     tls_codec::Deserialize as _, tls_codec::Serialize as _, BasicCredential, Ciphersuite,
     CreateMessageError, CredentialWithKey, GroupId, KeyPackage, LeafNodeIndex, MlsGroup,
@@ -9,11 +10,8 @@ use openmls::prelude::{
 use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::OpenMlsRustCrypto;
 use rustler::{Encoder, Env, Term};
-use std::collections::HashMap;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Mutex, OnceLock,
-};
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type Payload = HashMap<String, String>;
 
@@ -27,6 +25,10 @@ pub enum ErrorCode {
     StorageInconsistent,
     CryptoFailure,
     UnsupportedCapability,
+    /// N1: Distinct variant for a poisoned Mutex/RwLock — a concurrency failure,
+    /// not a storage integrity issue. Prevents the Elixir caller from attempting
+    /// incorrect state-repair recovery when the real cause is a panicked thread.
+    LockPoisoned,
 }
 
 impl ErrorCode {
@@ -41,6 +43,7 @@ impl ErrorCode {
             Self::StorageInconsistent => "storage_inconsistent",
             Self::CryptoFailure => "crypto_failure",
             Self::UnsupportedCapability => "unsupported_capability",
+            Self::LockPoisoned => "lock_poisoned",
         }
     }
 }
@@ -63,6 +66,8 @@ struct GroupSession {
     sender: MemberSession,
     recipient: MemberSession,
     decrypted_by_message_id: HashMap<String, CachedMessage>,
+    /// Insertion-order queue for deterministic FIFO cache eviction (N4).
+    decrypted_message_order: VecDeque<String>,
 }
 
 struct MemberSession {
@@ -71,6 +76,7 @@ struct MemberSession {
     group: MlsGroup,
 }
 
+#[derive(Clone)]
 struct CachedMessage {
     ciphertext: String,
     plaintext: String,
@@ -84,12 +90,9 @@ const SNAPSHOT_RECIPIENT_SIGNER_KEY: &str = "session_recipient_signer";
 const SNAPSHOT_CACHE_KEY: &str = "session_cache";
 const MAX_DECRYPT_CACHE_ENTRIES: usize = 256;
 
-static GROUP_SESSIONS: OnceLock<Mutex<HashMap<String, GroupSession>>> = OnceLock::new();
+static GROUP_SESSIONS: std::sync::LazyLock<DashMap<String, GroupSession>> =
+    std::sync::LazyLock::new(DashMap::new);
 static KEY_PACKAGE_COUNTER: AtomicU64 = AtomicU64::new(1);
-
-fn group_sessions() -> &'static Mutex<HashMap<String, GroupSession>> {
-    GROUP_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
-}
 
 impl MlsError {
     #[must_use]
@@ -159,6 +162,25 @@ pub fn create_key_package(params: &Payload) -> MlsResult {
 
 pub fn create_group(params: &Payload) -> MlsResult {
     let parsed = CreateGroupParams::try_from(params)?;
+
+    // N3: Reject empty, oversized, or NUL-containing group IDs before touching any
+    // state. Length is checked in bytes; IDs are hex-encoded UUIDs (ASCII-only)
+    // so byte length equals character count.
+    if parsed.group_id.is_empty() || parsed.group_id.len() > 256 {
+        return Err(MlsError::with_code(
+            ErrorCode::InvalidInput,
+            "create_group",
+            "INVALID_GROUP_ID",
+        ));
+    }
+    if parsed.group_id.contains('\0') {
+        return Err(MlsError::with_code(
+            ErrorCode::InvalidInput,
+            "create_group",
+            "INVALID_GROUP_ID_NULL_BYTE",
+        ));
+    }
+
     let ciphersuite = parse_ciphersuite(&parsed.ciphersuite).ok_or_else(|| {
         let mut details = Payload::new();
         details.insert("operation".to_owned(), "create_group".to_owned());
@@ -188,12 +210,7 @@ pub fn create_group(params: &Payload) -> MlsResult {
     let session_snapshot = build_group_session_snapshot(&session, "create_group")?;
     let epoch = session.sender.group.epoch().as_u64().to_string();
 
-    let mut guard = group_sessions().lock().unwrap_or_else(|e| {
-        eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
-        e.into_inner()
-    });
-    guard.insert(parsed.group_id.clone(), session);
-    drop(guard);
+    GROUP_SESSIONS.insert(parsed.group_id.clone(), session);
 
     let mut payload = Payload::new();
     payload.insert("group_id".to_owned(), parsed.group_id.clone());
@@ -218,40 +235,59 @@ pub fn join_from_welcome(params: &Payload) -> MlsResult {
             let group_id =
                 non_empty(params, "group_id").unwrap_or_else(|| format!("rejoin:{}", token));
 
-            let mut guard = group_sessions().lock().unwrap_or_else(|e| {
-                eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
-                e.into_inner()
-            });
+            // N3: Reject empty, oversized, or NUL-containing group IDs before touching
+            // any state. Length is in bytes; IDs are hex-encoded UUIDs (ASCII-only)
+            // so byte length equals character count.
+            if group_id.is_empty() || group_id.len() > 256 {
+                return Err(MlsError::with_code(
+                    ErrorCode::InvalidInput,
+                    operation,
+                    "INVALID_GROUP_ID",
+                ));
+            }
+            if group_id.contains('\0') {
+                return Err(MlsError::with_code(
+                    ErrorCode::InvalidInput,
+                    operation,
+                    "INVALID_GROUP_ID_NULL_BYTE",
+                ));
+            }
 
-            if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
+            if has_complete_session_snapshot(params) || !GROUP_SESSIONS.contains_key(&group_id) {
                 if let Some(restored) =
                     restore_group_session_from_snapshot(&group_id, params, operation)?
                 {
-                    guard.insert(group_id.clone(), restored);
-                } else if !guard.contains_key(&group_id) {
+                    GROUP_SESSIONS.insert(group_id.clone(), restored);
+                } else if !GROUP_SESSIONS.contains_key(&group_id) {
                     let session = create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)?;
-                    guard.insert(group_id.clone(), session);
+                    GROUP_SESSIONS.insert(group_id.clone(), session);
                 }
             }
 
-            let session = guard.get(&group_id).ok_or_else(|| {
-                MlsError::with_code(
-                    ErrorCode::StorageInconsistent,
-                    operation,
-                    "missing_group_state",
-                )
-            })?;
+            // N7: Use DashMap entry — shard lock held only while extracting raw data.
+            let (epoch, snapshot_raw) = {
+                let entry = GROUP_SESSIONS.get(&group_id).ok_or_else(|| {
+                    MlsError::with_code(
+                        ErrorCode::StorageInconsistent,
+                        operation,
+                        "missing_group_state",
+                    )
+                })?;
+                let epoch = entry.sender.group.epoch().as_u64().to_string();
+                // N6: Extract raw snapshot data while holding the shard lock (fast: byte clones).
+                let snapshot_raw = extract_snapshot_raw_data(&entry, operation)?;
+                (epoch, snapshot_raw)
+            }; // entry (shard lock) dropped here
+               // Shard lock released — serialize outside the lock (slow: hex-encoding ~8-18 ms).
+            let snapshot = serialize_snapshot_raw_data(snapshot_raw);
 
             let mut payload = Payload::new();
             payload.insert("group_id".to_owned(), group_id);
             payload.insert("group_state_ref".to_owned(), format!("state:{}", token));
             payload.insert("audit_id".to_owned(), format!("audit:{}", token));
             payload.insert("status".to_owned(), "joined".to_owned());
-            payload.insert(
-                "epoch".to_owned(),
-                session.sender.group.epoch().as_u64().to_string(),
-            );
-            payload.extend(build_group_session_snapshot(session, operation)?);
+            payload.insert("epoch".to_owned(), epoch);
+            payload.extend(snapshot);
             Ok(payload)
         }
         None => {
@@ -288,23 +324,36 @@ pub fn process_incoming(params: &Payload) -> MlsResult {
 
     match (group_id, ciphertext) {
         (Some(group_id), Some(ciphertext)) => {
-            let mut guard = group_sessions().lock().unwrap_or_else(|e| {
-                eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
-                e.into_inner()
-            });
+            // N3: Reject empty, oversized, or NUL-containing group IDs before touching
+            // any state. Length is in bytes; IDs are hex-encoded UUIDs (ASCII-only)
+            // so byte length equals character count.
+            if group_id.is_empty() || group_id.len() > 256 {
+                return Err(MlsError::with_code(
+                    ErrorCode::InvalidInput,
+                    operation,
+                    "INVALID_GROUP_ID",
+                ));
+            }
+            if group_id.contains('\0') {
+                return Err(MlsError::with_code(
+                    ErrorCode::InvalidInput,
+                    operation,
+                    "INVALID_GROUP_ID_NULL_BYTE",
+                ));
+            }
 
             let should_restore =
-                has_complete_session_snapshot(params) || !guard.contains_key(&group_id);
+                has_complete_session_snapshot(params) || !GROUP_SESSIONS.contains_key(&group_id);
 
             if should_restore {
                 if let Some(restored) =
                     restore_group_session_from_snapshot(&group_id, params, operation)?
                 {
-                    guard.insert(group_id.clone(), restored);
+                    GROUP_SESSIONS.insert(group_id.clone(), restored);
                 }
             }
 
-            let session = guard.get_mut(&group_id).ok_or_else(|| {
+            let mut entry = GROUP_SESSIONS.get_mut(&group_id).ok_or_else(|| {
                 let mut err_details = Payload::new();
                 err_details.insert("operation".to_owned(), operation.to_owned());
                 err_details.insert("reason".to_owned(), "missing_group_state".to_owned());
@@ -314,6 +363,7 @@ pub fn process_incoming(params: &Payload) -> MlsResult {
                     details: err_details,
                 }
             })?;
+            let session = &mut *entry;
 
             if let Some(cache_key) = message_id.as_ref() {
                 if let Some(cached_message) = session.decrypted_by_message_id.get(cache_key) {
@@ -395,6 +445,7 @@ pub fn process_incoming(params: &Payload) -> MlsResult {
             if let Some(cache_key) = message_id {
                 cache_decrypted_message(
                     &mut session.decrypted_by_message_id,
+                    &mut session.decrypted_message_order,
                     cache_key,
                     CachedMessage {
                         ciphertext: ciphertext.clone(),
@@ -403,7 +454,13 @@ pub fn process_incoming(params: &Payload) -> MlsResult {
                 );
             }
 
-            payload.extend(build_group_session_snapshot(session, operation)?);
+            // N6/N7: Extract raw snapshot data while holding the shard lock (fast: byte clones).
+            let snapshot_raw = extract_snapshot_raw_data(session, operation)?;
+            drop(entry); // shard lock released here
+                         // Shard lock released — serialize outside the lock (slow: hex-encoding ~8-18 ms).
+            let snapshot = serialize_snapshot_raw_data(snapshot_raw);
+
+            payload.extend(snapshot);
 
             Ok(payload)
         }
@@ -449,26 +506,22 @@ pub fn mls_add(params: &Payload) -> MlsResult {
 pub fn mls_remove(params: &Payload) -> MlsResult {
     let operation = "mls_remove";
     with_required_group(operation, params, |group_id| {
-        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
-            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
-            e.into_inner()
-        });
-
-        if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
+        if has_complete_session_snapshot(params) || !GROUP_SESSIONS.contains_key(&group_id) {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                guard.insert(group_id.clone(), restored);
+                GROUP_SESSIONS.insert(group_id.clone(), restored);
             }
         }
 
-        let session = guard.get_mut(&group_id).ok_or_else(|| {
+        let mut entry = GROUP_SESSIONS.get_mut(&group_id).ok_or_else(|| {
             MlsError::with_code(
                 ErrorCode::StorageInconsistent,
                 operation,
                 "missing_group_state",
             )
         })?;
+        let session = &mut *entry;
 
         // Determine which leaf index to remove.
         let leaf_index = determine_remove_target(params, operation)?;
@@ -572,7 +625,11 @@ pub fn mls_remove(params: &Payload) -> MlsResult {
         // Read epoch from sender's group after the operation.
         let epoch = session.sender.group.epoch().as_u64().to_string();
 
-        let snapshot = build_group_session_snapshot(session, operation)?;
+        // N6/N7: Extract raw snapshot data while holding the shard lock (fast: byte clones).
+        let snapshot_raw = extract_snapshot_raw_data(session, operation)?;
+        drop(entry); // shard lock released here
+                     // Shard lock released — serialize outside the lock (slow: hex-encoding ~8-18 ms).
+        let snapshot = serialize_snapshot_raw_data(snapshot_raw);
 
         let mut payload = Payload::new();
         payload.insert("group_id".to_owned(), group_id);
@@ -631,33 +688,33 @@ pub fn merge_staged_commit(params: &Payload) -> MlsResult {
     })?;
 
     with_required_group(operation, params, |group_id| {
-        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
-            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
-            e.into_inner()
-        });
-
-        if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
+        if has_complete_session_snapshot(params) || !GROUP_SESSIONS.contains_key(&group_id) {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                guard.insert(group_id.clone(), restored);
+                GROUP_SESSIONS.insert(group_id.clone(), restored);
             }
         }
 
-        let session = guard.get_mut(&group_id).ok_or_else(|| {
+        let mut entry = GROUP_SESSIONS.get_mut(&group_id).ok_or_else(|| {
             MlsError::with_code(
                 ErrorCode::StorageInconsistent,
                 operation,
                 "missing_group_state",
             )
         })?;
+        let session = &mut *entry;
 
         // If the recipient's group is already inactive, the commit was already processed
         // by the sender-side operation (e.g. mls_remove processes the commit inline).
         // In the two-actor co-located model, skip re-processing and return current state.
         if !session.recipient.group.is_active() {
             let epoch = session.sender.group.epoch().as_u64().to_string();
-            let snapshot = build_group_session_snapshot(session, operation)?;
+            // N6/N7: Extract raw snapshot data while holding the shard lock (fast: byte clones).
+            let snapshot_raw = extract_snapshot_raw_data(session, operation)?;
+            drop(entry); // shard lock released here
+                         // Shard lock released — serialize outside the lock (slow: hex-encoding ~8-18 ms).
+            let snapshot = serialize_snapshot_raw_data(snapshot_raw);
 
             let mut payload = Payload::new();
             payload.insert("group_id".to_owned(), group_id);
@@ -737,7 +794,11 @@ pub fn merge_staged_commit(params: &Payload) -> MlsResult {
         // Epoch is authoritative from the sender's group.
         let epoch = session.sender.group.epoch().as_u64().to_string();
 
-        let snapshot = build_group_session_snapshot(session, operation)?;
+        // N6/N7: Extract raw snapshot data while holding the shard lock (fast: byte clones).
+        let snapshot_raw = extract_snapshot_raw_data(session, operation)?;
+        drop(entry); // shard lock released here
+                     // Shard lock released — serialize outside the lock (slow: hex-encoding ~8-18 ms).
+        let snapshot = serialize_snapshot_raw_data(snapshot_raw);
 
         let mut payload = Payload::new();
         payload.insert("group_id".to_owned(), group_id);
@@ -775,26 +836,22 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
     with_required_group(operation, params, |group_id| {
         let body = params.get("body").cloned().unwrap_or_default();
 
-        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
-            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
-            e.into_inner()
-        });
-
-        if has_complete_session_snapshot(params) || !guard.contains_key(&group_id) {
+        if has_complete_session_snapshot(params) || !GROUP_SESSIONS.contains_key(&group_id) {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                guard.insert(group_id.clone(), restored);
+                GROUP_SESSIONS.insert(group_id.clone(), restored);
             }
         }
 
-        let session = guard.get_mut(&group_id).ok_or_else(|| {
+        let mut entry = GROUP_SESSIONS.get_mut(&group_id).ok_or_else(|| {
             MlsError::with_code(
                 ErrorCode::StorageInconsistent,
                 operation,
                 "missing_group_state",
             )
         })?;
+        let session = &mut *entry;
 
         let message_out = session
             .sender
@@ -812,12 +869,18 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
         let ciphertext = encode_hex(&serialized);
         let epoch = session.sender.group.epoch().as_u64().to_string();
 
+        // N6/N7: Extract raw snapshot data while holding the shard lock (fast: byte clones).
+        let snapshot_raw = extract_snapshot_raw_data(session, operation)?;
+        drop(entry); // shard lock released here
+                     // Shard lock released — serialize outside the lock (slow: hex-encoding ~8-18 ms).
+        let snapshot = serialize_snapshot_raw_data(snapshot_raw);
+
         let mut payload = Payload::new();
         payload.insert("group_id".to_owned(), group_id);
         payload.insert("ciphertext".to_owned(), ciphertext);
         payload.insert("epoch".to_owned(), epoch);
         payload.insert("status".to_owned(), "encrypted".to_owned());
-        payload.extend(build_group_session_snapshot(session, operation)?);
+        payload.extend(snapshot);
         Ok(payload)
     })
 }
@@ -825,18 +888,25 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
 pub fn export_group_info(params: &Payload) -> MlsResult {
     let operation = "export_group_info";
     with_required_group(operation, params, |group_id| {
-        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
-            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
-            e.into_inner()
-        });
-
-        if !guard.contains_key(&group_id) {
+        if !GROUP_SESSIONS.contains_key(&group_id) {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                guard.insert(group_id.clone(), restored);
+                GROUP_SESSIONS.insert(group_id.clone(), restored);
             }
         }
+
+        // N6/N7: Extract raw snapshot data while holding the shard lock (fast: byte clones),
+        // then drop the shard lock before serializing (slow: hex-encoding ~8-18 ms).
+        let (epoch_opt, snapshot_raw_opt) = if let Some(entry) = GROUP_SESSIONS.get(&group_id) {
+            let epoch = entry.sender.group.epoch().as_u64().to_string();
+            let raw = extract_snapshot_raw_data(&entry, operation)?;
+            (Some(epoch), Some(raw))
+        } else {
+            (None, None)
+        }; // entry (shard lock) dropped here
+           // Shard lock released — serialize outside the lock.
+        let snapshot_opt = snapshot_raw_opt.map(serialize_snapshot_raw_data);
 
         let mut payload = Payload::new();
         payload.insert("group_id".to_owned(), group_id.clone());
@@ -845,12 +915,9 @@ pub fn export_group_info(params: &Payload) -> MlsResult {
             format!("group-info:{}", group_id),
         );
 
-        if let Some(session) = guard.get(&group_id) {
-            payload.insert(
-                "epoch".to_owned(),
-                session.sender.group.epoch().as_u64().to_string(),
-            );
-            payload.extend(build_group_session_snapshot(session, operation)?);
+        if let (Some(epoch), Some(snapshot)) = (epoch_opt, snapshot_opt) {
+            payload.insert("epoch".to_owned(), epoch);
+            payload.extend(snapshot);
         }
 
         Ok(payload)
@@ -873,26 +940,22 @@ pub fn export_ratchet_tree(params: &Payload) -> MlsResult {
 pub fn list_member_credentials(params: &Payload) -> MlsResult {
     let operation = "list_member_credentials";
     with_required_group(operation, params, |group_id| {
-        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
-            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
-            e.into_inner()
-        });
-
-        if !guard.contains_key(&group_id) {
+        if !GROUP_SESSIONS.contains_key(&group_id) {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                guard.insert(group_id.clone(), restored);
+                GROUP_SESSIONS.insert(group_id.clone(), restored);
             }
         }
 
-        let session = guard.get(&group_id).ok_or_else(|| {
+        let entry = GROUP_SESSIONS.get(&group_id).ok_or_else(|| {
             MlsError::with_code(
                 ErrorCode::StorageInconsistent,
                 operation,
                 "missing_group_state",
             )
         })?;
+        let session = &*entry;
 
         // Iterate members, extract credential identity for each.
         // member.index is a LeafNodeIndex with a .u32() method.
@@ -941,7 +1004,26 @@ where
     let group_id = required_non_empty(params, "group_id", &mut details);
 
     match group_id {
-        Some(group_id) => on_group(group_id),
+        Some(group_id) => {
+            // N3: Reject empty, oversized, or NUL-containing group IDs before touching
+            // any state. Length is in bytes; IDs are hex-encoded UUIDs (ASCII-only)
+            // so byte length equals character count.
+            if group_id.is_empty() || group_id.len() > 256 {
+                return Err(MlsError::with_code(
+                    ErrorCode::InvalidInput,
+                    operation,
+                    "INVALID_GROUP_ID",
+                ));
+            }
+            if group_id.contains('\0') {
+                return Err(MlsError::with_code(
+                    ErrorCode::InvalidInput,
+                    operation,
+                    "INVALID_GROUP_ID_NULL_BYTE",
+                ));
+            }
+            on_group(group_id)
+        }
         None => {
             details.insert("operation".to_owned(), operation.to_owned());
             Err(MlsError::invalid_input(details))
@@ -1162,6 +1244,7 @@ fn create_group_session(
             group: recipient_group,
         },
         decrypted_by_message_id: HashMap::new(),
+        decrypted_message_order: VecDeque::new(),
     })
 }
 
@@ -1215,34 +1298,167 @@ fn map_create_message_error(operation: &str, error: CreateMessageError) -> MlsEr
     }
 }
 
+/// Raw data extracted from a [`GroupSession`] while the `GROUP_SESSIONS` lock is held.
+///
+/// The extract step clones/copies only raw bytes (cheap). The subsequent
+/// [`serialize_snapshot_raw_data`] step hex-encodes those bytes into strings
+/// (expensive, ~8-18 ms) and can run *outside* the lock.
+struct SnapshotRawData {
+    sender_storage: HashMap<Vec<u8>, Vec<u8>>,
+    recipient_storage: HashMap<Vec<u8>, Vec<u8>>,
+    /// TLS-serialized bytes of the sender's `SignatureKeyPair`.
+    sender_signer_bytes: Vec<u8>,
+    /// TLS-serialized bytes of the recipient's `SignatureKeyPair`.
+    recipient_signer_bytes: Vec<u8>,
+    /// N4 (Fix B): Cache entries stored in insertion order so that the VecDeque
+    /// eviction queue can be rebuilt deterministically after a snapshot restore.
+    /// HashMap iteration is non-deterministic; using Vec preserves order.
+    message_cache_ordered: Vec<(String, CachedMessage)>,
+}
+
+/// Phase 1 (N6): Extract raw data while the `GROUP_SESSIONS` lock is held.
+///
+/// All operations here are byte-level clones or fixed-size TLS serializations —
+/// typically well under 1 ms. The caller must drop the lock before calling
+/// [`serialize_snapshot_raw_data`].
+fn extract_snapshot_raw_data(
+    session: &GroupSession,
+    operation: &str,
+) -> Result<SnapshotRawData, MlsError> {
+    // Clone raw storage maps — O(n) byte copies, no encoding work.
+    // N1: Use LockPoisoned (not StorageInconsistent) — a poisoned RwLock is a
+    // concurrency failure caused by a panicked thread, not a storage integrity
+    // issue. The Elixir caller must not attempt state-repair for this condition.
+    let sender_storage = session
+        .sender
+        .provider
+        .storage()
+        .values
+        .read()
+        .map_err(|_| MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned"))?
+        .clone();
+
+    let recipient_storage = session
+        .recipient
+        .provider
+        .storage()
+        .values
+        .read()
+        .map_err(|_| MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned"))?
+        .clone();
+
+    // TLS-serialize the signers — these are small fixed-size key blobs (~64 bytes),
+    // so serialization is negligible.
+    let sender_signer_bytes = session
+        .sender
+        .signer
+        .tls_serialize_detached()
+        .map_err(|_| {
+            MlsError::with_code(
+                ErrorCode::CryptoFailure,
+                operation,
+                "signature_serialize_failed",
+            )
+        })?;
+
+    let recipient_signer_bytes =
+        session
+            .recipient
+            .signer
+            .tls_serialize_detached()
+            .map_err(|_| {
+                MlsError::with_code(
+                    ErrorCode::CryptoFailure,
+                    operation,
+                    "signature_serialize_failed",
+                )
+            })?;
+
+    // N4 (Fix B): Capture cache entries in VecDeque insertion order so the eviction
+    // queue can be rebuilt deterministically after a snapshot restore. Iterating
+    // a HashMap is non-deterministic; the VecDeque is the canonical order source.
+    let message_cache_ordered: Vec<(String, CachedMessage)> = session
+        .decrypted_message_order
+        .iter()
+        .filter_map(|key| {
+            session
+                .decrypted_by_message_id
+                .get(key)
+                .map(|v| (key.clone(), v.clone()))
+        })
+        .collect();
+
+    Ok(SnapshotRawData {
+        sender_storage,
+        recipient_storage,
+        sender_signer_bytes,
+        recipient_signer_bytes,
+        message_cache_ordered,
+    })
+}
+
+/// Phase 2 (N6): Serialize raw data into the snapshot [`Payload`].
+///
+/// All operations here are CPU-bound hex-encoding (~8-18 ms total). This runs
+/// *outside* the `GROUP_SESSIONS` lock so other threads are not blocked.
+fn serialize_snapshot_raw_data(raw: SnapshotRawData) -> Payload {
+    let mut payload = Payload::new();
+
+    // Serialize storage maps: each entry becomes "hex(key):hex(value)".
+    let sender_storage_str = {
+        let mut entries: Vec<String> = raw
+            .sender_storage
+            .iter()
+            .map(|(k, v)| format!("{}:{}", encode_hex(k), encode_hex(v)))
+            .collect();
+        entries.sort_unstable();
+        entries.join(",")
+    };
+
+    let recipient_storage_str = {
+        let mut entries: Vec<String> = raw
+            .recipient_storage
+            .iter()
+            .map(|(k, v)| format!("{}:{}", encode_hex(k), encode_hex(v)))
+            .collect();
+        entries.sort_unstable();
+        entries.join(",")
+    };
+
+    let sender_signer_str = encode_hex(&raw.sender_signer_bytes);
+    let recipient_signer_str = encode_hex(&raw.recipient_signer_bytes);
+    // N4 (Fix B): serialize_message_cache_ordered preserves insertion order so that
+    // the VecDeque eviction queue is rebuilt identically after a snapshot restore.
+    let cache_str = serialize_message_cache_ordered(&raw.message_cache_ordered);
+
+    payload.insert(SNAPSHOT_SENDER_STORAGE_KEY.to_owned(), sender_storage_str);
+    payload.insert(
+        SNAPSHOT_RECIPIENT_STORAGE_KEY.to_owned(),
+        recipient_storage_str,
+    );
+    payload.insert(SNAPSHOT_SENDER_SIGNER_KEY.to_owned(), sender_signer_str);
+    payload.insert(
+        SNAPSHOT_RECIPIENT_SIGNER_KEY.to_owned(),
+        recipient_signer_str,
+    );
+    payload.insert(SNAPSHOT_CACHE_KEY.to_owned(), cache_str);
+
+    payload
+}
+
+/// Build a snapshot payload from a `GroupSession`.
+///
+/// Internally this delegates to [`extract_snapshot_raw_data`] +
+/// [`serialize_snapshot_raw_data`] so that callers which hold the
+/// `GROUP_SESSIONS` lock can switch to the two-phase approach (N6).
+/// For call sites where no `GROUP_SESSIONS` lock is held (e.g. `create_group`
+/// before the insert), this is a thin convenience wrapper.
 fn build_group_session_snapshot(
     session: &GroupSession,
     operation: &str,
 ) -> Result<Payload, MlsError> {
-    let mut payload = Payload::new();
-
-    payload.insert(
-        SNAPSHOT_SENDER_STORAGE_KEY.to_owned(),
-        serialize_storage_map(session.sender.provider.storage(), operation)?,
-    );
-    payload.insert(
-        SNAPSHOT_RECIPIENT_STORAGE_KEY.to_owned(),
-        serialize_storage_map(session.recipient.provider.storage(), operation)?,
-    );
-    payload.insert(
-        SNAPSHOT_SENDER_SIGNER_KEY.to_owned(),
-        serialize_signer(&session.sender.signer, operation)?,
-    );
-    payload.insert(
-        SNAPSHOT_RECIPIENT_SIGNER_KEY.to_owned(),
-        serialize_signer(&session.recipient.signer, operation)?,
-    );
-    payload.insert(
-        SNAPSHOT_CACHE_KEY.to_owned(),
-        serialize_message_cache(&session.decrypted_by_message_id),
-    );
-
-    Ok(payload)
+    let raw = extract_snapshot_raw_data(session, operation)?;
+    Ok(serialize_snapshot_raw_data(raw))
 }
 
 fn restore_group_session_from_snapshot(
@@ -1283,7 +1499,8 @@ fn restore_group_session_from_snapshot(
         deserialize_storage_map(recipient_storage.as_deref().unwrap(), operation)?;
     let sender_signer = deserialize_signer(sender_signer.as_deref().unwrap(), operation)?;
     let recipient_signer = deserialize_signer(recipient_signer.as_deref().unwrap(), operation)?;
-    let message_cache = deserialize_message_cache(&cache, operation)?;
+    // N4 (Fix B): Deserialize in serialization order so VecDeque is deterministic.
+    let message_cache_ordered = deserialize_message_cache_ordered(&cache, operation)?;
 
     let sender_provider = OpenMlsRustCrypto::default();
     {
@@ -1367,6 +1584,16 @@ fn restore_group_session_from_snapshot(
             )
         })?;
 
+    // N4 (Fix B): Rebuild HashMap and VecDeque from the ordered list so that
+    // eviction order after restore exactly matches the original insertion order.
+    let mut message_cache: HashMap<String, CachedMessage> =
+        HashMap::with_capacity(message_cache_ordered.len());
+    let mut message_order: VecDeque<String> = VecDeque::with_capacity(message_cache_ordered.len());
+    for (key, value) in message_cache_ordered {
+        message_order.push_back(key.clone());
+        message_cache.insert(key, value);
+    }
+
     Ok(Some(GroupSession {
         sender: MemberSession {
             provider: sender_provider,
@@ -1379,24 +1606,8 @@ fn restore_group_session_from_snapshot(
             group: recipient_group,
         },
         decrypted_by_message_id: message_cache,
+        decrypted_message_order: message_order,
     }))
-}
-
-fn serialize_storage_map(
-    storage: &openmls_rust_crypto::MemoryStorage,
-    operation: &str,
-) -> Result<String, MlsError> {
-    let values = storage.values.read().map_err(|_| {
-        MlsError::with_code(ErrorCode::StorageInconsistent, operation, "lock_poisoned")
-    })?;
-
-    let mut entries: Vec<String> = values
-        .iter()
-        .map(|(key, value)| format!("{}:{}", encode_hex(key), encode_hex(value)))
-        .collect();
-    entries.sort_unstable();
-
-    Ok(entries.join(","))
 }
 
 fn deserialize_storage_map(
@@ -1439,18 +1650,6 @@ fn deserialize_storage_map(
     Ok(values)
 }
 
-fn serialize_signer(signer: &SignatureKeyPair, operation: &str) -> Result<String, MlsError> {
-    let bytes = signer.tls_serialize_detached().map_err(|_| {
-        MlsError::with_code(
-            ErrorCode::CryptoFailure,
-            operation,
-            "signature_serialize_failed",
-        )
-    })?;
-
-    Ok(encode_hex(&bytes))
-}
-
 fn deserialize_signer(encoded: &str, operation: &str) -> Result<SignatureKeyPair, MlsError> {
     let bytes = decode_hex(encoded).map_err(|_| {
         MlsError::with_code(
@@ -1459,17 +1658,35 @@ fn deserialize_signer(encoded: &str, operation: &str) -> Result<SignatureKeyPair
             "invalid_signature_snapshot",
         )
     })?;
-    let mut bytes_slice = bytes.as_slice();
 
-    SignatureKeyPair::tls_deserialize(&mut bytes_slice).map_err(|_| {
-        MlsError::with_code(
+    // H3: tls_deserialize can panic internally on malformed byte sequences
+    // (e.g. length-prefix underflow deep inside the TLS codec).  Wrapping in
+    // catch_unwind converts any such panic into a recoverable MlsError so that
+    // a bad snapshot cannot crash the NIF host process.
+    let op_owned = operation.to_owned();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut bytes_slice: &[u8] = &bytes;
+        SignatureKeyPair::tls_deserialize(&mut bytes_slice)
+    }));
+
+    match result {
+        Ok(Ok(kp)) => Ok(kp),
+        Ok(Err(_)) => Err(MlsError::with_code(
             ErrorCode::InvalidInput,
-            operation,
-            "invalid_signature_snapshot",
-        )
-    })
+            &op_owned,
+            "signature_keypair_tls_malformed",
+        )),
+        Err(_panic) => Err(MlsError::with_code(
+            ErrorCode::InvalidInput,
+            &op_owned,
+            "signature_keypair_tls_malformed",
+        )),
+    }
 }
 
+/// Serialize a message cache as a sorted string (used for HashMap-keyed cache in
+/// tests and the session_cache_roundtrip test).  Sort ensures a stable output
+/// when insertion order is not tracked.
 fn serialize_message_cache(cache: &HashMap<String, CachedMessage>) -> String {
     let mut entries: Vec<String> = cache
         .iter()
@@ -1487,19 +1704,63 @@ fn serialize_message_cache(cache: &HashMap<String, CachedMessage>) -> String {
     entries.join(",")
 }
 
+/// N4 (Fix B): Serialize cache entries in their original insertion order.
+///
+/// Preserving insertion order in the snapshot means `deserialize_message_cache`
+/// can rebuild both the HashMap and the `decrypted_message_order` VecDeque
+/// deterministically after a round-trip — regardless of HashMap's internal
+/// non-deterministic iteration order.
+fn serialize_message_cache_ordered(ordered: &[(String, CachedMessage)]) -> String {
+    ordered
+        .iter()
+        .map(|(message_id, cached_message)| {
+            format!(
+                "{}:{}:{}",
+                encode_hex(message_id.as_bytes()),
+                &cached_message.ciphertext,
+                encode_hex(cached_message.plaintext.as_bytes())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn deserialize_message_cache(
     encoded: &str,
     operation: &str,
 ) -> Result<HashMap<String, CachedMessage>, MlsError> {
-    let mut cache = HashMap::new();
+    let ordered = deserialize_message_cache_ordered(encoded, operation)?;
+    Ok(ordered.into_iter().collect())
+}
+
+/// N4 (Fix B): Deserialize cache entries preserving the serialized order.
+///
+/// Returns entries as a `Vec` in serialization order so that callers can
+/// rebuild the `decrypted_message_order` VecDeque deterministically.
+/// After a serialize→deserialize round-trip the VecDeque order exactly matches
+/// the original insertion order, fixing non-deterministic eviction after restore.
+fn deserialize_message_cache_ordered(
+    encoded: &str,
+    operation: &str,
+) -> Result<Vec<(String, CachedMessage)>, MlsError> {
+    let mut ordered: Vec<(String, CachedMessage)> = Vec::new();
 
     if encoded.is_empty() {
-        return Ok(cache);
+        return Ok(ordered);
     }
 
     for entry in encoded.split(',').filter(|entry| !entry.is_empty()) {
-        if cache.len() >= MAX_DECRYPT_CACHE_ENTRIES {
-            break;
+        // H4: Enforce the 256-entry cache cap as a hard security invariant.
+        // A snapshot with more entries than MAX_DECRYPT_CACHE_ENTRIES almost
+        // certainly indicates data corruption or tampering; silently truncating
+        // would hide the anomaly.  Return an explicit error instead so callers
+        // can surface the integrity violation rather than absorbing it quietly.
+        if ordered.len() >= MAX_DECRYPT_CACHE_ENTRIES {
+            return Err(MlsError::with_code(
+                ErrorCode::InvalidInput,
+                operation,
+                "cache_too_large",
+            ));
         }
 
         let mut fields = entry.splitn(3, ':');
@@ -1539,31 +1800,38 @@ fn deserialize_message_cache(
             MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
         })?;
 
-        cache.insert(
+        ordered.push((
             message_id,
             CachedMessage {
                 ciphertext,
                 plaintext,
             },
-        );
+        ));
     }
 
-    Ok(cache)
+    Ok(ordered)
 }
 
 fn cache_decrypted_message(
     cache: &mut HashMap<String, CachedMessage>,
+    order: &mut VecDeque<String>,
     message_id: String,
     cached_message: CachedMessage,
 ) {
-    let exists = cache.contains_key(&message_id);
+    // If already cached, update in place without changing insertion order.
+    if cache.contains_key(&message_id) {
+        cache.insert(message_id, cached_message);
+        return;
+    }
 
-    if !exists && cache.len() >= MAX_DECRYPT_CACHE_ENTRIES {
-        if let Some(evict_key) = cache.keys().next().cloned() {
+    // Evict oldest (front of queue) when at capacity — deterministic FIFO (N4).
+    if cache.len() >= MAX_DECRYPT_CACHE_ENTRIES {
+        if let Some(evict_key) = order.pop_front() {
             cache.remove(&evict_key);
         }
     }
 
+    order.push_back(message_id.clone());
     cache.insert(message_id, cached_message);
 }
 
@@ -1579,7 +1847,15 @@ fn encode_hex(bytes: &[u8]) -> String {
     encoded
 }
 
+/// Maximum number of hex-encoded characters accepted by `decode_hex`.
+/// Corresponds to a 1 MB decoded payload (2 hex chars per byte).
+const MAX_HEX_DECODE_BYTES: usize = 1_048_576; // 1 MB
+
 fn decode_hex(value: &str) -> Result<Vec<u8>, &'static str> {
+    if value.len() > MAX_HEX_DECODE_BYTES * 2 {
+        return Err("hex_input_too_large");
+    }
+
     if !value.len().is_multiple_of(2) {
         return Err("invalid_ciphertext_encoding");
     }
@@ -1639,7 +1915,8 @@ mod atoms {
         commit_rejected,
         storage_inconsistent,
         crypto_failure,
-        unsupported_capability
+        unsupported_capability,
+        lock_poisoned
     }
 }
 
@@ -1660,6 +1937,7 @@ fn error_atom(code: ErrorCode) -> rustler::types::atom::Atom {
         ErrorCode::StorageInconsistent => atoms::storage_inconsistent(),
         ErrorCode::CryptoFailure => atoms::crypto_failure(),
         ErrorCode::UnsupportedCapability => atoms::unsupported_capability(),
+        ErrorCode::LockPoisoned => atoms::lock_poisoned(),
     }
 }
 
@@ -2163,6 +2441,83 @@ mod tests {
         assert_eq!(
             ErrorCode::UnsupportedCapability.as_str(),
             "unsupported_capability"
+        );
+        // N1: LockPoisoned is a concurrency failure distinct from storage issues.
+        assert_eq!(ErrorCode::LockPoisoned.as_str(), "lock_poisoned");
+    }
+
+    #[test]
+    fn group_id_null_byte_is_rejected() {
+        // N3: NUL bytes must be rejected in all entry points that validate group IDs.
+        let null_id = "group\0bad";
+
+        let err = create_group(&payload(&[
+            ("group_id", null_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect_err("NUL byte in group_id must be rejected");
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(
+            err.details.get("reason"),
+            Some(&"INVALID_GROUP_ID_NULL_BYTE".to_owned())
+        );
+
+        let err2 = process_incoming(&payload(&[
+            ("group_id", null_id),
+            ("ciphertext", "deadbeef"),
+        ]))
+        .expect_err("NUL byte in group_id must be rejected for process_incoming");
+        assert_eq!(err2.code, ErrorCode::InvalidInput);
+        assert_eq!(
+            err2.details.get("reason"),
+            Some(&"INVALID_GROUP_ID_NULL_BYTE".to_owned())
+        );
+    }
+
+    #[test]
+    fn cache_order_is_preserved_across_snapshot_roundtrip() {
+        // N4 (Fix B): After a serialize→deserialize round-trip the VecDeque
+        // eviction order must match the original insertion order exactly.
+        let mut cache: HashMap<String, CachedMessage> = HashMap::new();
+        let mut order: VecDeque<String> = VecDeque::new();
+
+        // Insert 5 messages in a deterministic order.
+        for i in 0..5u32 {
+            let key = format!("msg-{}", i);
+            cache_decrypted_message(
+                &mut cache,
+                &mut order,
+                key.clone(),
+                CachedMessage {
+                    ciphertext: format!("ct{}", i),
+                    plaintext: format!("pt{}", i),
+                },
+            );
+        }
+
+        // Simulate snapshot extraction: collect in VecDeque order.
+        let ordered: Vec<(String, CachedMessage)> = order
+            .iter()
+            .filter_map(|k| cache.get(k).map(|v| (k.clone(), v.clone())))
+            .collect();
+
+        // Serialize preserving insertion order.
+        let serialized = serialize_message_cache_ordered(&ordered);
+
+        // Deserialize back in order.
+        let restored =
+            deserialize_message_cache_ordered(&serialized, "test").expect("must deserialize");
+
+        let restored_keys: Vec<&str> = restored.iter().map(|(k, _)| k.as_str()).collect();
+        let expected_keys: Vec<String> = (0..5).map(|i| format!("msg-{}", i)).collect();
+        let expected_refs: Vec<&str> = expected_keys.iter().map(|s| s.as_str()).collect();
+
+        assert_eq!(
+            restored_keys, expected_refs,
+            "VecDeque insertion order must be preserved across snapshot round-trip"
         );
     }
 

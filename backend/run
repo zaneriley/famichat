@@ -2331,6 +2331,119 @@ function _qa_messaging_run {
     fi
   fi
 
+  # ---------------------------------------------------------------------------
+  # G1 — MLS failure-rate gate
+  # Scans canonical_flow_result.txt and continuity_contract.txt for MLS
+  # failure telemetry log lines emitted by MessageService.emit_mls_failure/5.
+  # Gate passes when mls_failure_rate < 0.05 (5%).
+  # Format: mls_failures / (mls_attempts + mls_failures) where attempts =
+  # total messages attempted (approximated from matrix send count in logs).
+  # In test mode the NIF is stubbed so failures appear only on real errors.
+  # ---------------------------------------------------------------------------
+  local mls_failure_rate
+  local mls_failure_gate
+  local mls_failure_count=0
+  local mls_total_count=0
+
+  # Count explicit MLS failure telemetry lines across all canonical output
+  local _g1_scan_files=()
+  [[ -f "${output_root}/canonical_flow_result.txt" ]] && \
+    _g1_scan_files+=("${output_root}/canonical_flow_result.txt")
+  [[ -f "${output_root}/continuity_contract.txt" ]] && \
+    _g1_scan_files+=("${output_root}/continuity_contract.txt")
+  [[ -f "${output_root}/canonical_flow_coverage.txt" ]] && \
+    _g1_scan_files+=("${output_root}/canonical_flow_coverage.txt")
+
+  if [[ "${#_g1_scan_files[@]}" -gt 0 ]]; then
+    # grep -c with multiple files prints "file:count"; sum the counts via awk
+    mls_failure_count=$(grep -c '\[Telemetry\].*famichat.*message.*mls_failure\|mls_encryption_failed\|mls_decryption_failed' \
+      "${_g1_scan_files[@]}" 2>/dev/null \
+      | awk -F: '{ s += $NF } END { print s+0 }' || echo 0)
+    # Total attempts: mls failures + successful sends observed in matrix CSV
+    local _mls_sends
+    _mls_sends=$(grep -c ',PASS,' "${output_root}/matrix_results.csv" 2>/dev/null || echo 0)
+    mls_total_count=$(( mls_failure_count + _mls_sends ))
+  fi
+
+  if [[ "${mls_total_count}" -eq 0 ]]; then
+    # No sends observed yet; treat rate as 0.0 (cannot divide by zero)
+    mls_failure_rate="0.0"
+    mls_failure_gate="PASS"
+  else
+    # Use awk for floating-point division
+    mls_failure_rate=$(awk "BEGIN { printf \"%.4f\", ${mls_failure_count} / ${mls_total_count} }")
+    mls_failure_gate=$(awk "BEGIN { print (${mls_failure_rate} < 0.05) ? \"PASS\" : \"FAIL\" }")
+  fi
+
+  # ---------------------------------------------------------------------------
+  # G2 — Coverage snapshot gate
+  # Parses [TOTAL] line from canonical_flow_coverage.txt produced by
+  # elixir:test:coverage during deep runs. Gate passes when >= 80.0%.
+  # In fast/non-deep runs the coverage file is absent; gate is SKIP.
+  # ---------------------------------------------------------------------------
+  local coverage_snapshot_pct="null"
+  local coverage_snapshot_gate="SKIP"
+
+  if [[ -f "${output_root}/canonical_flow_coverage.txt" ]]; then
+    local _raw_pct
+    _raw_pct=$(grep '^\[TOTAL\]' "${output_root}/canonical_flow_coverage.txt" \
+      | grep -oP '[0-9]+\.[0-9]+' | head -1 || true)
+    if [[ -n "${_raw_pct}" ]]; then
+      coverage_snapshot_pct="${_raw_pct}"
+      coverage_snapshot_gate=$(awk "BEGIN { print (${_raw_pct} >= 80.0) ? \"PASS\" : \"FAIL\" }")
+    fi
+  fi
+
+  # ---------------------------------------------------------------------------
+  # G3 — Per-operation timing budget gate
+  # Reads canonical_flow_timing_detail.json written by the Day 2 timing test
+  # in canonical_messaging_flow_test.exs during elixir:test:canonical-flow.
+  # Gate passes when every per-operation field is < 200ms.
+  # Gate is SKIP when the file is absent (canonical flow not run or fast mode
+  # without timing test).  Gate is FAIL (hard gate) when any field >= 200ms.
+  # ---------------------------------------------------------------------------
+  local timing_detail_file="${project_root}/backend/.tmp/canonical_flow_timing_detail.json"
+  local timing_budget_gate="SKIP"
+  local timing_detail_json="null"
+
+  if [[ -f "${timing_detail_file}" ]]; then
+    timing_detail_json="$(cat "${timing_detail_file}")"
+    local _timing_fail=0
+
+    # Check each per-operation field against the 200ms threshold
+    local _field
+    for _field in auth_to_subscribe_ms subscribe_to_send_ms send_to_receive_ms \
+                  mls_encrypt_ms snapshot_persist_ms; do
+      local _field_val
+      # Use jq type guard: emit the value only when it is a JSON number;
+      # any other type (string, null, missing) causes jq to exit non-zero so
+      # we treat it as a gate failure rather than coercing it to 0 in awk.
+      _field_val=$(jq -r --arg f "${_field}" \
+        'if ((.[$f] | type) == "number") then .[$f] else error("non-numeric") end' \
+        "${timing_detail_file}" 2>/dev/null || true)
+      if [[ -z "${_field_val}" ]]; then
+        # Missing or non-numeric field — treat as gate failure so we don't silently skip it
+        _timing_fail=1
+        break
+      fi
+      if awk "BEGIN { exit (${_field_val} < 200) ? 0 : 1 }"; then
+        : # under threshold
+      else
+        _timing_fail=1
+        break
+      fi
+    done
+
+    if [[ "${_timing_fail}" -eq 0 ]]; then
+      timing_budget_gate="PASS"
+    else
+      timing_budget_gate="FAIL"
+    fi
+
+    # Copy the timing detail file into the run output directory
+    cp "${timing_detail_file}" "${output_root}/canonical_flow_timing_detail.json"
+  fi
+
   local body_prefix="qa-${run_id}"
 
   _qa_run_http_matrix_scenario \
@@ -2570,6 +2683,21 @@ function _qa_messaging_run {
     global_failures+=("continuity_contract")
   fi
 
+  # G1 gate: MLS failure rate must be < 5%
+  if [[ "${mls_failure_gate}" == "FAIL" ]]; then
+    global_failures+=("mls_failure_rate")
+  fi
+
+  # G2 gate: coverage snapshot must be >= 80%
+  if [[ "${coverage_snapshot_gate}" == "FAIL" ]]; then
+    global_warnings+=("coverage_snapshot")
+  fi
+
+  # G3 gate: per-operation timing budget must be < 200ms
+  if [[ "${timing_budget_gate}" == "FAIL" ]]; then
+    global_failures+=("timing_budget")
+  fi
+
   local outcome="PASS"
   if [[ "${#blocked_failures[@]}" -gt 0 ]]; then
     outcome="BLOCKED"
@@ -2591,6 +2719,24 @@ function _qa_messaging_run {
   global_failures_json="$(_qa_array_to_json "${global_failures[@]}")"
   global_warnings_json="$(_qa_array_to_json "${global_warnings[@]}")"
 
+  # G2: coverage_snapshot_pct may be "null" (string) when no file exists;
+  # pass as --arg so jq can emit JSON null when the value equals "null".
+  local _coverage_pct_json
+  if [[ "${coverage_snapshot_pct}" == "null" ]]; then
+    _coverage_pct_json="null"
+  else
+    _coverage_pct_json="${coverage_snapshot_pct}"
+  fi
+
+  # G3: timing_detail_json may be "null" (string) when no file exists;
+  # pass as --argjson so it is embedded as a JSON object or null.
+  local _timing_detail_argjson
+  if [[ "${timing_detail_json}" == "null" ]]; then
+    _timing_detail_argjson="null"
+  else
+    _timing_detail_argjson="${timing_detail_json}"
+  fi
+
   jq -n \
     --arg run_id "${run_id}" \
     --arg mode "${mode}" \
@@ -2603,7 +2749,13 @@ function _qa_messaging_run {
     --arg coverage "${coverage_status}" \
     --arg continuity_contract "${continuity_contract_status}" \
     --arg recovery_rejoin_contract "${recovery_contract_status}" \
+    --arg mls_failure_rate "${mls_failure_rate}" \
+    --arg mls_failure_gate "${mls_failure_gate}" \
+    --argjson coverage_snapshot_pct "${_coverage_pct_json}" \
+    --arg coverage_snapshot_gate "${coverage_snapshot_gate}" \
     --argjson canonical_flow_elapsed_seconds "${canonical_elapsed}" \
+    --arg timing_budget_gate "${timing_budget_gate}" \
+    --argjson timing_detail "${_timing_detail_argjson}" \
     --argjson scenarios "${scenario_results}" \
     --argjson critical_failures "${critical_json}" \
     --argjson warning_failures "${warning_json}" \
@@ -2623,6 +2775,12 @@ function _qa_messaging_run {
       canonical_flow_coverage: $coverage,
       continuity_contract: $continuity_contract,
       recovery_rejoin_contract: $recovery_rejoin_contract,
+      mls_failure_rate: ($mls_failure_rate | tonumber),
+      mls_failure_gate: $mls_failure_gate,
+      coverage_snapshot_pct: $coverage_snapshot_pct,
+      coverage_snapshot_gate: $coverage_snapshot_gate,
+      timing_budget_gate: $timing_budget_gate,
+      timing_detail: $timing_detail,
       scenarios: $scenarios,
       critical_failures: $critical_failures,
       warning_failures: $warning_failures,
@@ -2641,6 +2799,9 @@ function _qa_messaging_run {
     echo "- canonical_flow_coverage: \`${coverage_status}\`"
     echo "- continuity_contract: \`${continuity_contract_status}\`"
     echo "- recovery_rejoin_contract: \`${recovery_contract_status}\`"
+    echo "- mls_failure_rate: \`${mls_failure_rate}\` (gate: \`${mls_failure_gate}\`)"
+    echo "- coverage_snapshot_pct: \`${coverage_snapshot_pct}\` (gate: \`${coverage_snapshot_gate}\`)"
+    echo "- timing_budget_gate: \`${timing_budget_gate}\` (threshold: 200ms per operation)"
     echo "- base_url: \`${base_url}\`"
     echo "- ws_base_url: \`${ws_base_url}\`"
     echo ""

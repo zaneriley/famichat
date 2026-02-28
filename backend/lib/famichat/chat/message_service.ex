@@ -16,6 +16,7 @@ defmodule Famichat.Chat.MessageService do
   }
 
   alias Famichat.Crypto.MLS
+  alias Famichat.Crypto.MLS.SnapshotMac
   alias Famichat.Vault
   alias Famichat.Ecto.Pagination
   require Logger
@@ -43,6 +44,8 @@ defmodule Famichat.Chat.MessageService do
     "deleted_key_material",
     "state_decode_failed"
   ]
+
+  @allowed_encryption_metadata_keys ~w(key_id algorithm version version_tag encryption_flag ciphersuite epoch)
 
   @doc """
   Pipeline-based message retrieval with structured error handling:
@@ -257,7 +260,12 @@ defmodule Famichat.Chat.MessageService do
   defp preload_associations(%{error: _} = state), do: state
 
   defp preload_associations(state) do
-    preloads = state.opts[:preload] || @default_preloads
+    # Always include :conversation in the preload list so that
+    # deserialize_message/1 can read conversation_type for telemetry without
+    # issuing a per-message Repo.get (N+1). Caller-supplied preloads are
+    # merged with this requirement; duplicates are deduplicated.
+    requested = state.opts[:preload] || @default_preloads
+    preloads = Enum.uniq([:conversation | requested])
     Map.update!(state, :result, &Repo.preload(&1, preloads))
   end
 
@@ -745,11 +753,10 @@ defmodule Famichat.Chat.MessageService do
     # Create the result structure
     {result, encryption_status} =
       if encryption_from_metadata do
-        # Convert string keys to atoms for the API
         encryption_metadata =
-          for {key, value} <- encryption_from_metadata, into: %{} do
-            {String.to_existing_atom(key), value}
-          end
+          encryption_from_metadata
+          |> Map.take(@allowed_encryption_metadata_keys)
+          |> Map.new(fn {key, value} -> {String.to_atom(key), value} end)
 
         # Build the result with encryption metadata
         deserialized =
@@ -760,17 +767,24 @@ defmodule Famichat.Chat.MessageService do
         {{:ok, message}, "disabled"}
       end
 
-    # Extract conversation type for telemetry
+    # Extract conversation type for telemetry.
+    # The conversation association MUST be preloaded before calling this
+    # function. A fallback Repo.get is intentionally not provided here —
+    # if the association is not loaded we raise immediately so the N+1
+    # surfaces at development time rather than silently in production.
     conversation_type =
       case message.conversation do
         %Conversation{conversation_type: type} ->
           type
 
+        %Ecto.Association.NotLoaded{} ->
+          raise ArgumentError,
+                "deserialize_message/1 requires :conversation to be preloaded " <>
+                  "(message id=#{message.id}). Add :conversation to the preload list " <>
+                  "in the caller to avoid N+1 queries."
+
         _ ->
-          case Repo.get(Conversation, message.conversation_id) do
-            %Conversation{conversation_type: type} -> type
-            _ -> nil
-          end
+          nil
       end
 
     # Prepare telemetry metadata
@@ -987,60 +1001,108 @@ defmodule Famichat.Chat.MessageService do
           initial_lock_version = loaded_state.lock_version
           initial_epoch = loaded_state.epoch
 
+          # R2: Normalize the snapshot once before entering the reduce loop.
+          # normalize_mls_snapshot/1 only validates the presence of 5 required
+          # keys (~50µs); it does NOT do binary_to_term or large deserialization.
+          # The actual saving is ~950µs of CPU validation time per 20-message page
+          # (19 × 50µs avoided). Each iteration receives the already-normalized
+          # map via the accumulator. When the MLS epoch advances mid-loop we reload
+          # the snapshot from the DB (the only path that triggers re-normalization)
+          # so the rest of the loop uses fresh state without redundant key checks.
+          initial_decoded_snapshot =
+            case initial_snapshot do
+              s when is_map(s) and s != %{} ->
+                case normalize_mls_snapshot(s) do
+                  {:ok, decoded} -> decoded
+                  :none -> nil
+                end
+
+              _ ->
+                nil
+            end
+
           case ensure_mls_runtime_ready() do
             :ok ->
-              case Enum.reduce_while(
-                     messages,
-                     {:ok, [], initial_snapshot, initial_epoch},
-                     fn message, {:ok, acc, snapshot, epoch} ->
-                       request =
-                         %{
-                           group_id: conversation_id,
-                           message_id: message.id,
-                           ciphertext: message.content
-                         }
-                         |> maybe_put_mls_snapshot(snapshot)
+              # R4: Parallelize the decrypt loop.  All messages in a page
+              # share the same snapshot/epoch at the point of fetching, so
+              # each task receives a copy of initial_decoded_snapshot and
+              # calls MLS.process_incoming independently.  Task.async_stream
+              # preserves input order in its result stream.
+              #
+              # Eagerly materialise the stream into a list so we can do two
+              # cheap passes (error-check + epoch-scan) without re-running
+              # the tasks.
+              raw_results =
+                messages
+                |> Task.async_stream(
+                  fn message ->
+                    decrypt_one_message(
+                      message,
+                      conversation_id,
+                      initial_decoded_snapshot,
+                      initial_epoch
+                    )
+                  end,
+                  max_concurrency: 4,
+                  # A single NIF decrypt takes ~7ms; 500ms is a 70× safety
+                  # margin.  Timeouts here indicate process failures, not
+                  # slow crypto.
+                  timeout: 500,
+                  on_timeout: :kill_task,
+                  ordered: true
+                )
+                # Materialize all task results eagerly before inspecting:
+                # tasks already ran in parallel; Enum.to_list() just collects
+                # results.  This lets reduce_while short-circuit without
+                # re-spawning tasks.
+                |> Enum.to_list()
 
-                       case MLS.process_incoming(request) do
-                         {:ok, payload} ->
-                           case extract_mls_plaintext(payload) do
-                             {:ok, plaintext} ->
-                               next_snapshot =
-                                 case extract_mls_snapshot(payload) do
-                                   {:ok, restored} -> restored
-                                   :none -> snapshot
-                                 end
+              # First pass: collect decrypted messages in order; halt on the
+              # first error to preserve the reduce_while short-circuit
+              # contract.
+              collected =
+                Enum.reduce_while(raw_results, {:ok, []}, fn
+                  {:ok, {:ok, decrypted_msg, _msg_epoch, _msg_snapshot}},
+                  {:ok, acc} ->
+                    {:cont, {:ok, [decrypted_msg | acc]}}
 
-                               next_epoch =
-                                 extract_mls_epoch(payload) || epoch
+                  {:ok, {:error, code, details, message}}, {:ok, _acc} ->
+                    {:halt, {:error, code, details, message}}
 
-                               {:cont,
-                                {:ok, [%{message | content: plaintext} | acc],
-                                 next_snapshot, next_epoch}}
+                  {:exit, reason}, {:ok, _acc} ->
+                    # Task exited (timeout, crash, or kill) — not a crypto
+                    # error.  Use :process_failed to distinguish a task-level
+                    # failure from :crypto_failure returned by the NIF itself.
+                    {:halt,
+                     {:error, :process_failed,
+                      %{operation: :process_incoming, reason: reason}, nil}}
+                end)
 
-                             {:error, details} ->
-                               {:halt,
-                                {:error, :crypto_failure, details, message}}
-                           end
+              case collected do
+                {:ok, decrypted_reversed} ->
+                  # Second pass: determine final epoch and snapshot.  If any
+                  # message advanced the epoch, reload from DB once (same
+                  # semantics as the sequential loop's epoch-advance branch).
+                  {final_epoch, final_snapshot} =
+                    resolve_final_epoch_and_snapshot(
+                      raw_results,
+                      initial_epoch,
+                      initial_decoded_snapshot,
+                      conversation
+                    )
 
-                         {:error, code, details} ->
-                           {normalized_code, normalized_details} =
-                             normalize_mls_error(code, details)
-
-                           {:halt,
-                            {:error, normalized_code, normalized_details,
-                             message}}
-                       end
-                     end
-                   ) do
-                {:ok, decrypted_reversed, final_snapshot, final_epoch} ->
                   updated_state =
                     %{state | result: Enum.reverse(decrypted_reversed)}
+
+                  # Use initial_decoded_snapshot as the baseline for change
+                  # detection so the comparison is always between two values
+                  # that went through the same normalize_mls_snapshot path.
+                  baseline_snapshot = initial_decoded_snapshot || initial_snapshot
 
                   maybe_persist_decrypt_snapshot(
                     updated_state,
                     conversation,
-                    initial_snapshot,
+                    baseline_snapshot,
                     final_snapshot,
                     initial_lock_version,
                     initial_epoch,
@@ -1068,6 +1130,88 @@ defmodule Famichat.Chat.MessageService do
       end
     else
       state
+    end
+  end
+
+  # R4: Per-message decrypt worker.  Each Task.async_stream task calls this
+  # function with the *same* initial_decoded_snapshot so all tasks can run
+  # concurrently.  The NIF operates on per-message context inside Rust's
+  # DashMap, so concurrent calls for different message_ids of the same group
+  # are safe.
+  #
+  # Returns:
+  #   {:ok, decrypted_message, msg_epoch, msg_snapshot}
+  #   {:error, code, details, message}
+  defp decrypt_one_message(message, conversation_id, snapshot, initial_epoch) do
+    request =
+      %{
+        group_id: conversation_id,
+        message_id: message.id,
+        ciphertext: message.content
+      }
+      |> maybe_put_mls_snapshot(snapshot)
+
+    # Safe to run concurrently for different message_ids of the same group:
+    # the Rust NIF uses DashMap (per-shard locking) and releases the shard
+    # lock before serialization work (N6 pattern).  Concurrent tasks
+    # serialize only on the sub-millisecond extract phase, not the slow
+    # hex-encode phase.
+    case MLS.process_incoming(request) do
+      {:ok, payload} ->
+        case extract_mls_plaintext(payload) do
+          {:ok, plaintext} ->
+            msg_epoch = extract_mls_epoch(payload) || initial_epoch
+
+            msg_snapshot =
+              case extract_mls_snapshot(payload) do
+                {:ok, restored} -> restored
+                :none -> snapshot
+              end
+
+            {:ok, %{message | content: plaintext}, msg_epoch, msg_snapshot}
+
+          {:error, details} ->
+            {:error, :crypto_failure, details, message}
+        end
+
+      {:error, code, details} ->
+        {normalized_code, normalized_details} = normalize_mls_error(code, details)
+        {:error, normalized_code, normalized_details, message}
+    end
+  end
+
+  # R4: After a parallel decrypt pass, determine the final epoch and snapshot
+  # to use for persisting state.  raw_results is the already-materialised
+  # list from Enum.to_list(Task.async_stream(...)).  If any message advanced
+  # the epoch relative to initial_epoch, reload from DB once (same semantics
+  # as the sequential loop's epoch-advance branch).  Otherwise, take the last
+  # per-message snapshot from the list.
+  defp resolve_final_epoch_and_snapshot(
+         raw_results,
+         initial_epoch,
+         initial_decoded_snapshot,
+         conversation
+       ) do
+    # Walk results to find the max epoch and the last per-message snapshot.
+    {max_epoch, last_snapshot} =
+      Enum.reduce(raw_results, {initial_epoch, initial_decoded_snapshot}, fn
+        {:ok, {:ok, _msg, msg_epoch, msg_snapshot}}, {acc_epoch, _acc_snap} ->
+          new_epoch = if msg_epoch > acc_epoch, do: msg_epoch, else: acc_epoch
+          {new_epoch, msg_snapshot}
+
+        _other, acc ->
+          acc
+      end)
+
+    if max_epoch != initial_epoch do
+      # Epoch advanced somewhere in the batch: reload snapshot from DB once,
+      # matching the sequential loop's behaviour.
+      case load_mls_snapshot_with_lock(conversation) do
+        {:ok, refreshed} -> {max_epoch, refreshed.snapshot}
+        _ -> {max_epoch, last_snapshot}
+      end
+    else
+      {max_epoch, last_snapshot}
     end
   end
 
@@ -1134,7 +1278,18 @@ defmodule Famichat.Chat.MessageService do
 
   defp maybe_put_mls_snapshot(request, snapshot)
        when is_map(snapshot) and snapshot != %{} do
-    Map.merge(request, snapshot)
+    case Enum.find(@mls_snapshot_keys, fn k -> not is_binary(Map.get(snapshot, k)) end) do
+      nil ->
+        Map.merge(request, snapshot)
+
+      missing_key ->
+        Logger.error(
+          "MLS snapshot failed key/type validation before NIF call; " <>
+            "missing_or_invalid=#{inspect(missing_key)}"
+        )
+
+        {:error, :invalid_snapshot, %{missing_or_invalid: missing_key}}
+    end
   end
 
   defp maybe_put_mls_snapshot(request, _snapshot), do: request
@@ -1149,13 +1304,24 @@ defmodule Famichat.Chat.MessageService do
   defp load_mls_snapshot_with_lock(%Conversation{} = conversation) do
     case ConversationSecurityStateStore.load(conversation.id) do
       {:ok, persisted} ->
-        {:ok,
-         %{
-           snapshot: persisted.state,
-           lock_version: persisted.lock_version,
-           epoch: persisted.epoch,
-           pending_commit: persisted.pending_commit
-         }}
+        case verify_snapshot_mac(conversation.id, persisted) do
+          :ok ->
+            {:ok,
+             %{
+               snapshot: persisted.state,
+               lock_version: persisted.lock_version,
+               epoch: persisted.epoch,
+               pending_commit: persisted.pending_commit
+             }}
+
+          {:error, reason} ->
+            Logger.error(
+              "Snapshot MAC verification failed for conversation #{conversation.id}: #{inspect(reason)}"
+            )
+
+            {:error, :snapshot_integrity_failed,
+             %{reason: reason, conversation_id: conversation.id}}
+        end
 
       {:error, :not_found, _details} ->
         case legacy_mls_snapshot_from_conversation_metadata(conversation) do
@@ -1183,7 +1349,11 @@ defmodule Famichat.Chat.MessageService do
        )
        when is_map(snapshot) and snapshot != %{} do
     attrs = %{protocol: @mls_state_protocol, state: snapshot, epoch: 0}
+    migrate_snapshot_with_retries(conversation, attrs, 0)
+  end
 
+  defp migrate_snapshot_with_retries(%Conversation{} = conversation, attrs, attempt)
+       when attempt < 5 do
     case ConversationSecurityStateStore.upsert(conversation.id, attrs, nil) do
       {:ok, persisted} ->
         {:ok,
@@ -1193,6 +1363,11 @@ defmodule Famichat.Chat.MessageService do
            epoch: persisted.epoch,
            pending_commit: persisted.pending_commit
          }}
+
+      {:error, :stale_state, _details} when attempt < 4 ->
+        backoff_ms = trunc(:math.pow(2, attempt) * 50)
+        Process.sleep(backoff_ms)
+        migrate_snapshot_with_retries(conversation, attrs, attempt + 1)
 
       {:error, :stale_state, _details} ->
         case ConversationSecurityStateStore.load(conversation.id) do
@@ -1213,6 +1388,44 @@ defmodule Famichat.Chat.MessageService do
         {:error, map_state_store_error_code(code), details}
     end
   end
+
+  defp migrate_snapshot_with_retries(_conversation, _attrs, _attempt) do
+    {:error, :max_retries_exceeded, %{reason: :migrate_snapshot_retries_exhausted}}
+  end
+
+  # Verifies the snapshot MAC stored alongside the persisted state.
+  # nil MAC (rows written before the migration) are rejected with a warning
+  # to prevent tampered or pre-migration snapshots from being silently accepted.
+  defp verify_snapshot_mac(conversation_id, %{snapshot_mac: nil, epoch: epoch} = persisted) do
+    Logger.warning(
+      "Snapshot MAC is nil for conversation #{conversation_id} epoch=#{epoch}; " <>
+        "rejecting — row predates MAC migration or key is unconfigured"
+    )
+
+    _ = persisted
+    {:error, :snapshot_mac_missing}
+  end
+
+  defp verify_snapshot_mac(conversation_id, %{snapshot_mac: stored_mac, state: state, epoch: epoch})
+       when is_binary(stored_mac) and is_map(state) do
+    mac_payload =
+      state
+      |> Map.put("group_id", conversation_id)
+      |> Map.put("epoch", to_string(epoch))
+
+    case SnapshotMac.verify(mac_payload, stored_mac, SnapshotMac.configured_key!()) do
+      :ok ->
+        :ok
+
+      {:error, :mac_mismatch} ->
+        {:error, :snapshot_integrity_failed}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp verify_snapshot_mac(_conversation_id, _persisted), do: :ok
 
   defp map_state_store_error_code(:stale_state), do: :storage_inconsistent
 

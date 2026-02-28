@@ -17,7 +17,12 @@ defmodule Famichat.Crypto.MLS do
     :commit_rejected,
     :storage_inconsistent,
     :crypto_failure,
-    :unsupported_capability
+    :unsupported_capability,
+    # N1: Distinct atom for a poisoned Mutex/RwLock — a concurrency failure,
+    # not a storage integrity issue. Callers must NOT attempt state-repair
+    # recovery for this code; the correct response is to surface the error
+    # and let the supervisor restart the affected process.
+    :lock_poisoned
   ]
 
   @sensitive_error_key_atoms [

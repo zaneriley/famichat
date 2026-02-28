@@ -598,6 +598,69 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     refute Map.has_key?(details, :key_material)
   end
 
+  test "R4: error short-circuit — first message failure halts page, does not silently succeed",
+       %{conversation: conversation, sender: sender} do
+    # Insert 3 messages so the parallel decrypt loop has multiple tasks to run.
+    assert {:ok, _m1} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "msg-1")
+             )
+
+    assert {:ok, _m2} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "msg-2")
+             )
+
+    assert {:ok, _m3} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "msg-3")
+             )
+
+    # Switch to an adapter that fails every process_incoming call.
+    # The reduce_while in do_decrypt_messages must halt on the first error
+    # and return {:error, ...} — never {:ok, messages}.
+    Application.put_env(:famichat, :mls_adapter, DecryptionFailAdapter)
+
+    assert {:error, {:mls_decryption_failed, :crypto_failure, _details}} =
+             MessageService.get_conversation_messages(conversation.id)
+  end
+
+  test "R4: parallel page returns messages in original insertion order",
+       %{conversation: conversation, sender: sender} do
+    # Insert 5 messages with distinct content so we can verify order from
+    # the returned plaintext values.  Task.async_stream uses ordered: true,
+    # so results must arrive in the same sequence regardless of which task
+    # finishes first.
+    contents = ~w[alpha bravo charlie delta echo]
+
+    ids =
+      Enum.map(contents, fn body ->
+        assert {:ok, msg} =
+                 MessageService.send_message(
+                   message_params(sender.id, conversation.id, body)
+                 )
+
+        msg.id
+      end)
+
+    # FakeAdapter.process_incoming returns plaintext: "plaintext:#{ciphertext}"
+    # where ciphertext is "ciphertext:#{original_body}" — so the returned
+    # content is deterministic and order-sensitive.
+    assert {:ok, retrieved} =
+             MessageService.get_conversation_messages(conversation.id, limit: 5)
+
+    assert length(retrieved) == 5
+
+    # IDs must be in insertion order (not arbitrary task-completion order).
+    assert Enum.map(retrieved, & &1.id) == ids
+
+    # Content values must also reflect original insertion order.
+    expected_plaintexts =
+      Enum.map(contents, fn body -> "plaintext:ciphertext:#{body}" end)
+
+    assert Enum.map(retrieved, & &1.content) == expected_plaintexts
+  end
+
   test "get_conversation_messages fails closed when mls runtime health is degraded",
        %{conversation: conversation, sender: sender} do
     Application.put_env(

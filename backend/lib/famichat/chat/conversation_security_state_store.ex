@@ -3,8 +3,10 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
   Chat-owned persistence boundary for durable conversation security state.
   """
   import Ecto.Query, warn: false
+  require Logger
 
   alias Famichat.Chat.ConversationSecurityState
+  alias Famichat.Crypto.MLS.SnapshotMac
   alias Famichat.Repo
   alias Famichat.Vault
 
@@ -17,6 +19,7 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
           state: map(),
           epoch: non_neg_integer(),
           pending_commit: map() | nil,
+          snapshot_mac: String.t() | nil,
           lock_version: pos_integer()
         }
 
@@ -99,7 +102,9 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
          :ok <- validate_protocol(protocol),
          {:ok, state_ciphertext} <- encode_state_payload(state_payload),
          {:ok, pending_ciphertext} <-
-           encode_optional_state_payload(pending_payload) do
+           encode_optional_state_payload(pending_payload),
+         {:ok, snapshot_mac} <-
+           sign_snapshot(conversation_id, epoch, state_payload) do
       {:ok,
        %{
          conversation_id: conversation_id,
@@ -109,7 +114,8 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
          state_format: @state_format,
          pending_commit_ciphertext: pending_ciphertext,
          pending_commit_format:
-           if(is_binary(pending_ciphertext), do: @state_format, else: nil)
+           if(is_binary(pending_ciphertext), do: @state_format, else: nil),
+         snapshot_mac: snapshot_mac
        }}
     end
   end
@@ -146,6 +152,23 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
   defp encode_optional_state_payload(nil), do: {:ok, nil}
   defp encode_optional_state_payload(payload), do: encode_state_payload(payload)
 
+  defp sign_snapshot(conversation_id, epoch, state_payload)
+       when is_binary(conversation_id) and is_map(state_payload) do
+    mac_payload =
+      state_payload
+      |> Map.put("group_id", conversation_id)
+      |> Map.put("epoch", to_string(epoch))
+
+    case SnapshotMac.sign(mac_payload, SnapshotMac.configured_key!()) do
+      {:ok, mac} ->
+        {:ok, mac}
+
+      {:error, reason} ->
+        Logger.warning("snapshot MAC sign failed: #{inspect(reason)}")
+        {:ok, nil}
+    end
+  end
+
   defp encode_state_payload(payload) do
     try do
       ciphertext =
@@ -155,17 +178,26 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
 
       {:ok, ciphertext}
     rescue
-      _ ->
+      e in [RuntimeError, ArgumentError] ->
         {:error, :state_encode_failed,
-         %{reason: :state_encode_failed, operation: :upsert}}
+         %{reason: :state_encode_failed, operation: :upsert, message: Exception.message(e)}}
+
+      e ->
+        Logger.error("Unexpected exception in encode_state_payload: #{inspect(e)}")
+        reraise e, __STACKTRACE__
     end
   end
+
+  @snapshot_required_keys ~w(session_sender_storage session_recipient_storage
+                              session_sender_signer session_recipient_signer session_cache)
 
   defp decode_state_payload("vault_term_v1", ciphertext) when is_binary(ciphertext) do
     try do
       with decrypted when is_binary(decrypted) <- Vault.decrypt!(ciphertext),
            decoded <- :erlang.binary_to_term(decrypted, [:safe]),
-           true <- is_map(decoded) do
+           true <-
+             is_map(decoded) and
+               Enum.all?(@snapshot_required_keys, &is_binary(Map.get(decoded, &1))) do
         {:ok, decoded}
       else
         _ ->
@@ -173,9 +205,13 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
            %{reason: :state_decode_failed, operation: :load}}
       end
     rescue
-      _ ->
+      e in [RuntimeError, ArgumentError, Cloak.MissingCipher] ->
         {:error, :state_decode_failed,
-         %{reason: :state_decode_failed, operation: :load}}
+         %{reason: :state_decode_failed, operation: :load, message: Exception.message(e)}}
+
+      e ->
+        Logger.error("Unexpected exception in decode_state_payload: #{inspect(e)}")
+        reraise e, __STACKTRACE__
     end
   end
 
@@ -207,6 +243,7 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
          state: state,
          epoch: record.epoch,
          pending_commit: pending_commit,
+         snapshot_mac: record.snapshot_mac,
          lock_version: record.lock_version
        }}
     end
@@ -240,12 +277,13 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
     next_lock_version = expected_lock_version + 1
 
-    {updated_count, _rows} =
+    {updated_count, rows} =
       Repo.update_all(
         from(s in ConversationSecurityState,
           where:
             s.conversation_id == ^conversation_id and
-              s.lock_version == ^expected_lock_version
+              s.lock_version == ^expected_lock_version,
+          select: s
         ),
         set: [
           protocol: encoded_attrs.protocol,
@@ -254,13 +292,15 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
           epoch: encoded_attrs.epoch,
           pending_commit_ciphertext: encoded_attrs.pending_commit_ciphertext,
           pending_commit_format: encoded_attrs.pending_commit_format,
+          snapshot_mac: encoded_attrs.snapshot_mac,
           lock_version: next_lock_version,
           updated_at: now
         ]
       )
 
     if updated_count == 1 do
-      load(conversation_id)
+      [record] = rows
+      decode_record(record)
     else
       {:error, :stale_state, %{reason: :lock_version_mismatch}}
     end

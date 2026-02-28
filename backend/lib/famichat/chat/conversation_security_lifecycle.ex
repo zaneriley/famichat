@@ -60,6 +60,7 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
     with {:ok, state} <- load_state(conversation_id, :merge_pending_commit),
          {:ok, pending_commit} <- pending_commit_from_state(state),
          :ok <- validate_pending_operation(pending_commit),
+         :ok <- validate_operation_matches_active_revocations(conversation_id, pending_commit),
          {:ok, merge_epoch} <-
            pending_commit_epoch(pending_commit, state.epoch),
          request <-
@@ -146,30 +147,39 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
      %{reason: :no_pending_commit, operation: :merge_pending_commit}}
   end
 
-  defp pending_commit_epoch(pending_commit, fallback_epoch) do
+  defp pending_commit_epoch(pending_commit, current_epoch) do
     value =
       Map.get(pending_commit, "staged_epoch") ||
         Map.get(pending_commit, :staged_epoch)
 
     cond do
-      is_integer(value) and value > fallback_epoch ->
+      is_integer(value) and value == current_epoch + 1 ->
         {:ok, value}
 
-      is_integer(value) and value >= 0 ->
+      is_integer(value) and value <= current_epoch ->
         {:error, :commit_rejected,
          %{
-           reason: :invalid_staged_epoch,
+           reason: :epoch_too_low,
            operation: :merge_pending_commit,
-           current_epoch: fallback_epoch,
+           current_epoch: current_epoch,
+           staged_epoch: value
+         }}
+
+      is_integer(value) ->
+        {:error, :commit_rejected,
+         %{
+           reason: :epoch_too_high,
+           operation: :merge_pending_commit,
+           current_epoch: current_epoch,
            staged_epoch: value
          }}
 
       true ->
         {:error, :commit_rejected,
          %{
-           reason: :invalid_staged_epoch,
+           reason: :epoch_malformed,
            operation: :merge_pending_commit,
-           current_epoch: fallback_epoch,
+           current_epoch: current_epoch,
            staged_epoch: value
          }}
     end
@@ -291,6 +301,26 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
            operation: :merge_pending_commit,
            pending_operation: operation
          }}
+    end
+  end
+
+  defp validate_operation_matches_active_revocations(conversation_id, pending_commit) do
+    with {:ok, active_revocations} <-
+           ConversationSecurityRevocationStore.list_active_for_conversation(
+             conversation_id
+           ) do
+      if active_revocations == [] or pending_remove_operation?(pending_commit) do
+        :ok
+      else
+        {:error, :commit_rejected,
+         %{
+           reason: :operation_type_mismatch,
+           operation: :merge_pending_commit,
+           pending_operation:
+             Map.get(pending_commit, "operation") ||
+               Map.get(pending_commit, :operation)
+         }}
+      end
     end
   end
 

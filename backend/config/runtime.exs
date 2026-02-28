@@ -59,6 +59,38 @@ config :famichat, :github_token, System.get_env("GITHUB_TOKEN")
 config :famichat,
   github_webhook_secret: System.get_env("GITHUB_WEBHOOK_SECRET")
 
+mls_snapshot_hmac_key_raw =
+  case {config_env(), System.get_env("MLS_SNAPSHOT_HMAC_KEY")} do
+    {:prod, nil} ->
+      raise "environment variable MLS_SNAPSHOT_HMAC_KEY is required in production"
+
+    {_, nil} ->
+      # Deterministic 32-byte key for dev/test only. DO NOT use in production.
+      "famichat-dev-snapshot-hmac-key!!"
+
+    {_, value} ->
+      value
+  end
+
+mls_snapshot_hmac_key =
+  case Base.decode64(mls_snapshot_hmac_key_raw) do
+    {:ok, decoded} when byte_size(decoded) >= 32 ->
+      decoded
+
+    {:ok, _short} ->
+      raise "MLS_SNAPSHOT_HMAC_KEY must decode to at least 32 bytes"
+
+    :error ->
+      # Treat as raw bytes (not base64) — must be at least 32 bytes long.
+      if byte_size(mls_snapshot_hmac_key_raw) >= 32 do
+        mls_snapshot_hmac_key_raw
+      else
+        raise "MLS_SNAPSHOT_HMAC_KEY must be at least 32 bytes (or base64-encoded 32+ bytes)"
+      end
+  end
+
+config :famichat, :mls_snapshot_hmac_key, mls_snapshot_hmac_key
+
 case System.get_env("FAMICHAT_MLS_ENFORCEMENT") do
   nil ->
     :ok

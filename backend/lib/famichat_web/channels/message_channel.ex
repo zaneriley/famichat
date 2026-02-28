@@ -310,35 +310,54 @@ defmodule FamichatWeb.MessageChannel do
                    socket.assigns.device_id
                  ) do
               {:ok, broadcast_payload} ->
-                measurements = compute_measurements(start_time)
+                case ensure_socket_device_active(socket) do
+                  :ok ->
+                    measurements = compute_measurements(start_time)
 
-                # Calculate message size for metrics
-                message_size =
-                  if is_binary(payload["body"]) do
-                    byte_size(payload["body"])
-                  else
-                    0
-                  end
+                    message_size =
+                      if is_binary(payload["body"]) do
+                        byte_size(payload["body"])
+                      else
+                        0
+                      end
 
-                metadata = %{
-                  user_id: socket.assigns.user_id,
-                  conversation_type: type,
-                  conversation_id: id,
-                  message_size: message_size,
-                  encryption_status:
-                    if(Map.get(payload, "encryption_flag"),
-                      do: "enabled",
-                      else: "disabled"
-                    )
-                }
+                    metadata = %{
+                      user_id: socket.assigns.user_id,
+                      conversation_type: type,
+                      conversation_id: id,
+                      message_size: message_size,
+                      encryption_status:
+                        if(Map.get(payload, "encryption_flag"),
+                          do: "enabled",
+                          else: "disabled"
+                        )
+                    }
 
-                # Broadcast the message
-                broadcast!(socket, "new_msg", broadcast_payload)
+                    case Phoenix.PubSub.broadcast(
+                           Famichat.PubSub,
+                           socket.topic,
+                           %Phoenix.Socket.Broadcast{
+                             topic: socket.topic,
+                             event: "new_msg",
+                             payload: broadcast_payload
+                           }
+                         ) do
+                      :ok ->
+                        emit_broadcast_telemetry(measurements, metadata)
+                        {:noreply, socket}
 
-                # Emit telemetry for the broadcast
-                emit_broadcast_telemetry(measurements, metadata)
+                      {:error, reason} ->
+                        Logger.error("PubSub broadcast failed",
+                          topic: socket.topic,
+                          reason: inspect(reason)
+                        )
 
-                {:noreply, socket}
+                        {:reply, {:error, %{reason: "broadcast_failed"}}, socket}
+                    end
+
+                  {:error, reason} ->
+                    {:reply, {:error, %{reason: reason_to_string(reason)}}, socket}
+                end
 
               {:error, reason} ->
                 {:reply, {:error, message_send_error_payload(reason)}, socket}

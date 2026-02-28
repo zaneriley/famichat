@@ -447,6 +447,22 @@ defmodule FamichatWeb.Telemetry do
         description: "Decryption errors (should remain near zero)"
       ),
 
+      # 4.4 MLS Failure Rate (G1 gate: must stay below 5%)
+      # Emitted by MessageService.emit_mls_failure/5 on any MLS encrypt/decrypt/state
+      # failure. The gate_report.json mls_failure_rate field is computed from this
+      # counter during qa:messaging:deep runs.
+      counter("famichat.message.mls_failure.total",
+        event_name: [:famichat, :message, :mls_failure],
+        measurement: :count,
+        tags: [:action, :reason],
+        tag_values:
+          &%{
+            action: (Map.get(&1, :action) || :unknown) |> to_string(),
+            reason: (Map.get(&1, :reason) || :unknown) |> to_string()
+          },
+        description: "MLS failures by action and reason (gate threshold: < 5%)"
+      ),
+
       # 4.3 Serialization/Deserialization Latency
       summary("famichat.message.serialized.duration",
         event_name: [:famichat, :message, :serialized],

@@ -11,7 +11,7 @@ Application.put_env(
 
 # Configure ExUnit
 ExUnit.configure(
-  exclude: [pending: true],
+  exclude: [pending: true, timing: true],
   formatters: [ExUnit.CLIFormatter, ExUnitNotifier]
 )
 

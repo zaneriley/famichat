@@ -2,6 +2,7 @@
 name = "mls_nif"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.80"
 publish = false
 description = "Famichat MLS NIF contract scaffold"
 
@@ -15,3 +16,10 @@ rustler = "0.37"
 openmls = { version = "0.8.1", features = ["openmls_rust_crypto"] }
 openmls_rust_crypto = "0.5.1"
 openmls_basic_credential = "0.5.0"
+dashmap = "6"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

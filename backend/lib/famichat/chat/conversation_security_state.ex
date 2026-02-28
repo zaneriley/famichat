@@ -17,6 +17,7 @@ defmodule Famichat.Chat.ConversationSecurityState do
           epoch: non_neg_integer(),
           pending_commit_ciphertext: binary() | nil,
           pending_commit_format: String.t() | nil,
+          snapshot_mac: String.t() | nil,
           lock_version: pos_integer(),
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
@@ -32,6 +33,7 @@ defmodule Famichat.Chat.ConversationSecurityState do
     field :epoch, :integer, default: 0
     field :pending_commit_ciphertext, :binary
     field :pending_commit_format, :string
+    field :snapshot_mac, :string
     field :lock_version, :integer, default: 1
 
     timestamps(type: :utc_datetime_usec)
