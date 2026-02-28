@@ -54,6 +54,9 @@ defmodule Famichat.Crypto.MLS.Adapter.Unimplemented do
   @impl true
   def export_ratchet_tree(_params), do: not_implemented(:export_ratchet_tree)
 
+  @impl true
+  def list_member_credentials(_params), do: not_implemented(:list_member_credentials)
+
   defp not_implemented(operation) do
     {:error, :unsupported_capability,
      %{reason: :not_implemented, operation: operation}}

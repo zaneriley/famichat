@@ -51,6 +51,9 @@ defmodule Famichat.TestSupport.MLS.FakeAdapter do
   @impl true
   def export_ratchet_tree(params), do: respond(:export_ratchet_tree, params)
 
+  @impl true
+  def list_member_credentials(params), do: respond(:list_member_credentials, params)
+
   defp respond(operation, params) when is_map(params) do
     case fetch_param(params, :raise_exception) do
       true ->

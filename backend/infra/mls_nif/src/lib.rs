@@ -169,10 +169,20 @@ pub fn create_group(params: &Payload) -> MlsResult {
         MlsError::invalid_input(details)
     })?;
 
+    let sender_identity: Option<Vec<u8>> =
+        non_empty(params, "credential_identity").map(|s| s.into_bytes());
+    // Recipient always uses synthetic identity in the two-actor model
+    let recipient_identity: Option<Vec<u8>> = None;
+
     let session =
         match restore_group_session_from_snapshot(&parsed.group_id, params, "create_group")? {
             Some(session) => session,
-            None => create_group_session(&parsed.group_id, ciphersuite)?,
+            None => create_group_session(
+                &parsed.group_id,
+                ciphersuite,
+                sender_identity,
+                recipient_identity,
+            )?,
         };
 
     let session_snapshot = build_group_session_snapshot(&session, "create_group")?;
@@ -219,7 +229,7 @@ pub fn join_from_welcome(params: &Payload) -> MlsResult {
                 {
                     guard.insert(group_id.clone(), restored);
                 } else if !guard.contains_key(&group_id) {
-                    let session = create_group_session(&group_id, DEFAULT_CIPHERSUITE)?;
+                    let session = create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)?;
                     guard.insert(group_id.clone(), session);
                 }
             }
@@ -579,6 +589,54 @@ pub fn export_ratchet_tree(params: &Payload) -> MlsResult {
     })
 }
 
+pub fn list_member_credentials(params: &Payload) -> MlsResult {
+    let operation = "list_member_credentials";
+    with_required_group(operation, params, |group_id| {
+        let mut guard = group_sessions().lock().unwrap_or_else(|e| {
+            eprintln!("[mls_nif] WARN: GROUP_SESSIONS mutex was poisoned; recovering guard");
+            e.into_inner()
+        });
+
+        if !guard.contains_key(&group_id) {
+            if let Some(restored) =
+                restore_group_session_from_snapshot(&group_id, params, operation)?
+            {
+                guard.insert(group_id.clone(), restored);
+            }
+        }
+
+        let session = guard.get(&group_id).ok_or_else(|| {
+            MlsError::with_code(
+                ErrorCode::StorageInconsistent,
+                operation,
+                "missing_group_state",
+            )
+        })?;
+
+        // Iterate members, extract credential identity for each.
+        // member.index is a LeafNodeIndex with a .u32() method.
+        // member.credential is a Credential; BasicCredential::try_from extracts identity bytes.
+        let credentials: Vec<String> = session
+            .sender
+            .group
+            .members()
+            .map(|member| {
+                let leaf_index = member.index.u32();
+                let identity_bytes = BasicCredential::try_from(member.credential)
+                    .map(|bc| bc.identity().to_vec())
+                    .unwrap_or_default();
+                format!("{}:{}", leaf_index, encode_hex(&identity_bytes))
+            })
+            .collect();
+
+        let mut payload = Payload::new();
+        payload.insert("group_id".to_owned(), group_id);
+        payload.insert("credentials".to_owned(), credentials.join(","));
+        payload.insert("status".to_owned(), "ok".to_owned());
+        Ok(payload)
+    })
+}
+
 fn lifecycle_ok<F>(operation: &str, params: &Payload, decorate: F) -> MlsResult
 where
     F: Fn(&mut Payload),
@@ -687,13 +745,20 @@ fn parse_ciphersuite(label: &str) -> Option<Ciphersuite> {
 fn create_group_session(
     group_id: &str,
     ciphersuite: Ciphersuite,
+    sender_identity: Option<Vec<u8>>,
+    recipient_identity: Option<Vec<u8>>,
 ) -> Result<GroupSession, MlsError> {
     let operation = "create_group";
+    let sender_id_bytes =
+        sender_identity.unwrap_or_else(|| format!("famichat:{}:sender", group_id).into_bytes());
+    let recipient_id_bytes = recipient_identity
+        .unwrap_or_else(|| format!("famichat:{}:recipient", group_id).into_bytes());
+
     let sender_provider = OpenMlsRustCrypto::default();
-    let (sender_credential, sender_signer) = create_credential_with_signer(
+    let (sender_credential, sender_signer) = create_credential_with_signer_bytes(
         &sender_provider,
         ciphersuite,
-        &format!("famichat:{}:sender", group_id),
+        sender_id_bytes,
         operation,
     )?;
 
@@ -718,10 +783,10 @@ fn create_group_session(
     })?;
 
     let recipient_provider = OpenMlsRustCrypto::default();
-    let (recipient_credential, recipient_signer) = create_credential_with_signer(
+    let (recipient_credential, recipient_signer) = create_credential_with_signer_bytes(
         &recipient_provider,
         ciphersuite,
-        &format!("famichat:{}:recipient", group_id),
+        recipient_id_bytes,
         operation,
     )?;
 
@@ -819,10 +884,10 @@ fn create_group_session(
     })
 }
 
-fn create_credential_with_signer(
+fn create_credential_with_signer_bytes(
     provider: &OpenMlsRustCrypto,
     ciphersuite: Ciphersuite,
-    identity: &str,
+    identity: Vec<u8>,
     operation: &str,
 ) -> Result<(CredentialWithKey, SignatureKeyPair), MlsError> {
     let signer = SignatureKeyPair::new(ciphersuite.signature_algorithm()).map_err(|_| {
@@ -842,7 +907,7 @@ fn create_credential_with_signer(
     })?;
 
     let credential_with_key = CredentialWithKey {
-        credential: BasicCredential::new(identity.as_bytes().to_vec()).into(),
+        credential: BasicCredential::new(identity).into(),
         signature_key: signer.to_public_vec().into(),
     };
 
@@ -1413,6 +1478,12 @@ fn export_group_info_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> T
 fn export_ratchet_tree_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
     let payload = payload_from_nif(params);
     encode_result(env, export_ratchet_tree(&payload))
+}
+
+#[rustler::nif(name = "list_member_credentials", schedule = "DirtyCpu")]
+fn list_member_credentials_nif<'a>(env: Env<'a>, params: HashMap<String, String>) -> Term<'a> {
+    let payload = payload_from_nif(params);
+    encode_result(env, list_member_credentials(&payload))
 }
 
 rustler::init!("Elixir.Famichat.Crypto.MLS.NifBridge");

@@ -56,4 +56,7 @@ defmodule Famichat.Crypto.MLS.NifBridge do
 
   @spec export_ratchet_tree(map()) :: {:ok, map()} | {:error, atom(), map()}
   def export_ratchet_tree(_params), do: :erlang.nif_error(:nif_not_loaded)
+
+  @spec list_member_credentials(map()) :: {:ok, map()} | {:error, atom(), map()}
+  def list_member_credentials(_params), do: :erlang.nif_error(:nif_not_loaded)
 end

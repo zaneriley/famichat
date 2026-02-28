@@ -391,6 +391,84 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
     assert length(cache_entries) <= 256
   end
 
+  # Phase 1: Credential Binding Tests
+
+  test "list_member_credentials returns real credential identities" do
+    group_id = "group-cred-test-#{System.unique_integer([:positive])}"
+
+    assert {:ok, _} =
+             MLS.create_group(%{
+               group_id: group_id,
+               ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"
+             })
+
+    assert {:ok, payload} = MLS.list_member_credentials(%{group_id: group_id})
+    credentials_str = Map.fetch!(payload, "credentials")
+
+    # Must return exactly 2 entries (sender + recipient in two-actor model)
+    entries = String.split(credentials_str, ",", trim: true)
+    assert length(entries) == 2, "expected 2 members, got: #{inspect(entries)}"
+
+    # Each entry must be "leaf_index:identity_hex"
+    for entry <- entries do
+      assert [_index, identity_hex] = String.split(entry, ":", parts: 2)
+      assert byte_size(identity_hex) > 0, "identity_hex must be non-empty"
+      # Identity must decode to valid UTF-8 bytes containing group_id
+      {:ok, decoded} = Base.decode16(String.upcase(identity_hex))
+      assert String.contains?(decoded, group_id),
+             "identity must contain group_id #{group_id}, got: #{inspect(decoded)}"
+    end
+  end
+
+  test "list_member_credentials with credential_identity param uses supplied identity" do
+    group_id = "group-cred-supplied-#{System.unique_integer([:positive])}"
+    device_id = "device-abc-123"
+
+    assert {:ok, _} =
+             MLS.create_group(%{
+               group_id: group_id,
+               ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+               credential_identity: device_id
+             })
+
+    assert {:ok, payload} = MLS.list_member_credentials(%{group_id: group_id})
+    credentials_str = Map.fetch!(payload, "credentials")
+    entries = String.split(credentials_str, ",", trim: true)
+
+    # At least one entry must have the supplied device_id as identity
+    identities =
+      Enum.map(entries, fn entry ->
+        [_index, hex] = String.split(entry, ":", parts: 2)
+        {:ok, bytes} = Base.decode16(String.upcase(hex))
+        bytes
+      end)
+
+    assert Enum.any?(identities, &(&1 == device_id)),
+           "expected device_id #{device_id} in identities: #{inspect(identities)}"
+  end
+
+  test "list_member_credentials fails closed for unknown group" do
+    assert {:error, _code, _details} =
+             MLS.list_member_credentials(%{
+               group_id: "nonexistent-group-#{System.unique_integer([:positive])}"
+             })
+  end
+
+  test "create_group without credential_identity still works (backward compat)" do
+    group_id = "group-backward-compat-#{System.unique_integer([:positive])}"
+
+    assert {:ok, payload} =
+             MLS.create_group(%{
+               group_id: group_id,
+               ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"
+             })
+
+    # Must still succeed and return expected keys
+    assert Map.has_key?(payload, "epoch") or Map.has_key?(payload, :epoch)
+    assert Map.has_key?(payload, "session_sender_storage") or
+             Map.has_key?(payload, :session_sender_storage)
+  end
+
   defp fetch(payload, key) do
     atom_key =
       case key do
@@ -407,6 +485,8 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
         "session_recipient_signer" -> :session_recipient_signer
         "session_cache" -> :session_cache
         "key_package_ref" -> :key_package_ref
+        "credentials" -> :credentials
+        "epoch" -> :epoch
         _ -> nil
       end
 

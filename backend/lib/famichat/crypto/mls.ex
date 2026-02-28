@@ -84,6 +84,9 @@ defmodule Famichat.Crypto.MLS do
   @spec export_ratchet_tree(map()) :: {:ok, map()} | {:error, atom(), map()}
   def export_ratchet_tree(params), do: call_1(:export_ratchet_tree, params)
 
+  @spec list_member_credentials(map()) :: {:ok, map()} | {:error, atom(), map()}
+  def list_member_credentials(params), do: call_1(:list_member_credentials, params)
+
   defp call_0(operation), do: call_adapter(operation, [])
 
   defp call_1(_operation, params) when not is_map(params) do

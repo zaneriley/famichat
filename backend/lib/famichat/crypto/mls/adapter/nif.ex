@@ -21,7 +21,8 @@ defmodule Famichat.Crypto.MLS.Adapter.Nif do
     :clear_pending_commit,
     :create_application_message,
     :export_group_info,
-    :export_ratchet_tree
+    :export_ratchet_tree,
+    :list_member_credentials
   ]
 
   @impl true
@@ -72,6 +73,9 @@ defmodule Famichat.Crypto.MLS.Adapter.Nif do
 
   @impl true
   def export_ratchet_tree(params), do: call_1(:export_ratchet_tree, params)
+
+  @impl true
+  def list_member_credentials(params), do: call_1(:list_member_credentials, params)
 
   defp call_0(operation) do
     try do

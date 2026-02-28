@@ -24,4 +24,5 @@ defmodule Famichat.Crypto.MLS.Adapter do
   @callback create_application_message(map()) :: result()
   @callback export_group_info(map()) :: result()
   @callback export_ratchet_tree(map()) :: result()
+  @callback list_member_credentials(map()) :: result()
 end
