@@ -137,6 +137,7 @@ Famichat has a solid backend messaging foundation and now includes a real OpenML
 ## What is still not done
 
 1. Key lifecycle and identity binding are now substantially complete for the core revocation path (MLS Remove Phases 0-3 done, revocation sealing wired, `mls_remove` and `merge_staged_commit` NIFs real); remaining production trust gaps are multi-device key distribution and cross-node consistency.
+   - **Device-add authorization is a known gap** (design decided 2026-03-01; implementation not started). Two paths are specified: Path A (passkey login, role-gated — non-admin members enter a pending/read-only state until a household admin approves) and Path B (QR scan from an existing trusted device, immediately approved for any role). The `Accounts.UserDevice` schema needs a `trust_state` field (`:pending | :active | :revoked`) and `Auth.Sessions.DeviceStore` needs the approval-gating logic. See `docs/VISION.md` ("Device Authentication Model") and `docs/auth-ia-ddd-refactor.md` (§8.1) for the full model.
 2. Commit/update/add/remove lifecycle handling needs deeper OpenMLS-backed semantics (pending-commit payload integrity and epoch transition assertions under churn).
 3. Multi-node/state-distribution strategy is still undefined for strict cross-node consistency and restart behavior.
 4. End-to-end confidence on backend gates is now supported by a serialized burn-in pass set (`3x fast + 2x deep`, all PASS); remaining closure is user-facing UX proof, not backend gate determinism.

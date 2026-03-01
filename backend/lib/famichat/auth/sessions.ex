@@ -153,7 +153,9 @@ defmodule Famichat.Auth.Sessions do
           |> UserDevice.changeset(%{revoked_at: DateTime.utc_now()})
           |> Repo.update()
 
+        revocation_ref = revocation_ref(:client, "#{user_id}:#{device_id}")
         stage_client_revocation(user_id, device_id)
+        trigger_mls_removal(user_id, device_id, revocation_ref)
         telemetry(:revoke, %{user_id: user_id, device_id: device_id})
         {:ok, :revoked}
 
@@ -326,6 +328,25 @@ defmodule Famichat.Auth.Sessions do
       %{count: 1},
       Map.put(metadata, :result, action)
     )
+  end
+
+  defp trigger_mls_removal(user_id, device_id, revocation_ref) do
+    # Best-effort: if this fails, the session is already revoked and the
+    # device cannot re-authenticate. MLS group removal is logged for audit
+    # and handled via the revocation journal.
+    try do
+      Chat.remove_device_from_mls_groups(user_id, device_id, revocation_ref)
+    rescue
+      e ->
+        Logger.warning(
+          "[Sessions] Failed to trigger MLS group removal for revoked device",
+          user_id: user_id,
+          device_id: device_id,
+          error: Exception.message(e)
+        )
+
+        :ok
+    end
   end
 
   defp stage_client_revocation(user_id, device_id) do

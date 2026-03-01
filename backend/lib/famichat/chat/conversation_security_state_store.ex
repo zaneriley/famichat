@@ -226,8 +226,47 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
 
   defp decode_optional_state_payload(nil, _format), do: {:ok, nil}
 
+  # pending_commit is a control map (operation, staged_epoch, …), not a
+  # snapshot — it must NOT be validated against @snapshot_required_keys.
   defp decode_optional_state_payload(ciphertext, format),
-    do: decode_state_payload(format, ciphertext)
+    do: decode_pending_commit_payload(format, ciphertext)
+
+  defp decode_pending_commit_payload("vault_term_v1", ciphertext)
+       when is_binary(ciphertext) do
+    try do
+      with decrypted when is_binary(decrypted) <- Vault.decrypt!(ciphertext),
+           decoded <- :erlang.binary_to_term(decrypted, [:safe]),
+           true <- is_map(decoded) do
+        {:ok, decoded}
+      else
+        _ ->
+          {:error, :state_decode_failed,
+           %{reason: :pending_commit_decode_failed, operation: :load}}
+      end
+    rescue
+      e in [RuntimeError, ArgumentError, Cloak.MissingCipher] ->
+        {:error, :state_decode_failed,
+         %{
+           reason: :pending_commit_decode_failed,
+           operation: :load,
+           message: Exception.message(e)
+         }}
+
+      e ->
+        Logger.error("Unexpected exception in decode_pending_commit_payload: #{inspect(e)}")
+        reraise e, __STACKTRACE__
+    end
+  end
+
+  defp decode_pending_commit_payload("vault_term_v1", _ciphertext) do
+    {:error, :state_decode_failed,
+     %{reason: :pending_commit_decode_failed, operation: :load}}
+  end
+
+  defp decode_pending_commit_payload(_unknown_format, _ciphertext) do
+    {:error, :state_decode_failed,
+     %{reason: :unknown_pending_commit_format}}
+  end
 
   defp decode_record(%ConversationSecurityState{} = record) do
     pending_format =

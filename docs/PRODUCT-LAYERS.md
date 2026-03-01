@@ -83,11 +83,19 @@ Features:
 │   ├── Message history (pagination)
 │   └── Typing indicators (optional, test if "cozy")
 │
+├── Device authentication (both paths needed at L1)
+│   ├── Path A: passkey login (household-role-gated approval)
+│   └── Path B: QR / existing-device approval (needed at L1 for lost-device
+│       and platform-switch scenarios; maps to pair_qr / pair_admin_code
+│       tokens already built in Auth.Onboarding)
+│
 └── Shared Moments
     ├── Photo upload/sharing
     ├── Emoji reactions
     └── Message threads (replying to specific message)
 ```
+
+> **Note on Path B placement**: Path B (QR linking from an existing trusted device) was previously implied to be a Layer 3 feature under "Multi-Device Support". That was incorrect. Path B is required at Layer 1 because even a two-person household faces lost-phone and platform-switch scenarios from the start. The infrastructure (`pair_qr`/`pair_admin_code` tokens) is already present. What remains is the authorization enforcement in `Auth.Sessions.DeviceStore` and the `trust_state` field on `Accounts.UserDevice`. See `docs/VISION.md` ("Device Authentication Model") for the full two-path model.
 
 ### JTBD Validation
 
@@ -206,6 +214,9 @@ Features:
     ├── Web (desktop for grandparents)
     ├── Mobile web (phone browser)
     └── PWA install (optional, feels like app)
+    Note: QR-based device linking (Path B) is NOT deferred to L3. It is
+    required at Layer 1 (see L1 note above). What is new at L3 is the
+    additional device form-factors (desktop web, PWA) that grandparents use.
 ```
 
 ### JTBD Validation
@@ -661,6 +672,6 @@ Location features (check-ins, safe zones, ETA sharing) likely require native mob
 
 ---
 
-**Last Updated**: 2026-02-25
-**Version**: 1.0
+**Last Updated**: 2026-03-01
+**Version**: 1.1
 **Status**: Living document - updated as layers validate or pivot

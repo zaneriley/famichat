@@ -221,6 +221,7 @@ defmodule Famichat.Chat do
   alias Famichat.Chat.ConversationSecurityRecoveryLifecycle
   alias Famichat.Chat.ConversationSecurityRevocationLifecycle
   alias Famichat.Chat.ConversationVisibilityService
+  alias Famichat.Chat.DeviceMlsRemoval
 
   @doc """
   Hides a conversation for a specific user.
@@ -414,5 +415,28 @@ defmodule Famichat.Chat do
       revocation_ref,
       attrs
     )
+  end
+
+  @doc """
+  Fires off an async task to remove the revoked device from every MLS group
+  (conversation) the user belongs to.
+
+  Session revocation is the hard guarantee and must already have happened
+  before calling this function. MLS removal is best-effort: failures are
+  logged and written to the revocation journal, but they do not propagate
+  to the caller and do not affect the return value.
+
+  The `revocation_ref` is the same idempotency key used for session-level
+  revocation staging so the two journal rows can be correlated.
+
+  Returns `:ok` immediately; all MLS work happens in a spawned task.
+  """
+  @spec remove_device_from_mls_groups(
+          Ecto.UUID.t(),
+          String.t(),
+          String.t()
+        ) :: :ok
+  def remove_device_from_mls_groups(user_id, device_id, revocation_ref) do
+    DeviceMlsRemoval.remove_async(user_id, device_id, revocation_ref)
   end
 end
