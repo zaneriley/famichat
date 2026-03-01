@@ -1,0 +1,8 @@
+# wasm-pack build output
+pkg/
+
+# Rust build artifacts
+target/
+
+# Node.js dependencies
+node_modules/

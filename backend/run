@@ -3026,6 +3026,38 @@ function rust:check {
 }
 
 # -----------------------------------------------------------------------------
+# WASM Spike
+# -----------------------------------------------------------------------------
+
+function wasm:check {
+  # Check WASM crate builds and compiles cleanly
+  cmd cargo check --target wasm32-unknown-unknown --manifest-path "infra/mls_wasm/Cargo.toml"
+}
+
+function wasm:build {
+  # Build WASM module for Node.js testing
+  # Requires wasm-pack: install with 'curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh'
+  if ! command -v wasm-pack >/dev/null 2>&1; then
+    echo "wasm-pack not found. Install with:" >&2
+    echo "  curl https://rustwasm.org/wasm-pack/installer/init.sh -sSf | sh" >&2
+    return 1
+  fi
+
+  cd "infra/mls_wasm" || return $?
+  wasm-pack build --target nodejs --release
+  cd - > /dev/null || return $?
+}
+
+function wasm:test {
+  # Build WASM and run test harness
+  wasm:build || return $?
+
+  cd "infra/mls_wasm" || return $?
+  node js/test.mjs
+  cd - > /dev/null || return $?
+}
+
+# -----------------------------------------------------------------------------
 # Javascript
 # -----------------------------------------------------------------------------
 

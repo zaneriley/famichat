@@ -68,6 +68,22 @@ Local manual spike routes:
 
 Note: Port can differ if you changed `backend/.env` (`DOCKER_WEB_PORT_FORWARD` / `PORT`).
 
+## Crypto Stack
+
+```
+OpenMLS (Rust library — the actual MLS implementation)
+    │
+    ├── backend/infra/mls_nif/     ← server-side wrapper (current)
+    │   Rustler NIF in the Elixir VM. Holds group sessions in memory.
+    │   Server decrypts for LiveView rendering — known gap, not the target.
+    │
+    └── (planned) mls_wasm/        ← browser-side wrapper (Path C)
+        wasm-bindgen targeting wasm32. Keys stay on device.
+        Server becomes a dumb relay. Required before other families trust the server.
+```
+
+We didn't reimplement MLS — we wrap it. Both the NIF and the future WASM module are thin deployment wrappers around the same library. ~70% of the NIF's crypto logic transfers directly. See [SPEC.md — Security](docs/SPEC.md) for the full decision and migration plan.
+
 ## Canonical API Surfaces
 
 1. `GET /api/v1/conversations/:id/messages`
