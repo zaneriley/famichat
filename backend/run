@@ -95,12 +95,9 @@ function docs:boundary-check {
   project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
   local -a docs_files=(
-    "${project_root}/docs/ENCRYPTION.md"
-    "${project_root}/docs/ARCHITECTURE.md"
-    "${project_root}/docs/NOW.md"
-    "${project_root}/docs/sprints/CURRENT-SPRINT.md"
-    "${project_root}/docs/sprints/ROADMAP.md"
-    "${project_root}/docs/sprints/STATUS.md"
+    "${project_root}/docs/SPEC.md"
+    "${project_root}/docs/ia-lexicon.md"
+    "${project_root}/docs/ia-boundary-guardrails.md"
   )
 
   local -a patterns=(

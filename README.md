@@ -79,15 +79,9 @@ Note: Port can differ if you changed `backend/.env` (`DOCKER_WEB_PORT_FORWARD` /
 
 ## Read These Docs First
 
-1. [Current reality and priorities](docs/NOW.md)
-2. [Current sprint](docs/sprints/CURRENT-SPRINT.md)
-3. [Sprint and program status](docs/sprints/STATUS.md)
-4. [Messaging QA runbook](docs/runbooks/messaging-qa-runbook.md)
-5. [API design and contract direction](docs/API-DESIGN.md)
-6. [Product vision](docs/VISION.md)
-7. [E2EE architecture](docs/ENCRYPTION.md)
-8. [ADR 010: MLS-first direction](docs/decisions/010-mls-first-for-neighborhood-scale.md)
-9. [ADR 006: Signal direction (deprecated)](docs/decisions/006-signal-protocol-for-e2ee.md)
+1. [Design spec (vision, UX, auth, architecture, open questions)](docs/SPEC.md)
+2. [Messaging QA runbook](docs/runbooks/messaging-qa-runbook.md)
+3. [ADR 010: MLS-first direction](docs/decisions/010-mls-first-for-neighborhood-scale.md)
 
 ## Repo Structure
 
@@ -99,13 +93,12 @@ Note: Port can differ if you changed `backend/.env` (`DOCKER_WEB_PORT_FORWARD` /
 │   ├── test/
 │   └── infra/mls_nif/
 ├── docs/
-│   ├── NOW.md
-│   ├── API-DESIGN.md
-│   ├── ENCRYPTION.md
-│   ├── VISION.md
+│   ├── SPEC.md
+│   ├── ia-lexicon.md
+│   ├── ia-boundary-guardrails.md
 │   ├── runbooks/
-│   ├── sprints/
-│   └── decisions/
+│   ├── decisions/
+│   └── archive/
 └── README.md
 ```
 
