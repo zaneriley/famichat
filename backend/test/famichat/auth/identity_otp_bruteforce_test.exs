@@ -26,9 +26,23 @@ defmodule Famichat.Auth.Identity.OTPBruteforceTest do
       end)
     end
 
-    @tag :pending
     test "verify_otp enforces rate limit on repeated attempts" do
-      # TODO: add once Identity.verify_otp/2 applies rate limiting.
+      email = ChatFixtures.unique_user_email()
+      _user = ChatFixtures.user_fixture(%{email: email})
+
+      {:ok, _code, _record} = Identity.issue_otp(email)
+      wrong_code = "000000"
+
+      # Exhaust the 5-attempt verify limit with wrong codes.
+      for _ <- 1..5 do
+        Identity.verify_otp(email, wrong_code)
+      end
+
+      assert {:error, {:rate_limited, retry_in}} =
+               Identity.verify_otp(email, wrong_code),
+             "expected rate limit after 5 failed OTP verify attempts"
+
+      assert retry_in > 0
     end
   end
 

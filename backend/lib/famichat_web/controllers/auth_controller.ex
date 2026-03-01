@@ -538,6 +538,12 @@ defmodule FamichatWeb.AuthController do
 
       {:error, :used} ->
         conn |> put_status(:gone) |> json(%{error: %{code: "used"}})
+
+      {:error, {:rate_limited, _retry_in}} ->
+        # Map rate-limited to the same 401/invalid response as a wrong code.
+        # Returning 429 or a distinct error body would reveal that the email
+        # address exists and is being actively tried, enabling enumeration.
+        conn |> put_status(:unauthorized) |> json(%{error: %{code: "invalid"}})
     end
   end
 

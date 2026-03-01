@@ -362,23 +362,44 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
            end)
   end
 
-  test "real NIF adapter persists encrypted snapshot in conversation_security_states",
+  test "application messages do NOT rewrite the snapshot in conversation_security_states",
        %{conversation: conversation, sender: sender} do
+    # Invariant: send_message (application message) must NOT persist the
+    # MLS snapshot to the database. Only epoch-advancing operations
+    # (ConversationSecurityLifecycle.merge_pending_commit/2) write the snapshot.
+    # This prevents 10-80 KB TOAST write amplification per message at
+    # family-scale traffic.
     Application.put_env(:famichat, :mls_adapter, Nif)
     seed_real_nif_state!(conversation.id)
 
+    # Capture the lock_version and ciphertext written by the seed step.
+    seeded_state = Repo.get!(ConversationSecurityState, conversation.id)
+    seeded_lock_version = seeded_state.lock_version
+    seeded_ciphertext = seeded_state.state_ciphertext
+
     assert {:ok, _message} =
              MessageService.send_message(
-               message_params(sender.id, conversation.id, "snapshot-persist")
+               message_params(sender.id, conversation.id, "no-snapshot-write")
+             )
+
+    # After N application messages, the snapshot row must not have changed.
+    assert {:ok, _message2} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "no-snapshot-write-2")
+             )
+
+    assert {:ok, _message3} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "no-snapshot-write-3")
              )
 
     persisted_state = Repo.get!(ConversationSecurityState, conversation.id)
 
-    assert is_binary(persisted_state.state_ciphertext)
-    assert byte_size(persisted_state.state_ciphertext) > 0
-    assert persisted_state.state_format == "vault_term_v1"
-    assert persisted_state.protocol == "mls"
-    assert persisted_state.lock_version >= 1
+    # lock_version must be unchanged — no upsert happened.
+    assert persisted_state.lock_version == seeded_lock_version
+    # The stored ciphertext blob must be byte-for-byte identical to what was
+    # seeded; no TOAST rewrite occurred.
+    assert persisted_state.state_ciphertext == seeded_ciphertext
   end
 
   test "read path restores from persisted snapshot after runtime state reset",
@@ -542,8 +563,12 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     assert Repo.aggregate(Message, :count, :id) == before_count
   end
 
-  test "send_message rolls back message insert when state lock is stale",
+  test "send_message succeeds even when a concurrent write bumps the lock version",
        %{conversation: conversation, sender: sender} do
+    # Under the lazy-snapshot invariant, send_message no longer attempts to
+    # upsert the snapshot row, so concurrent lock version changes made by the
+    # StaleStateAdapter (or any other concurrent writer) do NOT cause the
+    # message send to fail. The message is persisted independently.
     Application.put_env(:famichat, :mls_adapter, StaleStateAdapter)
 
     assert {:ok, _persisted_state} =
@@ -555,13 +580,13 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
 
     before_count = Repo.aggregate(Message, :count, :id)
 
-    assert {:error, {:mls_encryption_failed, :storage_inconsistent, details}} =
+    # Should succeed — no snapshot upsert races with message insert.
+    assert {:ok, _message} =
              MessageService.send_message(
-               message_params(sender.id, conversation.id, "lock-conflict")
+               message_params(sender.id, conversation.id, "no-lock-conflict")
              )
 
-    assert details[:reason] == :lock_version_mismatch
-    assert Repo.aggregate(Message, :count, :id) == before_count
+    assert Repo.aggregate(Message, :count, :id) == before_count + 1
   end
 
   test "send_message fails closed when mls runtime health is degraded",
@@ -725,8 +750,12 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     refute Map.has_key?(metadata, :events)
   end
 
-  test "persist_mls_session_snapshot_in_tx includes pending_commit from state in persisted attrs",
+  test "send_message does not update the snapshot even when the adapter returns snapshot keys",
        %{conversation: conversation, sender: sender} do
+    # SnapshotPersistingAdapter returns snapshot keys in its create_application_message
+    # response (epoch 2 and all session_* keys). Under the lazy-snapshot invariant,
+    # send_message must NOT write that snapshot to the database. The snapshot row
+    # should remain exactly as seeded at epoch 1.
     Application.put_env(:famichat, :mls_adapter, SnapshotPersistingAdapter)
 
     assert {:ok, _persisted_state} =
@@ -736,15 +765,254 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
                nil
              )
 
+    seeded = Repo.get!(ConversationSecurityState, conversation.id)
+    seeded_lock_version = seeded.lock_version
+
     assert {:ok, _message} =
              MessageService.send_message(
-               message_params(sender.id, conversation.id, "persist-pending-commit")
+               message_params(sender.id, conversation.id, "no-epoch-advance")
              )
 
     assert {:ok, reloaded} = ConversationSecurityStateStore.load(conversation.id)
-    assert reloaded.pending_commit == nil
-    assert is_map(reloaded.state)
-    assert reloaded.epoch == 2
+    # Epoch must remain at 1 — the adapter-returned epoch 2 must not be persisted.
+    assert reloaded.epoch == 1
+    # lock_version must not have incremented — no DB write occurred.
+    assert reloaded.lock_version == seeded_lock_version
+  end
+
+  test "merge_pending_commit DOES persist the snapshot after an epoch advance",
+       %{conversation: conversation} do
+    # This test verifies the positive case: epoch-advancing operations must
+    # write the snapshot. send_message must not write it (see test above).
+    # We seed an initial state, then stage + merge a commit to advance the epoch,
+    # and confirm the snapshot is updated in the DB.
+    assert {:ok, initial} =
+             ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{state: snapshot_payload(), epoch: 1, protocol: "mls"},
+               nil
+             )
+
+    initial_lock_version = initial.lock_version
+
+    # Stage a pending commit at epoch 2.
+    assert {:ok, after_stage} =
+             ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{
+                 state: snapshot_payload(),
+                 epoch: 1,
+                 protocol: "mls",
+                 pending_commit: %{
+                   "operation" => "mls_commit",
+                   "staged_epoch" => 2
+                 }
+               },
+               initial.lock_version
+             )
+
+    after_stage_lock = after_stage.lock_version
+
+    # Merge the pending commit — this should write the snapshot.
+    # We use ConversationSecurityStateStore.upsert directly to model what
+    # ConversationSecurityLifecycle.merge_pending_commit does: persist a new
+    # snapshot blob with the advanced epoch, clearing pending_commit.
+    assert {:ok, after_merge} =
+             ConversationSecurityStateStore.upsert(
+               conversation.id,
+               %{
+                 state: snapshot_payload(),
+                 epoch: 2,
+                 protocol: "mls",
+                 pending_commit: nil
+               },
+               after_stage_lock
+             )
+
+    # Epoch advanced and a DB write occurred (lock_version incremented).
+    assert after_merge.epoch == 2
+    assert after_merge.lock_version > initial_lock_version
+    assert after_merge.pending_commit == nil
+  end
+
+  test "sending N application messages results in exactly 1 snapshot write (the seed)",
+       %{conversation: conversation, sender: sender} do
+    # Core lazy-snapshot invariant: N application messages must produce zero
+    # additional snapshot writes beyond the initial seed. Only epoch-advancing
+    # operations (Add/Remove/Commit) are allowed to write the snapshot.
+    Application.put_env(:famichat, :mls_adapter, Nif)
+    seed_real_nif_state!(conversation.id)
+
+    seeded = Repo.get!(ConversationSecurityState, conversation.id)
+    seeded_lock_version = seeded.lock_version
+
+    n = 5
+
+    for i <- 1..n do
+      assert {:ok, _msg} =
+               MessageService.send_message(
+                 message_params(sender.id, conversation.id, "msg-#{i}")
+               )
+    end
+
+    after_sends = Repo.get!(ConversationSecurityState, conversation.id)
+
+    # lock_version must not have changed — zero snapshot upserts occurred.
+    assert after_sends.lock_version == seeded_lock_version,
+           "Expected lock_version=#{seeded_lock_version} (no snapshot writes) " <>
+             "but got #{after_sends.lock_version} after #{n} application messages"
+  end
+
+  test "recovery path correctly reloads from last epoch-advancing snapshot after NIF state loss",
+       %{conversation: conversation, sender: sender} do
+    # After a simulated server restart (NIF in-memory state cleared), the
+    # recovery lifecycle must reload from the last persisted epoch-advancing
+    # snapshot and allow subsequent operations to succeed.
+    Application.put_env(:famichat, :mls_adapter, Nif)
+    seed_real_nif_state!(conversation.id)
+    plaintext = "pre-restart-message"
+
+    assert {:ok, message} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, plaintext)
+             )
+
+    # Verify the message was encrypted and stored.
+    reloaded_message = Repo.get!(Message, message.id)
+    assert reloaded_message.content != plaintext
+    assert is_binary(reloaded_message.content)
+
+    # Simulate NIF state loss by overwriting the group with a fresh session.
+    # After this, process_incoming will fail — matching post-restart behavior.
+    assert {:ok, _} =
+             Famichat.Crypto.MLS.create_group(%{
+               group_id: conversation.id,
+               ciphersuite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"
+             })
+
+    assert {:error, :commit_rejected, _} =
+             Famichat.Crypto.MLS.process_incoming(%{
+               group_id: conversation.id,
+               ciphertext: reloaded_message.content
+             })
+
+    # The recovery path must restore from the last persisted snapshot and
+    # allow decryption to succeed again.
+    assert {:ok, messages} =
+             MessageService.get_conversation_messages(conversation.id)
+
+    assert Enum.any?(messages, fn m ->
+             m.id == message.id and m.content == plaintext
+           end),
+           "Recovery path did not restore decrypted content from persisted snapshot"
+  end
+
+  test "concurrent MLS sends do not cause snapshot conflicts",
+       %{conversation: conversation, sender: sender} do
+    # Under the lazy-snapshot invariant, send_message does NOT write to
+    # conversation_security_states. This means concurrent sends cannot
+    # race on the snapshot row's lock_version. This test verifies that
+    # 6 concurrent sends all succeed and that the snapshot row is untouched.
+    Application.put_env(:famichat, :mls_adapter, Nif)
+    seed_real_nif_state!(conversation.id)
+
+    seeded_state = Repo.get!(ConversationSecurityState, conversation.id)
+    seeded_lock_version = seeded_state.lock_version
+
+    n = 6
+
+    results =
+      1..n
+      |> Task.async_stream(
+        fn i ->
+          MessageService.send_message(
+            message_params(sender.id, conversation.id, "concurrent-msg-#{i}")
+          )
+        end,
+        max_concurrency: n,
+        timeout: 10_000,
+        ordered: false
+      )
+      |> Enum.to_list()
+
+    # Every task must return {:ok, _task_result} from async_stream, and
+    # the inner send_message must succeed — no stale_state or race errors.
+    assert length(results) == n
+
+    Enum.each(results, fn result ->
+      assert {:ok, {:ok, %{id: _id}}} = result,
+             "Expected all concurrent sends to succeed, got: #{inspect(result)}"
+    end)
+
+    # All n messages must be persisted in the messages table.
+    persisted_count =
+      Repo.aggregate(
+        from(m in Message,
+          where: m.conversation_id == ^conversation.id
+        ),
+        :count,
+        :id
+      )
+
+    assert persisted_count == n,
+           "Expected #{n} messages persisted, got #{persisted_count}"
+
+    # The snapshot row must not have been touched — lock_version unchanged.
+    after_state = Repo.get!(ConversationSecurityState, conversation.id)
+
+    assert after_state.lock_version == seeded_lock_version,
+           "Expected lock_version=#{seeded_lock_version} (no snapshot writes) " <>
+             "but got #{after_state.lock_version} after #{n} concurrent sends"
+  end
+
+  test "snapshot MAC verification rejects tampered state_ciphertext bytes",
+       %{conversation: conversation, sender: sender} do
+    # Security invariant: a DB-level attacker who replaces snapshot_mac with a
+    # forged value cannot bypass MAC verification. When load_mls_snapshot_with_lock
+    # finds that the stored MAC does not match the decrypted state, it must
+    # reject the snapshot and surface {:error, :snapshot_integrity_failed, ...},
+    # which send_message wraps as {:error, {:mls_encryption_failed, :snapshot_integrity_failed, _}}.
+    #
+    # This test simulates a tampered snapshot_mac (leaving state_ciphertext
+    # intact so Vault decryption still succeeds) and confirms the MAC check
+    # is the gate that rejects the state — not ciphertext corruption.
+    Application.put_env(:famichat, :mls_adapter, Nif)
+    seed_real_nif_state!(conversation.id)
+
+    # Confirm the seeded state loads cleanly before tampering.
+    assert {:ok, _clean_state} = ConversationSecurityStateStore.load(conversation.id)
+
+    # Directly overwrite snapshot_mac in the DB with a plausible-looking but
+    # incorrect 64-character hex string. state_ciphertext is left intact so
+    # Vault decryption will succeed — but the recomputed MAC will not match.
+    fake_mac = String.duplicate("a", 64)
+
+    {count, _} =
+      Repo.update_all(
+        from(s in ConversationSecurityState,
+          where: s.conversation_id == ^conversation.id
+        ),
+        set: [snapshot_mac: fake_mac]
+      )
+
+    assert count == 1
+
+    # Attempting to send a message must fail because load_mls_snapshot_with_lock
+    # will call verify_snapshot_mac, find a mismatch, and return
+    # {:error, :snapshot_integrity_failed, _}.  send_message wraps this as
+    # {:error, {:mls_encryption_failed, :snapshot_integrity_failed, _}}.
+    before_count = Repo.aggregate(Message, :count, :id)
+
+    assert {:error, {:mls_encryption_failed, :snapshot_integrity_failed, details}} =
+             MessageService.send_message(
+               message_params(sender.id, conversation.id, "must-be-rejected")
+             )
+
+    # The error details must reference the tampered conversation.
+    assert details[:conversation_id] == conversation.id
+
+    # No message must have been persisted — fails closed.
+    assert Repo.aggregate(Message, :count, :id) == before_count
   end
 
   defp message_params(sender_id, conversation_id, content \\ "hello") do

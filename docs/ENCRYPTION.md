@@ -13,11 +13,24 @@ Boundary drift guardrails: [ia-boundary-guardrails.md](ia-boundary-guardrails.md
 
 Famichat uses a layered security model:
 
-1. **Server-side E2EE path**: MLS via OpenMLS (Rust NIF adapter).
+1. **Server-side MLS path**: MLS via OpenMLS (Rust NIF adapter). The server
+   performs encryption and decryption. MLS provides forward secrecy (past
+   message keys are deleted after use) and post-compromise security (new
+   messages are secure after a Remove/Add cycle even if prior key material
+   was compromised).
 2. **Field-level encryption**: Cloak.Ecto for sensitive account/auth fields.
 3. **Infrastructure encryption**: database/storage encryption at rest.
 
-**Trust model**: self-hosted infrastructure with a product requirement that admins cannot read message content once MLS is active.
+**Trust model**: The server is the trust anchor. Self-hosted deployment means
+the instance operator controls the server infrastructure and the MLS key
+material. In the current Phoenix LiveView architecture, the server decrypts
+messages for rendering — the server operator can read message plaintext in
+principle. Full client-side decryption (where the server never sees plaintext)
+is a future milestone contingent on native iOS/Android client development.
+
+This is distinct from a system where decryption occurs exclusively on the
+client device. Do not represent Famichat as providing that guarantee in its
+current architecture.
 
 ---
 

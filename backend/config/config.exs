@@ -7,7 +7,8 @@ import Config
 
 config :famichat, :webauthn,
   rp_id: System.get_env("WEBAUTHN_RP_ID") || "localhost",
-  rp_name: System.get_env("WEBAUTHN_RP_NAME") || "Famichat"
+  rp_name: System.get_env("WEBAUTHN_RP_NAME") || "Famichat",
+  origin: System.get_env("WEBAUTHN_ORIGIN") || "http://localhost"
 
 config :famichat,
   ecto_repos: [Famichat.Repo],

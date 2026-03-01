@@ -178,6 +178,14 @@ defmodule Famichat.Auth.Passkeys do
 
   @doc """
   Registers a new passkey using the attestation payload from the client.
+
+  Expects the payload to contain:
+  - `attestation_object`: base64-encoded attestation object from the WebAuthn API
+  - `client_data_json`: base64-encoded client data JSON from the WebAuthn API
+  - `credential_id`: base64-encoded credential ID
+  - `challenge_handle`: the opaque handle from the registration challenge issuance
+
+  Calls `Wax.register/3` to perform full cryptographic attestation verification.
   """
   @spec register_passkey(map()) ::
           {:ok, Passkey.t()} | {:error, term()}
@@ -185,23 +193,46 @@ defmodule Famichat.Auth.Passkeys do
     with {:ok, challenge_ctx} <-
            resolve_registration_challenge(attestation_payload),
          {:ok, user} <- Identity.fetch_user(challenge_ctx.user_id),
-         :ok <-
-           verify_payload_challenge(
+         {:ok, attestation_object_cbor} <-
+           decode_base64(
              attestation_payload,
-             challenge_ctx.challenge_binary
+             ["attestation_object", :attestation_object]
+           ),
+         {:ok, client_data_json_raw} <-
+           decode_base64(
+             attestation_payload,
+             ["client_data_json", :client_data_json]
            ),
          {:ok, credential_id} <-
-           decode_base64(attestation_payload, ["credential_id", :credential_id]),
-         {:ok, public_key} <-
-           decode_base64(attestation_payload, ["public_key", :public_key]) do
+           decode_base64(
+             attestation_payload,
+             ["credential_id", :credential_id]
+           ),
+         wax_challenge <- build_registration_challenge(challenge_ctx),
+         {:ok, {auth_data, _attestation_result}} <-
+           safe_wax_register(
+             attestation_object_cbor,
+             client_data_json_raw,
+             wax_challenge
+           ),
+         :ok <- check_user_verified(auth_data) do
+      cose_key = auth_data.attested_credential_data.credential_public_key
+      sign_count = auth_data.sign_count
+
+      aaguid =
+        case Wax.AuthenticatorData.get_aaguid(auth_data) do
+          nil -> nil
+          aaguid_bin -> aaguid_bin
+        end
+
+      public_key_bin = encode_cose_key_json(cose_key)
+
       attrs = %{
         user_id: user.id,
         credential_id: credential_id,
-        public_key: public_key,
-        sign_count:
-          Map.get(attestation_payload, "sign_count") ||
-            Map.get(attestation_payload, :sign_count, 0),
-        aaguid: decode_optional(attestation_payload, ["aaguid", :aaguid]),
+        public_key: public_key_bin,
+        sign_count: sign_count,
+        aaguid: aaguid,
         label:
           Map.get(attestation_payload, "label") ||
             Map.get(attestation_payload, :label),
@@ -251,10 +282,32 @@ defmodule Famichat.Auth.Passkeys do
          {:ok, challenge_ctx} <- resolve_assertion_challenge(payload),
          {:ok, passkey} <- find_active_passkey(credential_id),
          :ok <- verify_assertion_user(passkey, challenge_ctx.user_id),
-         :ok <-
-           verify_payload_challenge(payload, challenge_ctx.challenge_binary),
-         :ok <- validate_sign_count(passkey, payload),
-         {:ok, passkey} <- touch_passkey(passkey, payload),
+         {:ok, cose_key} <- load_cose_key(passkey),
+         {:ok, authenticator_data_bin} <-
+           decode_base64(
+             payload,
+             ["authenticator_data", :authenticator_data]
+           ),
+         {:ok, client_data_json_raw} <-
+           decode_base64(
+             payload,
+             ["client_data_json", :client_data_json]
+           ),
+         {:ok, signature} <-
+           decode_base64(payload, ["signature", :signature]),
+         wax_challenge <-
+           build_assertion_challenge(challenge_ctx, credential_id, cose_key),
+         {:ok, auth_data} <-
+           safe_wax_authenticate(
+             credential_id,
+             authenticator_data_bin,
+             signature,
+             client_data_json_raw,
+             wax_challenge
+           ),
+         :ok <- check_user_verified(auth_data),
+         :ok <- check_sign_count_regression(passkey, auth_data.sign_count),
+         {:ok, passkey} <- update_sign_count(passkey, auth_data.sign_count),
          :ok <- finalize_assertion_challenge(challenge_ctx) do
       user = Repo.preload(passkey, :user).user
       emit_passkey_event(:assert, %{user_id: user.id})
@@ -263,6 +316,224 @@ defmodule Famichat.Auth.Passkeys do
   end
 
   ## Implementation ---------------------------------------------------------
+
+  # Builds a Wax.Challenge struct for registration using the raw challenge bytes
+  # and RP configuration. The challenge bytes are injected directly so Wax does
+  # not generate its own — this is necessary because the challenge was already
+  # issued and delivered to the client.
+  defp build_registration_challenge(%{challenge_binary: challenge_bytes}) do
+    cfg = rp_config()
+    origin = Keyword.get(cfg, :origin, "http://localhost")
+    rp = Keyword.get(cfg, :rp_id, "localhost")
+
+    Wax.new_registration_challenge(
+      bytes: challenge_bytes,
+      origin: origin,
+      rp_id: rp,
+      trusted_attestation_types: [:none, :self, :basic, :uncertain, :attca, :anonca],
+      verify_trust_root: false
+    )
+  end
+
+  # Builds a Wax.Challenge struct for assertion using the raw challenge bytes,
+  # RP configuration, and the single allowed credential.
+  defp build_assertion_challenge(
+         %{challenge_binary: challenge_bytes},
+         credential_id,
+         cose_key
+       ) do
+    cfg = rp_config()
+    origin = Keyword.get(cfg, :origin, "http://localhost")
+    rp = Keyword.get(cfg, :rp_id, "localhost")
+
+    Wax.new_authentication_challenge(
+      bytes: challenge_bytes,
+      origin: origin,
+      rp_id: rp,
+      allow_credentials: [{credential_id, cose_key}]
+    )
+  end
+
+  # Checks that the user_verified flag is set in the authenticator data.
+  # Returns :ok when UV is true, {:error, :user_verification_required} otherwise.
+  # This enforces that the authenticator performed biometric or PIN verification.
+  defp check_user_verified(%{flag_user_verified: true}), do: :ok
+  defp check_user_verified(_), do: {:error, :user_verification_required}
+
+  # Encodes a COSE key map to a portable JSON binary.
+  # COSE keys have integer keys and binary coordinate values; JSON requires string
+  # keys and cannot represent raw binaries, so binary values are base64-encoded.
+  # This format is stable across Erlang/OTP major versions (unlike term_to_binary).
+  defp encode_cose_key_json(cose_key) when is_map(cose_key) do
+    cose_key
+    |> Enum.reduce(%{}, fn {k, v}, acc ->
+      key_str = Integer.to_string(k)
+      val = if is_binary(v), do: Base.encode64(v), else: v
+      Map.put(acc, key_str, val)
+    end)
+    |> Jason.encode!()
+  end
+
+  # Decodes a COSE key from the portable JSON format produced by encode_cose_key_json/1.
+  # String keys are converted back to integers; base64 strings that decode cleanly are
+  # treated as binary coordinate values (integers are left as integers).
+  defp decode_cose_key_json(json_str) when is_binary(json_str) do
+    try do
+      cose_key =
+        json_str
+        |> Jason.decode!()
+        |> Enum.reduce(%{}, fn {k, v}, acc ->
+          int_key = String.to_integer(k)
+
+          val =
+            cond do
+              is_binary(v) ->
+                case Base.decode64(v) do
+                  {:ok, bin} -> bin
+                  :error -> v
+                end
+
+              true ->
+                v
+            end
+
+          Map.put(acc, int_key, val)
+        end)
+
+      if is_map(cose_key) do
+        {:ok, cose_key}
+      else
+        {:error, :invalid_public_key}
+      end
+    rescue
+      _ -> {:error, :invalid_public_key}
+    end
+  end
+
+  # Deserializes the stored public key back into a COSE key map.
+  # Supports both the new portable JSON format (produced by encode_cose_key_json/1)
+  # and the legacy term_to_binary format (for passkeys registered before this fix).
+  # Legacy passkeys stored with term_to_binary should be disabled separately since
+  # the binary format is not portable across Erlang major versions.
+  defp load_cose_key(%Passkey{public_key: pk_bin}) when is_binary(pk_bin) do
+    # Detect JSON format: JSON strings begin with '{'
+    if String.starts_with?(pk_bin, "{") do
+      decode_cose_key_json(pk_bin)
+    else
+      # Legacy term_to_binary path — attempt to read but log a warning.
+      # These passkeys should be disabled and re-enrolled.
+      Logger.warning(
+        "[Passkeys] Loading passkey stored in legacy term_to_binary format. " <>
+          "This passkey should be disabled and re-enrolled for Erlang version portability."
+      )
+
+      try do
+        cose_key = :erlang.binary_to_term(pk_bin, [:safe])
+
+        if is_map(cose_key) do
+          {:ok, cose_key}
+        else
+          {:error, :invalid_public_key}
+        end
+      rescue
+        _ -> {:error, :invalid_public_key}
+      end
+    end
+  end
+
+  defp load_cose_key(_), do: {:error, :invalid_public_key}
+
+  # Returns :ok when the incoming sign_count is strictly greater than the stored
+  # value (or both are zero, which means the authenticator does not implement
+  # sign counts), and {:error, :replayed} otherwise.
+  defp check_sign_count_regression(%Passkey{sign_count: stored}, incoming) do
+    # Per WebAuthn spec §7.2 step 17: if the stored sign_count is 0 and
+    # the new sign_count is also 0, the authenticator does not support sign
+    # counts, which is allowed. Otherwise the new value must be strictly
+    # greater than the stored value.
+    cond do
+      stored == 0 and incoming == 0 -> :ok
+      incoming > stored -> :ok
+      true -> {:error, :replayed}
+    end
+  end
+
+  defp update_sign_count(passkey, new_count) do
+    passkey
+    |> Passkey.changeset(%{sign_count: new_count, last_used_at: DateTime.utc_now()})
+    |> Repo.update()
+  end
+
+  # Wraps Wax.register/3 to catch exceptions raised by malformed CBOR/binary input.
+  # Wax may raise CaseClauseError or similar when the CBOR library encounters
+  # unexpected tags in garbage data.
+  defp safe_wax_register(attestation_object_cbor, client_data_json_raw, challenge) do
+    result = Wax.register(attestation_object_cbor, client_data_json_raw, challenge)
+    map_wax_error(result)
+  rescue
+    e ->
+      Logger.warning(
+        "[Passkeys] Wax.register raised exception for malformed input: #{inspect(e)}"
+      )
+
+      {:error, :invalid_attestation_object}
+  end
+
+  # Wraps Wax.authenticate/6 to catch exceptions raised by malformed binary input.
+  defp safe_wax_authenticate(
+         credential_id,
+         auth_data_bin,
+         signature,
+         client_data_json_raw,
+         challenge
+       ) do
+    result =
+      Wax.authenticate(
+        credential_id,
+        auth_data_bin,
+        signature,
+        client_data_json_raw,
+        challenge
+      )
+
+    map_wax_error(result)
+  rescue
+    e ->
+      Logger.warning(
+        "[Passkeys] Wax.authenticate raised exception for malformed input: #{inspect(e)}"
+      )
+
+      {:error, :invalid_authenticator_data}
+  end
+
+  # Maps Wax error structs to canonical application error tuples.
+  defp map_wax_error({:ok, _} = ok), do: ok
+
+  defp map_wax_error({:error, %Wax.InvalidSignatureError{}}) do
+    {:error, :invalid_signature}
+  end
+
+  defp map_wax_error({:error, %Wax.InvalidClientDataError{reason: :origin_mismatch}}) do
+    {:error, :invalid_origin}
+  end
+
+  defp map_wax_error({:error, %Wax.InvalidClientDataError{reason: :challenge_mismatch}}) do
+    {:error, :invalid_challenge}
+  end
+
+  defp map_wax_error({:error, %Wax.InvalidClientDataError{reason: :rp_id_mismatch}}) do
+    {:error, :invalid_rp_id}
+  end
+
+  defp map_wax_error({:error, %Wax.InvalidClientDataError{reason: :credential_id_mismatch}}) do
+    {:error, :not_found}
+  end
+
+  defp map_wax_error({:error, %Wax.ExpiredChallengeError{}}) do
+    {:error, :expired}
+  end
+
+  defp map_wax_error({:error, _} = err), do: err
 
   defp do_issue(type, %User{} = user, opts)
        when type in [@registration_type, @assertion_type] do
@@ -373,7 +644,7 @@ defmodule Famichat.Auth.Passkeys do
       "attestation" => "none",
       "authenticatorSelection" => %{
         "residentKey" => "preferred",
-        "userVerification" => "preferred"
+        "userVerification" => "required"
       },
       "challenge" => challenge_b64,
       "excludeCredentials" => exclude,
@@ -405,7 +676,7 @@ defmodule Famichat.Auth.Passkeys do
       "rpId" => rp_id(),
       "timeout" => 60_000,
       "allowCredentials" => allow_credentials,
-      "userVerification" => "preferred"
+      "userVerification" => "required"
     }
   end
 
@@ -471,7 +742,13 @@ defmodule Famichat.Auth.Passkeys do
         {:ok, challenge}
       else
         {:error, reason}
-        when reason in [:expired, :invalid, :invalid_challenge, :type_mismatch] ->
+        when reason in [
+               :expired,
+               :invalid,
+               :invalid_challenge,
+               :type_mismatch,
+               :already_used
+             ] ->
           emit_challenge_event(:invalid, %{type: type, reason: reason})
           adapt_fetch_error(reason)
 
@@ -488,6 +765,7 @@ defmodule Famichat.Auth.Passkeys do
   end
 
   defp adapt_fetch_error(:expired), do: {:error, :expired}
+  defp adapt_fetch_error(:already_used), do: {:error, :already_used}
   defp adapt_fetch_error(:invalid), do: {:error, :invalid_challenge}
   defp adapt_fetch_error(:invalid_challenge), do: {:error, :invalid_challenge}
   defp adapt_fetch_error(:type_mismatch), do: {:error, :invalid_challenge}
@@ -558,15 +836,6 @@ defmodule Famichat.Auth.Passkeys do
     end
   end
 
-  defp verify_payload_challenge(payload, expected_binary) do
-    with {:ok, provided} <-
-           fetch_binary_param(payload, ["challenge", :challenge]),
-         {:ok, decoded} <- decode_challenge_string(provided),
-         true <- decoded == expected_binary || {:error, :invalid_challenge} do
-      :ok
-    end
-  end
-
   defp verify_assertion_user(%Passkey{user_id: user_id}, user_id), do: :ok
   defp verify_assertion_user(_passkey, _), do: {:error, :invalid_credentials}
 
@@ -591,21 +860,6 @@ defmodule Famichat.Auth.Passkeys do
 
   defp continue_or_halt(""), do: {:cont, nil}
   defp continue_or_halt(trimmed), do: {:halt, trimmed}
-
-  defp decode_challenge_string(challenge) when is_binary(challenge) do
-    case Base.url_decode64(challenge, padding: false) do
-      {:ok, decoded} ->
-        {:ok, decoded}
-
-      :error ->
-        case Base.decode64(challenge) do
-          {:ok, decoded} -> {:ok, decoded}
-          :error -> {:error, :invalid_challenge}
-        end
-    end
-  end
-
-  defp decode_challenge_string(_), do: {:error, :invalid_challenge}
 
   defp passkey_rate_key(payload) do
     Map.get(payload, "device_id") ||
@@ -649,33 +903,6 @@ defmodule Famichat.Auth.Passkeys do
     end
   end
 
-  defp validate_sign_count(%Passkey{sign_count: stored}, payload) do
-    incoming =
-      payload
-      |> Map.get("sign_count") ||
-        Map.get(payload, :sign_count) || stored
-
-    if incoming >= stored do
-      :ok
-    else
-      {:error, :replayed}
-    end
-  end
-
-  defp touch_passkey(passkey, payload) do
-    sign_count =
-      payload
-      |> Map.get("sign_count") ||
-        Map.get(payload, :sign_count) ||
-        passkey.sign_count
-
-    attrs = %{sign_count: sign_count, last_used_at: DateTime.utc_now()}
-
-    passkey
-    |> Passkey.changeset(attrs)
-    |> Repo.update()
-  end
-
   defp decode_base64(map, [string_key, atom_key]) do
     case Map.get(map, string_key) || Map.get(map, atom_key) do
       nil ->
@@ -689,22 +916,6 @@ defmodule Famichat.Auth.Passkeys do
 
       _ ->
         {:error, :invalid_field}
-    end
-  end
-
-  defp decode_optional(map, keys) do
-    case Enum.find_value(keys, fn key -> Map.get(map, key) end) do
-      nil ->
-        nil
-
-      value when is_binary(value) ->
-        case Base.decode64(value) do
-          {:ok, decoded} -> decoded
-          :error -> nil
-        end
-
-      value ->
-        value
     end
   end
 

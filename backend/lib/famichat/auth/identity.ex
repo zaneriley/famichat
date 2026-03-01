@@ -38,6 +38,7 @@ defmodule Famichat.Auth.Identity do
 
   @magic_link_bucket :"magic_link.issue"
   @otp_issue_bucket :"otp.issue"
+  @otp_verify_bucket :"otp.verify"
 
   @doc "Normalizes email input (trim + lowercase)."
   @spec normalize_email(String.t()) :: String.t()
@@ -273,9 +274,14 @@ defmodule Famichat.Auth.Identity do
     end
   end
 
+  defp secure_6digit_code do
+    <<n::unsigned-32>> = :crypto.strong_rand_bytes(4)
+    Integer.to_string(rem(n, 900_000) + 100_000)
+  end
+
   defp do_issue_otp(normalized_email) do
     with {:ok, user} <- fetch_user_by_email(normalized_email) do
-      code = (:rand.uniform(900_000) + 99_999) |> Integer.to_string()
+      code = secure_6digit_code()
       payload = %{"user_id" => user.id, "code" => code}
       hashed_email = email_hash(normalized_email)
       context = "otp:" <> Base.encode16(hashed_email, case: :lower)
@@ -302,7 +308,15 @@ defmodule Famichat.Auth.Identity do
           {:ok, User.t()} | {:error, term()}
   def verify_otp(email, code) when is_binary(email) and is_binary(code) do
     normalized = normalize_email(email)
-    hashed_email = email_hash(normalized)
+
+    case rate_limit(@otp_verify_bucket, normalized, 5, 60) do
+      :ok -> do_verify_otp(normalized, code)
+      error -> error
+    end
+  end
+
+  defp do_verify_otp(normalized_email, code) do
+    hashed_email = email_hash(normalized_email)
     context = "otp:" <> Base.encode16(hashed_email, case: :lower)
 
     with {:ok, token} <- Tokens.fetch(:otp, code, context: context),

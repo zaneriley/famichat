@@ -4,12 +4,16 @@ defmodule FamichatWeb.AuthControllerTest do
   import Ecto.Query
 
   alias Famichat.Repo
-  alias Famichat.Auth.Sessions
+  alias Famichat.Auth.{Passkeys, Sessions}
   alias Famichat.Chat.ConversationSecurityRevocation
   alias Famichat.ChatFixtures
   alias Famichat.Accounts.{User, UserDevice}
 
   @json "application/json"
+  # Must match config :famichat, :webauthn defaults and the Wax challenge issued
+  # by the registration/assertion challenge endpoints.
+  @webauthn_origin "http://localhost"
+  @webauthn_rp_id "localhost"
 
   setup do
     family = ChatFixtures.family_fixture()
@@ -33,6 +37,75 @@ defmodule FamichatWeb.AuthControllerTest do
     %{family: family, admin: admin, admin_session: admin_session}
   end
 
+  # ---------------------------------------------------------------------------
+  # Test 1: malformed passkey registration request returns a clear error
+  # ---------------------------------------------------------------------------
+  test "passkey registration rejects malformed request missing attestation fields",
+       %{conn: conn, family: family, admin_session: admin_session} do
+    conn =
+      conn
+      |> put_req_header("content-type", @json)
+      |> auth(admin_session.access_token)
+
+    invite_conn =
+      post(conn, ~p"/api/v1/auth/invites", %{
+        household_id: family.id,
+        role: "member",
+        email: "badkey@example.test"
+      })
+
+    response = json_response(invite_conn, 202)
+    invite_token = response["invite_token"]
+    register_token_raw = response["invite_token"]
+
+    # Accept invite to get registration token
+    accept_payload =
+      conn
+      |> post(~p"/api/v1/auth/invites/accept", %{token: invite_token})
+      |> json_response(200)
+
+    registration_token = accept_payload["registration_token"]
+
+    # Complete invite registration
+    register_payload =
+      conn
+      |> put_req_header("authorization", "Bearer #{registration_token}")
+      |> post(~p"/api/v1/auth/invites/complete", %{username: "bad_key_member"})
+      |> json_response(201)
+
+    register_token = register_payload["passkey_register_token"]
+
+    # Get challenge
+    challenge_payload =
+      conn
+      |> post(~p"/api/v1/auth/passkeys/register/challenge", %{
+        register_token: register_token
+      })
+      |> json_response(200)
+
+    challenge_handle = challenge_payload["challenge_handle"]
+
+    # Send old fake payload without attestation_object or client_data_json.
+    # Wax now rejects this — the API must return 400 or 422, not 201.
+    resp =
+      conn
+      |> post(~p"/api/v1/auth/passkeys/register", %{
+        credential_id: Base.encode64("credential-123"),
+        public_key: Base.encode64("public-key-123"),
+        challenge: challenge_payload["challenge"],
+        challenge_handle: challenge_handle,
+        sign_count: 0
+      })
+
+    assert resp.status in [400, 422],
+           "Expected 400 or 422 for malformed passkey registration, got #{resp.status}"
+
+    _ = register_token_raw
+  end
+
+  # ---------------------------------------------------------------------------
+  # Test 2: full invite → pair → register → passkey login flow with real WebAuthn
+  # ---------------------------------------------------------------------------
   test "invite → pair → register → passkey login flow",
        %{
          conn: conn,
@@ -153,18 +226,17 @@ defmodule FamichatWeb.AuthControllerTest do
     assert public_key_opts
     assert public_key_opts["challenge"] == challenge
 
-    credential_id = Base.encode64("credential-123")
-    public_key = Base.encode64("public-key-123")
+    # Fetch the raw challenge bytes via the Passkeys context so we can build
+    # a real WebAuthn attestation payload that Wax will accept.
+    {:ok, challenge_record} = Passkeys.fetch_registration_challenge(challenge_handle)
+    challenge_bytes = challenge_record.challenge
 
-    # Register passkey
+    {private_key, credential_id, reg_http_payload} =
+      build_webauthn_registration_payload(challenge_handle, challenge_bytes)
+
+    # Register passkey with a real attestation object + client_data_json
     conn
-    |> post(~p"/api/v1/auth/passkeys/register", %{
-      credential_id: credential_id,
-      public_key: public_key,
-      challenge: challenge,
-      challenge_handle: challenge_handle,
-      sign_count: 0
-    })
+    |> post(~p"/api/v1/auth/passkeys/register", reg_http_payload)
     |> json_response(201)
 
     # Request passkey assertion challenge via username
@@ -185,19 +257,28 @@ defmodule FamichatWeb.AuthControllerTest do
     assert assert_public_key
     assert assert_public_key["challenge"] == assert_challenge
 
+    # Fetch raw assertion challenge bytes and build a real signed assertion payload.
+    {:ok, assert_challenge_record} = Passkeys.fetch_assertion_challenge(assert_handle)
+    assert_challenge_bytes = assert_challenge_record.challenge
+
     device_id = Ecto.UUID.generate()
+
+    assert_http_payload =
+      build_webauthn_assertion_payload(
+        assert_handle,
+        assert_challenge_bytes,
+        credential_id,
+        private_key,
+        _sign_count = 2
+      )
 
     # Assert passkey + start session
     session_payload =
       conn
-      |> post(~p"/api/v1/auth/passkeys/assert", %{
-        credential_id: credential_id,
-        challenge: assert_challenge,
-        challenge_handle: assert_handle,
-        sign_count: 1,
-        device_id: device_id,
-        trust_device: true
-      })
+      |> post(~p"/api/v1/auth/passkeys/assert", Map.merge(assert_http_payload, %{
+        "device_id" => device_id,
+        "trust_device" => true
+      }))
       |> json_response(201)
 
     access_token = session_payload["access_token"]
@@ -349,7 +430,226 @@ defmodule FamichatWeb.AuthControllerTest do
              %{"error" => %{"code" => "invalid_parameters"}}
   end
 
+  describe "OTP verify — rate-limit response is indistinguishable from wrong code" do
+    # Security property: an attacker must not be able to distinguish
+    # "email exists but rate limited" from "wrong code".  Both must produce
+    # the same HTTP status and identical JSON body so that email enumeration
+    # via the rate-limit boundary is impossible.
+
+    test "rate-limited 6th attempt returns 401 with the same body as a wrong code",
+         %{conn: conn, admin: admin} do
+      conn = put_req_header(conn, "content-type", @json)
+
+      # Issue a valid OTP so the identity record exists for the email.
+      otp_conn =
+        conn
+        |> post(~p"/api/v1/auth/otp/request", %{email: admin.email})
+
+      assert json_response(otp_conn, 202)["status"] == "accepted"
+
+      wrong_code = "000000"
+
+      # Exhaust 5 verify attempts so the 6th is rate-limited.
+      for _ <- 1..5 do
+        conn
+        |> post(~p"/api/v1/auth/otp/verify", %{
+          email: admin.email,
+          code: wrong_code
+        })
+      end
+
+      # Capture the wrong-code response for comparison.
+      # Use a fresh user so its rate limit is clean.
+      fresh_user =
+        ChatFixtures.user_fixture(%{
+          email: "fresh_otp_compare@example.test",
+          username: "fresh_otp_compare"
+        })
+
+      otp_conn2 =
+        conn
+        |> post(~p"/api/v1/auth/otp/request", %{email: fresh_user.email})
+
+      assert json_response(otp_conn2, 202)["status"] == "accepted"
+
+      wrong_code_response =
+        conn
+        |> post(~p"/api/v1/auth/otp/verify", %{
+          email: fresh_user.email,
+          code: wrong_code
+        })
+
+      wrong_status = wrong_code_response.status
+      wrong_body = json_response(wrong_code_response, wrong_status)
+
+      # 6th attempt on the original email — should be rate limited internally,
+      # but the HTTP response must look identical to a wrong-code response.
+      rate_limited_response =
+        conn
+        |> post(~p"/api/v1/auth/otp/verify", %{
+          email: admin.email,
+          code: wrong_code
+        })
+
+      assert rate_limited_response.status == wrong_status,
+             "rate-limited response status #{rate_limited_response.status} differs from " <>
+               "wrong-code status #{wrong_status} — this enables email enumeration"
+
+      assert json_response(rate_limited_response, wrong_status) == wrong_body,
+             "rate-limited response body differs from wrong-code body — this enables email enumeration"
+    end
+
+    test "rate-limited response does not return 429", %{conn: conn, admin: admin} do
+      conn = put_req_header(conn, "content-type", @json)
+
+      otp_conn =
+        conn
+        |> post(~p"/api/v1/auth/otp/request", %{email: admin.email})
+
+      assert json_response(otp_conn, 202)["status"] == "accepted"
+
+      wrong_code = "000000"
+
+      for _ <- 1..5 do
+        conn
+        |> post(~p"/api/v1/auth/otp/verify", %{
+          email: admin.email,
+          code: wrong_code
+        })
+      end
+
+      rate_limited_response =
+        conn
+        |> post(~p"/api/v1/auth/otp/verify", %{
+          email: admin.email,
+          code: wrong_code
+        })
+
+      refute rate_limited_response.status == 429,
+             "verify_otp returned 429 on rate limit — this reveals the email address exists"
+
+      assert rate_limited_response.status == 401,
+             "expected 401 on rate-limited OTP verify, got #{rate_limited_response.status}"
+
+      body = json_response(rate_limited_response, 401)
+
+      assert body == %{"error" => %{"code" => "invalid"}},
+             "rate-limited body should be identical to invalid-code body, got #{inspect(body)}"
+    end
+  end
+
   defp auth(conn, token) do
     put_req_header(conn, "authorization", "Bearer #{token}")
+  end
+
+  # ---------------------------------------------------------------------------
+  # WebAuthn payload helpers — adapted from Famichat.Auth.Passkeys.WebAuthnCryptoTest
+  # These construct real ECDSA P-256 / CBOR / COSE payloads that Wax will accept.
+  # ---------------------------------------------------------------------------
+
+  defp generate_ec_keypair do
+    {pub, priv} = :crypto.generate_key(:ecdh, :secp256r1)
+    {priv, pub}
+  end
+
+  defp cose_key_from_point(<<4, x::binary-size(32), y::binary-size(32)>>) do
+    %{1 => 2, 3 => -7, -1 => 1, -2 => x, -3 => y}
+  end
+
+  defp build_auth_data_registration(credential_id, cose_key, sign_count) do
+    rp_id_hash = :crypto.hash(:sha256, @webauthn_rp_id)
+    # UP=1, UV=1, AT=1 → 0x45
+    flags = 0x45
+    aaguid = <<0::128>>
+    cred_id_len = byte_size(credential_id)
+    cose_key_cbor = CBOR.encode(cose_key)
+
+    <<rp_id_hash::binary-size(32), flags::8, sign_count::unsigned-big-integer-32,
+      aaguid::binary-size(16), cred_id_len::unsigned-big-integer-16,
+      credential_id::binary-size(cred_id_len), cose_key_cbor::binary>>
+  end
+
+  defp build_auth_data_assertion(sign_count) do
+    rp_id_hash = :crypto.hash(:sha256, @webauthn_rp_id)
+    # UP=1, UV=1, no AT → 0x05
+    flags = 0x05
+    <<rp_id_hash::binary-size(32), flags::8, sign_count::unsigned-big-integer-32>>
+  end
+
+  defp build_client_data_json_create(challenge_bytes) do
+    Jason.encode!(%{
+      "type" => "webauthn.create",
+      "challenge" => Base.url_encode64(challenge_bytes, padding: false),
+      "origin" => @webauthn_origin,
+      "crossOrigin" => false
+    })
+  end
+
+  defp build_client_data_json_get(challenge_bytes) do
+    Jason.encode!(%{
+      "type" => "webauthn.get",
+      "challenge" => Base.url_encode64(challenge_bytes, padding: false),
+      "origin" => @webauthn_origin,
+      "crossOrigin" => false
+    })
+  end
+
+  defp build_attestation_object(auth_data) do
+    att_obj = %{
+      "fmt" => "none",
+      "attStmt" => %{},
+      "authData" => %CBOR.Tag{tag: :bytes, value: auth_data}
+    }
+
+    CBOR.encode(att_obj)
+  end
+
+  defp sign_assertion(private_key, auth_data_bin, client_data_json_raw) do
+    client_data_hash = :crypto.hash(:sha256, client_data_json_raw)
+    message = auth_data_bin <> client_data_hash
+    :crypto.sign(:ecdsa, :sha256, message, [private_key, :secp256r1])
+  end
+
+  # Returns {private_key, credential_id_binary, http_params_map}.
+  defp build_webauthn_registration_payload(challenge_handle, challenge_bytes) do
+    {private_key, pub_point} = generate_ec_keypair()
+    cose_key = cose_key_from_point(pub_point)
+    credential_id = :crypto.strong_rand_bytes(32)
+
+    auth_data = build_auth_data_registration(credential_id, cose_key, 1)
+    client_data_json = build_client_data_json_create(challenge_bytes)
+    attestation_object = build_attestation_object(auth_data)
+
+    params = %{
+      "challenge_handle" => challenge_handle,
+      "challenge" => Base.url_encode64(challenge_bytes, padding: false),
+      "credential_id" => Base.encode64(credential_id, padding: false),
+      "attestation_object" => Base.encode64(attestation_object, padding: false),
+      "client_data_json" => Base.encode64(client_data_json, padding: false)
+    }
+
+    {private_key, credential_id, params}
+  end
+
+  # Returns an http_params_map for the assertion endpoint.
+  defp build_webauthn_assertion_payload(
+         challenge_handle,
+         challenge_bytes,
+         credential_id,
+         private_key,
+         sign_count
+       ) do
+    auth_data_bin = build_auth_data_assertion(sign_count)
+    client_data_json = build_client_data_json_get(challenge_bytes)
+    signature = sign_assertion(private_key, auth_data_bin, client_data_json)
+
+    %{
+      "challenge_handle" => challenge_handle,
+      "challenge" => Base.url_encode64(challenge_bytes, padding: false),
+      "credential_id" => Base.encode64(credential_id, padding: false),
+      "authenticator_data" => Base.encode64(auth_data_bin, padding: false),
+      "client_data_json" => Base.encode64(client_data_json, padding: false),
+      "signature" => Base.encode64(signature, padding: false)
+    }
   end
 end

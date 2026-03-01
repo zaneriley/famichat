@@ -47,6 +47,24 @@ defmodule Famichat.Chat.MessageService do
 
   @allowed_encryption_metadata_keys ~w(key_id algorithm version version_tag encryption_flag ciphersuite epoch)
 
+  # Snapshot persistence invariant:
+  #
+  # MLS snapshots are persisted to the database ONLY on epoch-advancing
+  # operations (Add, Remove, Commit via ConversationSecurityLifecycle). Between
+  # epoch advances, the in-memory DashMap in the Rust NIF (`GROUP_SESSIONS`) is
+  # the authoritative live state.
+  #
+  # Application messages (send_message/1) do NOT advance the MLS epoch and
+  # therefore do NOT write the snapshot to the database. Writing a 10-80 KB
+  # TOAST-encoded encrypted blob per application message would produce
+  # pathological write amplification (20 MB+ per conversation per day at
+  # typical family-scale traffic).
+  #
+  # Recovery path: if the server restarts between epoch advances, the NIF state
+  # is lost but the database holds the last epoch-advancing snapshot.
+  # ConversationSecurityRecoveryLifecycle reloads from that snapshot and
+  # re-establishes the group session before any subsequent message operations.
+
   @doc """
   Pipeline-based message retrieval with structured error handling:
 
@@ -512,61 +530,25 @@ defmodule Famichat.Chat.MessageService do
   defp persist_message(%{error: _} = state), do: state
 
   defp persist_message(state) do
-    case Repo.transaction(fn ->
-           with {:ok, message} <- Repo.insert(state.changeset),
-                {:ok, updated_state} <-
-                  persist_mls_session_snapshot_in_tx(state) do
-             Map.put(updated_state, :message, message)
-           else
-             {:error, reason} -> Repo.rollback(reason)
-           end
-         end) do
-      {:ok, updated_state} ->
-        updated_state
+    # Application messages do NOT persist the MLS snapshot (see invariant comment
+    # near @allowed_encryption_metadata_keys). Only the message row itself is
+    # written here. Snapshot persistence happens exclusively in epoch-advancing
+    # paths (ConversationSecurityLifecycle.merge_pending_commit/2).
+    case Repo.insert(state.changeset) do
+      {:ok, message} ->
+        Map.put(state, :message, message)
 
-      {:error, reason} ->
-        Map.put(state, :error, reason)
+      {:error, changeset} ->
+        Map.put(state, :error, changeset)
     end
   end
 
-  defp persist_mls_session_snapshot_in_tx(
-         %{
-           conversation: %Conversation{} = conversation,
-           mls_session_snapshot: snapshot
-         } = state
-       )
-       when is_map(snapshot) and snapshot != %{} do
-    expected_lock_version = Map.get(state, :mls_state_lock_version)
-    epoch = Map.get(state, :mls_state_epoch, 0)
-
-    attrs = %{
-      protocol: @mls_state_protocol,
-      state: snapshot,
-      epoch: epoch,
-      pending_commit: Map.get(state, :mls_pending_commit)
-    }
-
-    case ConversationSecurityStateStore.upsert(
-           conversation.id,
-           attrs,
-           expected_lock_version
-         ) do
-      {:ok, persisted} ->
-        {:ok,
-         state
-         |> Map.put(:mls_state_lock_version, persisted.lock_version)
-         |> Map.put(:mls_state_epoch, persisted.epoch)
-         |> Map.put(:mls_session_snapshot, persisted.state)}
-
-      {:error, code, details} ->
-        mapped_code = map_state_store_error_code(code)
-        emit_mls_failure(:persist_state, mapped_code, details, state)
-        {:error, {:mls_encryption_failed, mapped_code, details}}
-    end
-  end
-
-  defp persist_mls_session_snapshot_in_tx(state), do: {:ok, state}
-
+  # persist_mls_session_snapshot/1 is intentionally a no-op for the send path.
+  # Application messages do not advance the MLS epoch; the NIF DashMap holds
+  # the authoritative in-memory state between epoch advances. Persisting the
+  # snapshot on every send would write 10-80 KB of TOAST-encoded encrypted data
+  # per message — pathological write amplification at family-scale traffic.
+  # Snapshot writes happen only in ConversationSecurityLifecycle.merge_pending_commit/2.
   defp persist_mls_session_snapshot(%{error: _} = state), do: state
   defp persist_mls_session_snapshot(state), do: state
 

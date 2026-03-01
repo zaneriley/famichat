@@ -337,9 +337,8 @@ defmodule Famichat.Auth.Onboarding do
   defp format_role(role), do: role
 
   defp admin_code do
-    :rand.uniform(999_999)
-    |> Integer.to_string()
-    |> String.pad_leading(6, "0")
+    <<n::unsigned-32>> = :crypto.strong_rand_bytes(4)
+    Integer.to_string(rem(n, 900_000) + 100_000)
   end
 
   defp sign_invite_registration_token(payload) do

@@ -15,7 +15,8 @@ Famichat is a self-hosted, white-label communication platform designed specifica
 ## Product Goals
 
 ### Primary Goals
-1. **Privacy & Security**: Top priority. End-to-end encryption, self-hosted control over data
+1. **Privacy & Security**: Top priority. MLS encryption at rest and in transit
+   with forward secrecy, self-hosted control over data and infrastructure
 2. **Performance**: Fast, responsive messaging (<200ms sender→recipient, <10ms typing latency)
 3. **Neighborhood-Centric**: Designed for neighborhood-scale communication (100-500 people)
 4. **Cozy Connection**: Ambient, asynchronous features that foster warmth without pressure
@@ -30,7 +31,7 @@ Famichat is a self-hosted, white-label communication platform designed specifica
 
 ## Performance Requirements
 
-**Rationale**: Security mechanisms add latency. E2EE encryption, key derivation, and signing operations take time. For users to trust the system, it must feel reliable and responsive. Slow systems feel broken, which undermines trust in security.
+**Rationale**: Security mechanisms add latency. MLS encryption, key derivation, and signing operations take time. For users to trust the system, it must feel reliable and responsive. Slow systems feel broken, which undermines trust in security.
 
 **Hard Requirements**:
 - Sender → Receiver latency: <200ms (total time from user types to recipient sees)
@@ -72,10 +73,21 @@ Famichat is a self-hosted, white-label communication platform designed specifica
 
 **Why Self-Hosting**:
 - Data ownership: No centralized provider
-- Privacy: Admin can't read E2E encrypted messages
+- Privacy: Self-hosted operator controls server infrastructure; MLS provides
+  forward secrecy and post-compromise security properties (see trust model below)
 - Performance: Local server = <50ms network latency
 - Control: Neighborhood self-governance
 - Alignment: Community-operated, not profit-driven
+
+**Trust Model (current architecture)**:
+The server is the trust anchor. Messages are encrypted at rest (Cloak/AES-256)
+and in transit (TLS). MLS (OpenMLS) provides forward secrecy and
+post-compromise security: past message keys are deleted after use, and a
+compromised epoch does not expose prior epochs. In the current LiveView
+architecture the server performs MLS decryption for rendering. The server
+operator can read message content in principle. Full client-side decryption —
+where the server never sees plaintext — is a future milestone contingent on
+native iOS/Android client development.
 
 **Not Planned**:
 - SaaS/managed hosting
@@ -131,7 +143,9 @@ Famichat is a self-hosted, white-label communication platform designed specifica
 - ✅ Direct conversations (1:1)
 - ✅ Family-membership validation (must share ≥1 family)
 - ✅ Real-time delivery via channels
-- End-to-end encryption (planned)
+- ✅ MLS encryption at rest and in transit with forward secrecy (server
+  decrypts for LiveView rendering; full client-side decryption is a future
+  milestone)
 - Message status (sent, delivered, read) - partial
 
 **Business Rules**:
@@ -311,7 +325,9 @@ Inspired by Animal Crossing - features that foster connection without pressure:
 
 #### Privacy & Security
 - **Self-Hosted**: Full control over data and infrastructure
-- **End-to-End Encryption**: Messages encrypted client-side
+- **Encryption at rest and in transit**: AES-256 field-level encryption (Cloak)
+  and TLS for all connections; MLS provides forward secrecy and
+  post-compromise security
 - **Passcodes**: Optional passcode protection
 - **Data Export**: Families can export their data
 
@@ -427,17 +443,20 @@ Inspired by Animal Crossing - features that foster connection without pressure:
 
 ### Security (Top Priority)
 **Requirements**:
-- End-to-end encryption (MLS/OpenMLS, ADR 010)
-- Self-hosted deployment (user controls data)
+- MLS (OpenMLS) encryption with forward secrecy and post-compromise security
+  (ADR 010); see trust model in Deployment Model section above
+- Self-hosted deployment (user controls data and infrastructure)
 - Passcode protection (optional)
 - Secure key management
-- Regular security audits
+- Regular security audits (pentested at MVP)
 
 **Architecture**:
-- Client-side encryption (messages, media)
-- Field-level encryption (sensitive user data)
+- Server-side MLS encryption/decryption in current LiveView architecture
+- Field-level encryption for sensitive user data (Cloak/AES-256)
 - Database encryption at rest
 - TLS for all connections
+- Future: client-side decryption once native clients exist (server would
+  never see plaintext)
 
 **Detailed Security**: See [ENCRYPTION.md](ENCRYPTION.md)
 
@@ -532,7 +551,8 @@ Inspired by Animal Crossing - features that foster connection without pressure:
 ✅ **Famichat**:
 - Self-hosted (no vendor)
 - Fully white-labeled
-- Privacy-first (E2EE)
+- Privacy-first (encryption at rest and in transit; MLS forward secrecy;
+  server-side decryption in current LiveView architecture)
 - Open-source potential
 
 ---
@@ -544,7 +564,9 @@ Inspired by Animal Crossing - features that foster connection without pressure:
 - [ ] User can send/receive text messages in real-time
 - [ ] User can create direct conversations
 - [ ] User can message themselves (notes)
-- [ ] Messages are encrypted end-to-end
+- [ ] Messages are encrypted at rest (Cloak) and in transit (TLS) with MLS
+      forward secrecy; server decrypts for LiveView rendering in current
+      architecture
 - [ ] App can be deployed to production
 - [ ] Basic onboarding flow works
 

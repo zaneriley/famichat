@@ -67,11 +67,20 @@ Famichat is a Phoenix/Elixir backend with Phoenix LiveView frontend, designed fo
 ---
 
 #### 3. Encryption Approach
-**Decision**: Hybrid encryption (E2EE + field-level + infrastructure)
+**Decision**: Hybrid encryption (MLS + field-level + infrastructure)
+
+**Trust model**: The server is the trust anchor. Messages are encrypted at
+rest (Cloak/AES-256) and in transit (TLS). MLS (OpenMLS) provides forward
+secrecy and post-compromise security. In the current LiveView architecture
+the server decrypts messages for rendering — the server operator can read
+message content in principle. Full client-side decryption is a future
+milestone requiring native clients.
 
 **Components**:
-- Server-side E2EE direction: MLS via OpenMLS (ADR 010)
-- Monorepo placement for MLS adapter: `backend/infra/mls_nif` (top-level `/native` stays reserved for future native app clients)
+- Server-side MLS via OpenMLS (ADR 010); server performs decryption in
+  current architecture
+- Monorepo placement for MLS adapter: `backend/infra/mls_nif` (top-level
+  `/native` stays reserved for future native app clients)
 - Field-level (Cloak.Ecto for sensitive data)
 - Database encryption at rest
 
@@ -200,7 +209,9 @@ See [ENCRYPTION.md](ENCRYPTION.md) for detailed security design.
 - Server-side MLS E2EE (Rust NIF + OpenMLS)
 - MLS key package lifecycle + group state/epoch management
 - Dedicated durable conversation security state store with optimistic locking
-- Trust model: Self-hosted backend = you control the server; message confidentiality target is "admin cannot read content"
+- Trust model: Self-hosted backend = you control the server; MLS provides
+  forward secrecy and post-compromise security; server decrypts for
+  LiveView rendering in current architecture (see Trust Model in VISION.md)
 
 ---
 
@@ -271,7 +282,9 @@ LiveView captures message (10ms)
 
 **Why Self-Hosting**:
 1. **Data Ownership**: No centralized provider, community controls data
-2. **Privacy**: Admin cannot read E2E encrypted messages
+2. **Privacy**: Self-hosted operator controls infrastructure; MLS provides
+   forward secrecy and post-compromise security; server decrypts for
+   LiveView rendering in current architecture
 3. **Performance**: Local server enables <30ms network latency (vs 50-150ms centralized)
 4. **Control**: Neighborhood self-governance, custom features
 5. **Alignment**: Community-operated, not profit-driven
