@@ -300,13 +300,13 @@ defmodule FamichatWeb.CoreComponents do
       <.flash
         id="disconnected"
         kind={:error}
-        title="We can't find the internet"
+        title={gettext("We can't find the internet")}
         close={false}
         autoshow={false}
         phx-disconnected={show("#disconnected")}
         phx-connected={hide("#disconnected")}
       >
-        Attempting to reconnect
+        <%= gettext("Attempting to reconnect") %>
         <Heroicons.arrow_path class="inline-block h-md w-md" />
       </.flash>
     </div>

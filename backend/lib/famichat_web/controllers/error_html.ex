@@ -30,15 +30,6 @@ defmodule FamichatWeb.ErrorHTML do
     def actions(_exception), do: []
   end
 
-  def dynamic_home_url do
-    scheme = Application.get_env(:famichat, :url_scheme, "http")
-    host = Application.get_env(:famichat, :url_host, "localhost")
-    port = Application.get_env(:famichat, :url_port, "8001")
-
-    port_segment = if port in ["80", "443"], do: "", else: ":#{port}"
-    "#{scheme}://#{host}#{port_segment}"
-  end
-
   def render(embed_template, _assigns) do
     Phoenix.Controller.status_message_from_template(embed_template)
   end

@@ -7,6 +7,9 @@ msgstr "パスキーでアカウントを守ります。パスワード不要。
 msgid "Actions"
 msgstr "操作"
 
+msgid "Attempting to reconnect"
+msgstr "再接続しています…"
+
 msgid "Ask the person who invited you to send a new link, or reply to the message you received."
 msgstr "招待してくれた方に新しいリンクを送ってもらうか、受信したメッセージに返信してください。"
 
@@ -87,6 +90,9 @@ msgstr "テーマ"
 
 msgid "This invite link didn't work"
 msgstr "この招待リンクは使えませんでした"
+
+msgid "We can't find the internet"
+msgstr "インターネットに接続できません"
 
 msgid "Welcome back"
 msgstr "おかえりなさい"

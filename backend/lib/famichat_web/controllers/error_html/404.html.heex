@@ -2,18 +2,14 @@
 <html lang="en">
   <head>
     <.live_title>
-      <%= assigns[:page_title] ||
-        "Zane Riley | Product Designer (Tokyo) | 10+ Years Experience" %>
+      <%= assigns[:page_title] || "Famichat — Page not found" %>
     </.live_title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
     <meta
       name="description"
-      content={
-        assigns[:page_description] ||
-          ~c"Zane Riley: Tokyo Product Designer. 10+ yrs experience. Currently at Google. Worked in e-commerce, healthcare, and finance. Designed and built products for Google, Google Maps, and Google Search."
-      }
+      content={assigns[:page_description] || "The page you're looking for doesn't exist."}
     />
     <link
       rel="apple-touch-icon"
@@ -70,9 +66,7 @@
         style="filter: url('#waves');transform: translateY(-0.25rem) translateX(calc(0rem));"
       >
         /********************************************** <br />
-        <a href="/" class="" aria-label={gettext("Return to homepage")}>
-          <%= dynamic_home_url() %>
-        </a>
+        Famichat
 
         <h1>
           <%= gettext("ERROR 404") %> <br /> <%= gettext("DATA NOT FOUND") %>
@@ -90,7 +84,7 @@
         ) %> <br /> <%= gettext("YOUR CONTINUED EXPLORATION.") %><br /> <br />
         ≺system initiating self-reflection protocol≻<br />
         <p class="">
-          <a href="/" class="pb-6 block"><%= gettext("RETURN TO HOME") %></a>
+          <a href={"/#{@conn.assigns[:user_locale] || "en"}/"} class="pb-6 block"><%= gettext("RETURN TO HOME") %></a>
         </p>
 
         <svg

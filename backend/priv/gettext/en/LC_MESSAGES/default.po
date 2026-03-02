@@ -7,6 +7,9 @@ msgstr "A passkey keeps your account secure — no password needed. Your device 
 msgid "Actions"
 msgstr "Actions"
 
+msgid "Attempting to reconnect"
+msgstr "Attempting to reconnect"
+
 msgid "Ask the person who invited you to send a new link, or reply to the message you received."
 msgstr "Ask the person who invited you to send a new link, or reply to the message you received."
 
@@ -84,6 +87,9 @@ msgstr "Theme"
 
 msgid "This invite link didn't work"
 msgstr "This invite link didn't work"
+
+msgid "We can't find the internet"
+msgstr "We can't find the internet"
 
 msgid "Welcome back"
 msgstr "Welcome back"

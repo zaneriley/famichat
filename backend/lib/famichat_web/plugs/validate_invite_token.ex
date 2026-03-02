@@ -7,9 +7,9 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   invite pattern: /:locale/invites/:token.
 
   Behavior:
-  - Token absent or structurally invalid (not found in DB): 404
-  - Token structurally valid but expired: 410 Gone
-  - Token structurally valid but already used: 410 Gone
+  - Token structurally malformed (nil, empty, or not a valid token format): 404
+  - Token invalid, expired, or used: pass through to InviteLive, which shows
+    friendly error UI with its :invalid step
   - Token valid: pass through, LiveView mounts normally
   - Session already has this token (reconnect after consume): pass through
 
@@ -32,10 +32,10 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   def call(conn, _opts) do
     token = conn.path_params["token"]
 
-    if is_binary(token) do
+    if is_binary(token) and token != "" do
       validate_and_gate(conn, token)
     else
-      conn
+      halt_with(conn, 404)
     end
   end
 
@@ -51,14 +51,16 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
         :ok ->
           conn
 
+        # Invalid, expired, and used tokens all pass through to InviteLive,
+        # which renders friendly error UI via its :invalid step.
         {:error, :invalid} ->
-          halt_with(conn, 404)
+          conn
 
         {:error, :expired} ->
-          halt_with(conn, 410)
+          conn
 
         {:error, :used} ->
-          halt_with(conn, 410)
+          conn
       end
     end
   end
