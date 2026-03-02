@@ -1,14 +1,26 @@
+msgid "%{name} invited you"
+msgstr "%{name} invited you"
+
 msgid "A passkey keeps your account secure — no password needed. Your device handles it for you, and only you can sign in."
 msgstr "A passkey keeps your account secure — no password needed. Your device handles it for you, and only you can sign in."
 
 msgid "Actions"
 msgstr "Actions"
 
+msgid "Ask the person who invited you to send a new link, or reply to the message you received."
+msgstr "Ask the person who invited you to send a new link, or reply to the message you received."
+
 msgid "Continue"
 msgstr "Continue"
 
+msgid "Continue — set up your passkey next"
+msgstr "Continue — set up your passkey next"
+
 msgid "Dark"
 msgstr "Dark"
+
+msgid "e.g. Mum, Dad, Grandma Rose"
+msgstr "e.g. Mum, Dad, Grandma Rose"
 
 msgid "Famichat"
 msgstr "Famichat"
@@ -34,6 +46,12 @@ msgstr "Set up passkey"
 msgid "Set up your passkey"
 msgstr "Set up your passkey"
 
+msgid "Can't use a passkey? Sign in another way"
+msgstr "Can't use a passkey? Sign in another way"
+
+msgid "Sign in to Famichat"
+msgstr "Sign in to Famichat"
+
 msgid "Sign in to your family's private space."
 msgstr "Sign in to your family's private space."
 
@@ -42,6 +60,15 @@ msgstr "Sign in with passkey"
 
 msgid "Signing you in…"
 msgstr "Signing you in…"
+
+msgid "Use your passkey to continue — your device will ask to confirm it's you."
+msgstr "Use your passkey to continue — your device will ask to confirm it's you."
+
+msgid "Just a name your family will recognise"
+msgstr "Just a name your family will recognise"
+
+msgid "Loading…"
+msgstr "Loading…"
 
 msgid "Skip to main content"
 msgstr "Skip to main content"
@@ -61,11 +88,17 @@ msgstr "This invite link didn't work"
 msgid "Welcome back"
 msgstr "Welcome back"
 
+msgid "You're in!"
+msgstr "You're in!"
+
 msgid "You're invited"
 msgstr "You're invited"
 
 msgid "Your name"
 msgstr "Your name"
+
+msgid "Your passkey is set up. Taking you to your family space…"
+msgstr "Your passkey is set up. Taking you to your family space…"
 
 msgid "Your private space for the people who matter most."
 msgstr "Your private space for the people who matter most."
