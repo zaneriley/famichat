@@ -6,6 +6,7 @@ defmodule FamichatWeb.Router do
   alias FamichatWeb.Plugs.CSPHeader
   import Phoenix.LiveView.Router
   import Phoenix.LiveDashboard.Router
+  import Plug.BasicAuth
   require Logger
 
   pipeline :locale do
@@ -38,10 +39,13 @@ defmodule FamichatWeb.Router do
 
     plug CommonMetadata
     # Do not include the LocaleRedirection plug here
+
+    plug :basic_auth, Application.compile_env(:famichat, :admin_basic_auth)
   end
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug :fetch_session
   end
 
   pipeline :api_authenticated do
@@ -52,6 +56,7 @@ defmodule FamichatWeb.Router do
     pipe_through :api
 
     get "/hello", HelloController, :index
+    get "/health", HealthController, :index
     post "/setup", AuthController, :bootstrap_admin
     post "/auth/invites", AuthController, :issue_invite
     post "/auth/invites/accept", AuthController, :accept_invite
@@ -78,6 +83,12 @@ defmodule FamichatWeb.Router do
     post "/auth/otp/verify", AuthController, :verify_otp
     post "/auth/recovery", AuthController, :issue_recovery
     post "/auth/recovery/redeem", AuthController, :redeem_recovery
+  end
+
+  scope "/api/v1", FamichatWeb do
+    pipe_through [:api, :api_authenticated]
+
+    get "/me", UserController, :me
   end
 
   scope "/api/v1", FamichatWeb.API do
@@ -132,15 +143,36 @@ defmodule FamichatWeb.Router do
 
   scope "/", FamichatWeb do
     pipe_through :browser
+    get "/", RootRedirectController, :index
     get "/up", UpController, :index
     get "/up/databases", UpController, :databases
   end
 
+  pipeline :validate_invite do
+    plug FamichatWeb.Plugs.ValidateInviteToken
+  end
+
+  # Invite route — validated at HTTP layer before LiveView mounts.
+  scope "/:locale", FamichatWeb do
+    pipe_through [:browser, :locale, :validate_invite]
+
+    live_session :invite_session, on_mount: FamichatWeb.LiveHelpers do
+      live "/invites/:token", AuthLive.InviteLive, :index
+    end
+  end
+
+  scope "/api", FamichatWeb do
+    pipe_through :api
+    match :*, "/*path", FallbackController, :not_found
+  end
+
+  # All other locale-scoped routes.
   scope "/:locale", FamichatWeb do
     pipe_through [:browser, :locale]
 
     live_session :default, on_mount: FamichatWeb.LiveHelpers do
       live "/", HomeLive, :index
+      live "/login", AuthLive.LoginLive, :index
     end
   end
 

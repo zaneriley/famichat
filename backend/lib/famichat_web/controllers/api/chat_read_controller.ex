@@ -59,12 +59,17 @@ defmodule FamichatWeb.API.ChatReadController do
           conn
           |> put_status(:unprocessable_entity)
           |> json(%{
-            error: "invalid_pagination",
+            error: %{code: "invalid_pagination"},
             details: format_changeset_errors(changeset)
           })
 
         {:error, :conversation_not_found} ->
           not_found(conn)
+
+        {:error, {:mls_decryption_failed, :recovery_required, _details}} ->
+          conn
+          |> put_status(:conflict)
+          |> json(%{error: %{code: "recovery_required"}})
 
         {:error, _reason} ->
           not_found(conn)
@@ -224,6 +229,6 @@ defmodule FamichatWeb.API.ChatReadController do
   defp not_found(conn) do
     conn
     |> put_status(:not_found)
-    |> json(%{error: "not_found"})
+    |> json(%{error: %{code: "not_found"}})
   end
 end

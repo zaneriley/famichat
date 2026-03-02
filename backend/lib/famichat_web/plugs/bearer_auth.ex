@@ -3,6 +3,7 @@ defmodule FamichatWeb.Plugs.BearerAuth do
   Verifies a Bearer access token and assigns the authenticated user/device IDs.
   """
   import Plug.Conn
+  import Phoenix.Controller, only: [json: 2]
 
   alias Famichat.Auth.Sessions
 
@@ -25,11 +26,9 @@ defmodule FamichatWeb.Plugs.BearerAuth do
   end
 
   defp unauthorized(conn) do
-    body = Jason.encode!(%{error: "unauthorized"})
-
     conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(:unauthorized, body)
+    |> put_status(:unauthorized)
+    |> json(%{error: %{code: "unauthorized"}})
     |> halt()
   end
 end
