@@ -12,13 +12,12 @@ defmodule FamichatWeb.AuthLive.LoginLive do
 
   @impl true
   def handle_event("passkey-result", %{"token" => token}, socket) do
-    locale = socket.assigns[:user_locale] || "en"
     # The access_token is now stored in the Plug session cookie (set by the
     # passkey assert endpoint). Navigate without the token in the URL so it
     # is not exposed in browser history or server logs. HomeLive reads the
     # token from the session. The URL param is kept as a fallback only.
     _ = token
-    {:noreply, push_navigate(socket, to: "/#{locale}/")}
+    {:noreply, push_navigate(socket, to: locale_path(socket, "/"))}
   end
 
   @impl true

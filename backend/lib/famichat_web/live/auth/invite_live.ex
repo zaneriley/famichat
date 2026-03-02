@@ -122,8 +122,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
 
   @impl true
   def handle_info(:redirect_home, socket) do
-    locale = socket.assigns[:user_locale] || "en"
-    {:noreply, push_navigate(socket, to: "/#{locale}/")}
+    {:noreply, push_navigate(socket, to: locale_path(socket, "/"))}
   end
 
   @impl true

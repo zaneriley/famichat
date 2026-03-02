@@ -36,7 +36,7 @@
       <% end %>
 
       <div class="flex justify-center">
-        <a href={"/#{@user_locale}/login/otp"} class="opacity-60 hover:opacity-100">
+        <a href={locale_path(assigns, "/login/otp")} class="opacity-60 hover:opacity-100">
           <.typography tag="span" size="2xs" color="deemphasized"><%= gettext("Can't use a passkey? Sign in another way") %></.typography>
         </a>
       </div>

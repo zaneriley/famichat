@@ -109,4 +109,23 @@ defmodule FamichatWeb.LiveHelpers do
     Gettext.put_locale(FamichatWeb.Gettext, user_locale)
     assign(socket, user_locale: user_locale)
   end
+
+  @doc """
+  Returns a locale-prefixed path using the current socket's or assigns' locale.
+  Use instead of hardcoding "/\#{locale}/path" everywhere.
+
+      locale_path(socket, "/login")     # => "/en/login"
+      locale_path(socket, "/")          # => "/en/"
+      locale_path(assigns, "/login")    # => "/en/login"
+  """
+  def locale_path(socket_or_assigns, path) do
+    locale =
+      case socket_or_assigns do
+        %Phoenix.LiveView.Socket{} -> socket_or_assigns.assigns[:user_locale] || "en"
+        %{user_locale: locale} -> locale || "en"
+        _ -> "en"
+      end
+
+    "/#{locale}#{path}"
+  end
 end

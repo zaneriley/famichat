@@ -121,33 +121,8 @@ defmodule FamichatWeb.HomeLive do
       {:error, :db_error}
   end
 
-  # NOTE: Ideally this would redirect to the login page, but the login page
-  # doesn't exist yet (L1 work in progress). Until then, render inline error.
-  # TODO: Replace with push_navigate(socket, to: "/login") once login page exists.
-  defp assign_auth_error(socket, reason) do
-    {:ok,
-     socket
-     |> assign(
-       channel_joined: false,
-       conversation_type: "family",
-       conversation_id: nil,
-       current_message: "",
-       user_id: nil,
-       device_id: nil,
-       test_username: nil,
-       error_message: "Authentication failed: #{inspect(reason)}",
-       auth_error: reason,
-       topic: nil,
-       security_reason: nil,
-       security_action: nil,
-       revoke_target: "",
-       recovery_ref: default_recovery_ref(),
-       recovery_last_status: nil,
-       last_seen_message_id: nil,
-       mls_enforcement_enabled: Application.get_env(:famichat, :mls_enforcement, false),
-       dev_mode: Application.get_env(:famichat, :environment) == :dev
-     )
-     |> stream(:messages, [], reset: true)}
+  defp assign_auth_error(socket, _reason) do
+    {:ok, push_navigate(socket, to: locale_path(socket, "/login"))}
   end
 
   @impl true
