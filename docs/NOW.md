@@ -2,78 +2,102 @@
 
 **Last updated:** 2026-03-01
 
-Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md).
+Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [ADR 012](decisions/012-spa-wasm-client-architecture.md).
 
 ---
 
 ## One-line state
 
-Path C (WASM E2EE) is confirmed feasible. Architecture is fully researched. Next work is the E2EE integration layer (key distribution, Welcome routing) + the L1 UI shell (auth, chat view) in parallel.
+Architecture is locked. WASM spike passed. No real user-facing UI exists yet. Critical path is: build the front door (LiveView auth + invite flow), onboard the spouse, then build the SPA while the app is in daily use.
 
 ---
 
-## What just happened (this session)
+## What just happened
 
-- OpenMLS WASM spike: all 7 criteria pass with real two-member MLS round-trip. Path C locked in.
-  - Report: `docs/spikes/WASM_SPIKE_REPORT.md`
-- Full architecture research: MLS lifecycle, backend changes, frontend integration
-  - Key finding: LiveView hybrid is the right model (not a full SPA). LiveView owns the shell; JS hook owns message encryption/decryption + DOM.
-  - Key finding: `add_member` currently discards the Commit message — this must be fixed before multi-member groups work.
-  - Key finding: the WASM `--target nodejs` build is wrong for browser use; needs `--target bundler`.
+- **Full SPA architecture decided and documented** — ADR 012 supersedes ADR 011 (archived). Svelte 5 + SvelteKit 2 SPA for message surfaces; LiveView for auth/onboarding/admin; Capacitor for mobile at L3.
+- **WASM spike passed GO** (10/12 criteria, 2026-03-01):
+  - S1–S6, S8, M1, M2, M4 all PASS in headless Chromium
+  - Warm-path P95 = 1.90ms (gate 50ms — 26× under); bundle 481.8 kB gzip (gate 500 kB)
+  - S7 + M3 pending physical iOS device — must confirm before L3
+  - Spike artifacts: `spikes/openmls-wasm/`, results at `.tmp/2026-03-01-SPA/spike/spike-results-final.md`
+- **Codebase audit completed** — the backend auth API exists and has tests, but almost nothing has been validated end-to-end with real infrastructure. No user-facing UI exists at all. See below.
+
+---
+
+## Actual state of the codebase
+
+### What genuinely works
+- Phoenix Channel messaging — <200ms latency, MLS crypto, PubSub, DB persistence all confirmed
+- MLS NIF — fully hardened (Track A), 17/17 Rust tests pass
+- Auth API — passkey register/assert (Wax), session refresh, device revocation — code exists and has unit tests
+
+### What exists in code but is NOT validated end-to-end
+- **Magic link / OTP auth** — no email client is configured; magic links cannot actually be sent. Backend logic exists, real delivery does not.
+- **Invite flow** — three-step pipeline exists and has HTTP tests; no browser page consumes it; never been run with a real user
+- **Passkey flows** — WebAuthn backend is correct; no browser JS calls `navigator.credentials.create()` or `.get()` anywhere
+
+### What does not exist at all
+- Any real user-facing UI (login page, registration, invite acceptance, messaging UI with real auth)
+- `POST /api/v1/conversations` — conversations can only be created via seeds/test context
+- `/app/*` catch-all route and static file serving for the SPA
+- CSP updated for WASM Web Worker (`worker-src 'self' blob:`)
+- Key package endpoints (deferred — post-spike, pre-L3)
+- `GET /api/v1/devices` (own device list)
+
+### The only end-to-end path that works
+`HomeLive` spike harness → hardcoded test users ("zane" / "wife") → Phoenix Channel → MLS encrypt/decrypt → PostgreSQL. This bypasses all real auth. It is throwaway.
 
 ---
 
 ## Immediate next steps (in order)
 
-### 1. Fix the WASM module for browser deployment (blocking for E2EE)
-Two gaps that block real browser E2EE:
+### 1. Build the front door (LiveView — throwaway, ~3 days)
 
-**a. Commit message is discarded in `add_member`** (`lib.rs` line 451: `let (_commit_msg, welcome, _group_info)`).
-- `_commit_msg` must be returned so the server can broadcast it to existing members
-- A new `process_commit(group_state, commit_b64)` WASM export is needed so existing members can advance their epoch when someone is added
-- Without this: two-member groups work, but adding a third member breaks all existing members
+These are intentionally throwaway per SPEC — write them tightly coupled, no abstraction, no design investment. They exist to get a real second user into the app for L1 validation.
 
-**b. Build target must change**
-- Current: `wasm-pack build --target nodejs` (spike/test only)
-- Needed: `wasm-pack build --target bundler` for esbuild integration
-- Copy output to `priv/static/wasm/` and verify MIME type
+**a. Passkey login page**
+- `navigator.credentials.get()` calling `/api/v1/auth/passkeys/assertion-challenge` → `/api/v1/auth/passkeys/assert`
+- OTP fallback (note: magic link requires email infra — skip for now, OTP only)
+- Store access token in memory, refresh token in `sessionStorage` for now (upgrade before L2)
 
-### 2. Backend: key package + Welcome infrastructure (blocking for E2EE)
-New tables and endpoints needed before any browser E2EE can work:
+**b. Passkey registration page**
+- `navigator.credentials.create()` calling challenge → register endpoints
+- Wire to invite token from URL
 
-**New tables:**
-- `key_packages` — one row per package, indexed by `(device_id, claimed_at IS NULL)`. Replaces packed `conversation_security_client_inventories` format. Not Vault-encrypted (server cannot read MLS key material).
-- `pending_welcomes` — durable inbox for Welcome messages to offline devices: `(target_device_id, conversation_id, welcome_blob, ratchet_tree_blob, delivered_at)`
+**c. Invite accept flow**
+- Consume invite token from URL → username form → hand off to passkey registration
+- Route: `/invites/:token`
 
-**New endpoints/channel events:**
-- `POST /api/v1/devices/:device_id/key_packages` — device uploads key packages at registration
-- `GET /api/v1/devices/:device_id/key_packages/claim` — consume-on-fetch (atomic DELETE + RETURNING)
-- Channel event `register_key_package` → broadcasts `new_member_pending` to current group members
-- Channel event `deliver_welcome` → stores in `pending_welcomes`; delivers on channel join if pending
+**d. Auth-gated message view**
+- Refactor `HomeLive` to require real session (not hardcoded users)
+- Minimal: conversation list + message thread + send box
+- No design investment — this will be deleted when the SPA ships
 
-**Backend message changes (blocking):**
-- Raise `@max_content_bytes` from 8KB to 64KB in `message.ex` (MLS ciphertexts are larger than plaintext)
-- `latest_previews/1` in `chat_read_controller.ex` must not try to render ciphertext as preview text
+### 2. Add `POST /api/v1/conversations` (~half day)
+Needed to create a new 1:1 conversation from the UI. Conversations currently only exist via seeds.
 
-### 3. Build the L1 UI shell (parallel with #2)
-These are independent of E2EE and can be built now:
-- Real login page with WebAuthn JS (`navigator.credentials.create()` / `.get()`)
-- Invite redemption UI
-- Replace `home_live.ex` test harness with a real conversation view (LiveView shell)
-- Key files: `backend/lib/famichat_web/live/home_live.ex`, `backend/lib/famichat_web/router.ex`
+### 3. Onboard the spouse
+This is the L1 gate. Not a dev task — a real-world test. If the invite + passkey registration flow causes friction, fix it before declaring L1.
 
-**Architecture:** LiveView owns shell (auth, nav, conversation list). JS hook (`MessageChannelHook`) owns message encryption/decryption. Stop calling `pushEvent("message_received", {body: plaintext})` — the hook manages the message DOM directly, plaintext never goes to the server.
+### 4. Build the SPA scaffold (while app is in daily use)
+After L1 is validated with the throwaway LiveView:
+- Create `frontend/` directory per ADR 012 §12
+- Wire `/app/*` catch-all route + `:spa` pipeline in router
+- Update CSP plug for `worker-src 'self' blob:` + `'wasm-unsafe-eval'`
+- Build Svelte conversation list + message view with real Phoenix Channel connection
+- Swap LiveView message view for SPA; delete throwaway
 
-**L1 success criteria:** you + wife use it daily and stop using iMessage/WhatsApp for family messages.
+---
 
-### 4. Wire the JS hook to WASM (after #1 + #2 + #3 are ready)
-- New `assets/js/mls/wasm_loader.js` — lazy-loads WASM module once per page
-- New `assets/js/mls/state_store.js` — IndexedDB read/write for group state blobs
-- Rewrite `MessageChannelHook` receive path: decrypt via WASM, insert DOM directly (no `pushEvent` for content)
-- Rewrite send path: `encrypt_message` → write IndexedDB → POST ciphertext
+## What NOT to build now
 
-### 5. 66 pre-existing test failures
-All in lifecycle, channel, and MLS contract modules. Pre-date this session. Not blocking L1 dogfooding but worth a cleanup pass before wider rollout.
+- Full WASM E2EE (Path C) — L3 work, not L1. Server-side decryption is acceptable while you are the only operator.
+- Key package endpoints, Welcome routing, multi-device join — L3 gate items
+- Magic link email infrastructure — OTP is sufficient for L1
+- Photo sharing, message threads — explicitly deferrable per SPEC
+- Design system, shared components, any LiveView abstraction — throwaway views, don't invest
+- QR pairing UI — invite link is sufficient for 2-person use
+- Push notifications — L3 scope
 
 ---
 
@@ -81,26 +105,30 @@ All in lifecycle, channel, and MLS contract modules. Pre-date this session. Not 
 
 | Decision | Details |
 |---|---|
-| E2EE path | Path C: OpenMLS WASM in browser; confirmed GO per spike |
-| Frontend model | LiveView hybrid — shell stays LiveView, hook owns E2EE layer |
+| E2EE path | Path C: Svelte SPA + OpenMLS WASM in Web Worker; spike passed GO |
+| Frontend model | Full SPA (not LiveView hybrid) — ADR 012, supersedes old NOW.md |
+| LiveView scope | Auth, onboarding, admin only — tightly coupled, explicitly deletable |
 | NIF fate | Keep during L0/L1 dogfooding; remove at L3 gate (before other families trust the server) |
-| Doc structure | SPEC.md = evergreen; NOW.md = temporal; archive/ = history |
+| Mobile | Capacitor 7 at L3; `ASWebAuthenticationSession` for passkeys (self-hosting constraint) |
 | Security stance | "Impossible, not guarded" — don't hold data you don't need to hold |
 
 ---
 
 ## Known gaps
 
-**Blocking E2EE (before L3 gate):**
-- `add_member` WASM export discards Commit message — multi-member groups broken
-- No `process_commit` WASM export — existing members can't advance epoch on member add
-- `signer_bytes` (signing private key) in caller-held JS blob — must move to non-extractable Web Crypto key before L3
-- No key package table or distribution endpoints
-- No durable Welcome delivery for offline devices
+**Blocking L1 (no real users until fixed):**
+- No login page, no registration page, no invite UI
+- `POST /api/v1/conversations` missing
+- Magic link delivery not configured (use OTP only for now)
 
-**Not blocking L1 dogfooding:**
-- `device_id` → MLS leaf index mapping (blocks full revoke→MLS)
-- Path A passkey pending-state schema for non-admin device adds
-- Production env vars not configured (`WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`)
-- Full-text search is architecturally foreclosed on server side — must be client-side when built
-- Push notification previews must be content-free (server can't generate them)
+**Blocking E2EE / L3 gate:**
+- Key package table + distribution endpoints not built
+- No Welcome message routing for offline devices
+- `/app/*` SPA catch-all route not wired
+- CSP not updated for WASM Web Worker
+- `device_id` → MLS leaf index mapping gap (blocks revoke → MLS removal)
+- S7 + M3 spike criteria pending physical iOS device
+
+**Pre-existing, not blocking L1:**
+- 66 pre-existing test failures in lifecycle, channel, MLS contract modules
+- `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME` env vars not configured for production

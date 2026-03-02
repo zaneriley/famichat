@@ -1,5 +1,12 @@
 .tmp/
 
+# WASM spike harness (throwaway — delete after S1-S8 confirmed)
+spikes/openmls-wasm/node_modules/
+spikes/openmls-wasm/dist/
+spikes/openmls-wasm/capacitor/ios/
+spikes/openmls-wasm/capacitor/android/
+spikes/openmls-wasm/spike-results.json
+
 # just for now
 
 

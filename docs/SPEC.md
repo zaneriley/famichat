@@ -433,6 +433,17 @@ These are either things we tried and rejected, known security anti-patterns in M
 - Send returns `recovery_required` + action `recover_conversation_security_state` on unrecoverable state
 - [OPEN] `device_id`→MLS leaf index mapping gap — blocks full revoke→MLS removal
 
+### Frontend & Client Platform (ADR 012 — spike passed 2026-03-01)
+- **Browser SPA**: Svelte 5 + SvelteKit 2 + Vite; OpenMLS WASM in a Web Worker handles all encrypted message surfaces
+- **LiveView continues** for auth, onboarding, settings, admin panel — tightly coupled and deletable, not permanent
+- **Mobile (L3–L4)**: Capacitor 7 wrapping the Svelte SPA; passkeys via `ASWebAuthenticationSession` (system browser, required for self-hosted operators); `@capacitor/secure-storage` (Keychain-backed) for refresh tokens
+- **Desktop (if/when)**: Tauri (Rust process + Svelte SPA); OpenMLS links natively, no WASM overhead
+- **Native iOS (L5+)**: Swift + OpenMLS Rust lib via Swift Package Manager — evaluate after L3 only if Capacitor hits hard limits
+- React off the table; Flutter rejected; LiveSvelte rejected (server sees plaintext props — incompatible with E2EE)
+- **Spike results**: 10/12 criteria PASS; S7 + M3 (WKWebView passkey) pending physical iOS device confirmation before L3
+- **Performance**: warm-path P95 = 1.90ms (gate 50ms); bundle 481.8 kB gzip (gate 500 kB)
+- Full architecture, security non-negotiables, build pipeline: `docs/decisions/012-spa-wasm-client-architecture.md`
+
 ### Ash Framework
 - Optional application layer; not a full-stack replacement
 - Do NOT use Ash for high-risk correctness-sensitive paths (sessions/tokens/passkeys/recovery/chat auth)
