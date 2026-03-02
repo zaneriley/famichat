@@ -14,6 +14,8 @@ defmodule FamichatWeb.AuthLive.InviteLive do
        button. A JS hook (`PasskeyRegister`) drives the WebAuthn flow entirely
        client-side, then pushes `"register-success"` or `"register-error"` back
        to this LiveView.
+    4. `:success` — shown for 1.5 s after successful registration before
+       `Process.send_after/3` fires `:redirect_home` and navigates to `/locale/`.
   """
 
   use FamichatWeb, :live_view
@@ -114,6 +116,12 @@ defmodule FamichatWeb.AuthLive.InviteLive do
 
   @impl true
   def handle_event("register-success", _params, socket) do
+    Process.send_after(self(), :redirect_home, 1500)
+    {:noreply, assign(socket, :step, :success)}
+  end
+
+  @impl true
+  def handle_info(:redirect_home, socket) do
     locale = socket.assigns[:user_locale] || "en"
     {:noreply, push_navigate(socket, to: "/#{locale}/")}
   end

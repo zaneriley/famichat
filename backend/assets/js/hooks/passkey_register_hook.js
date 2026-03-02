@@ -77,7 +77,7 @@ const PasskeyRegisterHook = {
     if (!registrationToken) {
       console.error("[PasskeyRegister] Missing registration_token on element");
       this.pushEvent("register-error", {
-        message: "Registration token missing. Please restart the flow.",
+        message: this._friendlyServerError("missing_registration_token"),
       });
       return;
     }
@@ -85,7 +85,7 @@ const PasskeyRegisterHook = {
     if (!username) {
       console.error("[PasskeyRegister] Missing username on element");
       this.pushEvent("register-error", {
-        message: "Username missing. Please go back and enter your username.",
+        message: this._friendlyError(null),
       });
       return;
     }
@@ -113,7 +113,7 @@ const PasskeyRegisterHook = {
         const code = body?.error?.code || "invite_completion_failed";
         console.error("[PasskeyRegister] complete_invite failed", code);
         this.pushEvent("register-error", {
-          message: this.messageForCode(code),
+          message: this._friendlyServerError(code),
         });
         return;
       }
@@ -124,7 +124,7 @@ const PasskeyRegisterHook = {
       if (!passkeyRegisterToken) {
         console.error("[PasskeyRegister] No passkey_register_token in response");
         this.pushEvent("register-error", {
-          message: "Registration failed. Please try again.",
+          message: this._friendlyServerError("passkey_registration_failed"),
         });
         return;
       }
@@ -150,7 +150,7 @@ const PasskeyRegisterHook = {
         const code = body?.error?.code || "challenge_failed";
         console.error("[PasskeyRegister] challenge request failed", code);
         this.pushEvent("register-error", {
-          message: this.messageForCode(code),
+          message: this._friendlyServerError(code),
         });
         return;
       }
@@ -169,20 +169,7 @@ const PasskeyRegisterHook = {
         });
       } catch (err) {
         console.error("[PasskeyRegister] navigator.credentials.create failed", err);
-
-        if (err.name === "NotAllowedError") {
-          this.pushEvent("register-error", {
-            message: "Passkey creation was cancelled or timed out.",
-          });
-        } else if (err.name === "InvalidStateError") {
-          this.pushEvent("register-error", {
-            message: "A passkey is already registered for this device.",
-          });
-        } else {
-          this.pushEvent("register-error", {
-            message: "Passkey creation failed. Your device may not support passkeys.",
-          });
-        }
+        this.pushEvent("register-error", { message: this._friendlyError(err) });
         return;
       }
 
@@ -204,7 +191,7 @@ const PasskeyRegisterHook = {
         const code = body?.error?.code || "passkey_registration_failed";
         console.error("[PasskeyRegister] passkey register failed", code);
         this.pushEvent("register-error", {
-          message: this.messageForCode(code),
+          message: this._friendlyServerError(code),
         });
         return;
       }
@@ -217,9 +204,44 @@ const PasskeyRegisterHook = {
     } catch (err) {
       console.error("[PasskeyRegister] Unexpected error during registration", err);
       this.pushEvent("register-error", {
-        message: "An unexpected error occurred. Please try again.",
+        message: this._friendlyError(err),
       });
     }
+  },
+
+  /**
+   * Maps browser WebAuthn errors to user-friendly messages.
+   * @param {Error|null|undefined} err
+   * @returns {string}
+   */
+  _friendlyError(err) {
+    if (!err) return "Something went wrong. Please try again.";
+    const name = err.name || "";
+    if (name === "NotAllowedError") return "Passkey setup was cancelled or timed out. Tap the button to try again.";
+    if (name === "NotSupportedError") return "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge.";
+    if (name === "AbortError") return "Passkey setup was interrupted. Please try again.";
+    if (name === "InvalidStateError") return "A passkey is already set up on this device.";
+    return "Passkey setup failed. Please try again.";
+  },
+
+  /**
+   * Maps server-returned error codes to user-friendly messages.
+   * @param {string} code
+   * @returns {string}
+   */
+  _friendlyServerError(code) {
+    const map = {
+      expired: "This invite has expired. Ask for a new one.",
+      used: "This invite has already been used.",
+      invalid: "This invite link is not valid.",
+      rate_limited: "Too many attempts. Please wait a moment.",
+      invalid_challenge: "The setup session expired. Please reload the page.",
+      passkey_registration_failed: "Passkey setup failed. Please try again.",
+      missing_registration_token: "Session expired. Please start the invite flow again.",
+      invite_completion_failed: "Registration failed. Please try again.",
+      challenge_failed: "Could not start passkey creation. Please try again.",
+    };
+    return map[code] || "Something went wrong. Please try again.";
   },
 
   /**
@@ -266,25 +288,6 @@ const PasskeyRegisterHook = {
     };
   },
 
-  /**
-   * Maps API error codes to user-facing messages.
-   * @param {string} code
-   * @returns {string}
-   */
-  messageForCode(code) {
-    const messages = {
-      expired: "This invite link has expired. Ask for a new one.",
-      used: "This invite link has already been used.",
-      invalid: "This invite link is not valid.",
-      rate_limited: "Too many attempts. Please try again later.",
-      invalid_challenge: "The passkey challenge was rejected. Please try again.",
-      missing_registration_token: "Session expired. Please start the invite flow again.",
-      invite_completion_failed: "Registration failed. Please try again.",
-      challenge_failed: "Could not start passkey creation. Please try again.",
-      passkey_registration_failed: "Passkey registration failed. Please try again.",
-    };
-    return messages[code] || "Something went wrong. Please try again.";
-  },
 };
 
 export default PasskeyRegisterHook;

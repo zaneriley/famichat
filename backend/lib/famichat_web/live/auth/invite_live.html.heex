@@ -2,29 +2,24 @@
   <%= case @step do %>
     <% :loading -> %>
       <%# SSR placeholder — replaced immediately by connected mount. %>
-      <div aria-busy="true" class="flex flex-col gap-md">
-        <.typography tag="p" size="md" color="deemphasized">
-          <%= gettext("Loading...") %>
-        </.typography>
+      <div aria-busy="true" class="flex flex-col items-center gap-md">
+        <span class="animate-spin inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full" aria-hidden="true"></span>
+        <.typography tag="p" size="md" color="deemphasized"><%= gettext("Loading…") %></.typography>
       </div>
 
     <% :accept -> %>
       <div class="flex flex-col gap-md">
-        <.typography tag="h1" size="2xl">
-          <%= gettext("You're invited") %>
+        <.typography tag="h1" size="2xl" color="main">
+          <%= if @payload[:inviter_username] do %>
+            <%= gettext("%{name} invited you", name: @payload[:inviter_username]) %>
+          <% else %>
+            <%= gettext("You're invited") %>
+          <% end %>
         </.typography>
         <.typography tag="p" size="md" color="deemphasized">
           <%= gettext("Someone who loves you set up a private space just for your family. Choose a name so they know it's you.") %>
         </.typography>
       </div>
-
-      <%= if @error do %>
-        <div role="alert" class="flex flex-col gap-2xs p-md">
-          <.typography tag="p" size="1xs" color="callout">
-            <%= error_message(@error) %>
-          </.typography>
-        </div>
-      <% end %>
 
       <form phx-submit="submit-username" class="flex flex-col gap-md">
         <div class="flex flex-col gap-2xs">
@@ -34,26 +29,31 @@
             type="text"
             name="username"
             value={@username}
-            placeholder={gettext("Your name")}
-            autocomplete="username"
-            autocapitalize="off"
+            placeholder={gettext("e.g. Mum, Dad, Grandma Rose")}
+            autocomplete="nickname"
+            autocapitalize="words"
             spellcheck="false"
             required
             class="ac-text-input w-full"
           />
+          <.typography tag="p" size="2xs" color="deemphasized">
+            <%= gettext("Just a name your family will recognise") %>
+          </.typography>
+          <%= if @error do %>
+            <div role="alert">
+              <.typography tag="p" size="2xs" color="callout"><%= error_message(@error) %></.typography>
+            </div>
+          <% end %>
         </div>
 
-        <button
-          type="submit"
-          class="ac-primary-button w-full"
-        >
-          <.typography tag="span" size="md" color="main"><%= gettext("Continue") %></.typography>
+        <button type="submit" class="ac-primary-button w-full">
+          <.typography tag="span" size="md" color="main"><%= gettext("Continue — set up your passkey next") %></.typography>
         </button>
       </form>
 
     <% :register -> %>
       <div class="flex flex-col gap-md">
-        <.typography tag="h1" size="2xl">
+        <.typography tag="h1" size="2xl" color="main">
           <%= gettext("Set up your passkey") %>
         </.typography>
         <.typography tag="p" size="md" color="deemphasized">
@@ -82,13 +82,24 @@
         </button>
       </div>
 
+    <% :success -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main"><%= gettext("You're in!") %></.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Your passkey is set up. Taking you to your family space…") %>
+        </.typography>
+      </div>
+
     <% :invalid -> %>
       <div class="flex flex-col gap-md">
-        <.typography tag="h1" size="2xl">
+        <.typography tag="h1" size="2xl" color="main">
           <%= gettext("This invite link didn't work") %>
         </.typography>
         <.typography tag="p" size="md" color="deemphasized">
           <%= error_message(@error) %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Ask the person who invited you to send a new link, or reply to the message you received.") %>
         </.typography>
       </div>
   <% end %>
