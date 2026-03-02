@@ -1,16 +1,16 @@
 defmodule FamichatWeb.LiveHelpers do
   @moduledoc """
-  A set of helper functions for Phoenix LiveView in the Famichat application.
+  Helper functions for Phoenix LiveView in the Famichat application.
 
-  Provides utilities for managing LiveView sockets, internationalization, page metadata, and navigation.
+  Provides utilities for managing LiveView sockets, internationalization,
+  page metadata, and navigation.
 
   ## Features
 
   * LiveView Socket Management: Configures common socket assigns for default and admin mounts
-  * Internationalization: Integrates with Gettext for multi-language support
+  * Internationalization: Integrates with Gettext for multi-language support (EN/JA)
   * Page Metadata: Functions for setting and managing page titles and descriptions
   * Navigation: Manages current path information and handles locale-based path changes
-  * Date Utilities: Assigns current year for copyright notices
 
   ## Usage
 
@@ -35,10 +35,9 @@ defmodule FamichatWeb.LiveHelpers do
   import Phoenix.Component
   import FamichatWeb.Gettext
 
-  @default_title gettext("Zane Riley | Product Designer")
-  @default_description gettext(
-                         "Famichat of Zane Riley, a Product Designer based in Tokyo with over 10 years of experience."
-                       )
+  @default_title gettext("Famichat")
+  @default_description gettext("Private, self-hosted messaging for families.")
+  @supported_locales ~w(en ja)
 
   def on_mount(:default, params, session, socket) do
     socket = setup_common_assigns(socket, params, session)
@@ -46,12 +45,21 @@ defmodule FamichatWeb.LiveHelpers do
   end
 
   def on_mount(:admin, params, session, socket) do
+    # NOTE: Plug.BasicAuth in the :admin pipeline enforces authentication
+    # before this mount is reached. This callback only adds the :admin
+    # assign for template conditionals; it is NOT an access control gate.
     socket = setup_common_assigns(socket, params, session)
     {:cont, assign(socket, :admin, true)}
   end
 
   defp setup_common_assigns(socket, params, session) do
-    user_locale = get_user_locale(session)
+    url_locale = params["locale"]
+
+    user_locale =
+      if url_locale in @supported_locales,
+        do: url_locale,
+        else: get_user_locale(session)
+
     Gettext.put_locale(FamichatWeb.Gettext, user_locale)
 
     socket

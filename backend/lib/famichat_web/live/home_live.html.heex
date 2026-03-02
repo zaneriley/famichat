@@ -1,3 +1,16 @@
+<%= if is_nil(@user_id) do %>
+  <div class="flex h-screen flex-col items-center justify-center gap-md">
+    <.typography tag="h1" size="2xl" color="main">Famichat</.typography>
+    <.typography tag="p" size="md" color="deemphasized">
+      <%= if @auth_error,
+        do: gettext("Your session ended. Sign in again to pick up where you left off."),
+        else: gettext("Your private space for the people who matter most.") %>
+    </.typography>
+    <a href={"/" <> (@user_locale || "en") <> "/login"} class="ac-primary-button px-md py-2xs rounded-full">
+      <.typography tag="span" size="md" color="callout"><%= gettext("Open Famichat") %></.typography>
+    </a>
+  </div>
+<% else %>
 <div
   id="kitchen-table-chat"
   class="ac-canvas flex h-[100dvh] w-full flex-col overflow-hidden md:mx-auto md:max-w-3xl md:border-x-2 md:border-[var(--color-brown-200)] md:shadow-2xl"
@@ -5,7 +18,6 @@
   data-conversation-type={@conversation_type}
   data-conversation-id={@conversation_id}
   data-user-id={@user_id}
-  data-auth-token={@auth_token || "guest-token"}
 >
   <header class="ac-header flex items-center justify-between gap-sm p-md">
     <div class="flex flex-col gap-1">
@@ -215,3 +227,4 @@
     document.addEventListener('DOMContentLoaded', scrollToBottom);
   </script>
 </div>
+<% end %>

@@ -1,26 +1,24 @@
 defmodule FamichatWeb.Navigation do
   @moduledoc """
-  Main site navigation livecomponent.
+  Main navigation LiveComponent for Famichat.
 
-  Features:
-  - Logo
-  - Page navigation (Case Studies, Notes, About)
+  Renders the top-level application bar with:
+  - Famichat logo (links to home)
   - EN/JA language switcher
-  - Active page highlighting
-  - Accessibility labels
+  - Theme switcher
 
   Usage:
       <.live_component module={FamichatWeb.Navigation} id="nav" current_path={@current_path} user_locale={@locale} />
 
   Assigns:
   - `current_path`: Current URL path (default: "/")
-  - `user_locale`: User's locale (default: "en")
+  - `user_locale`: User's locale string, e.g. "en" or "ja" (default: "en")
+  - `selected_theme`: Active theme name (default: "dark")
 
-  Requires gettext translations for navigation labels and language switcher text.
+  All user-visible labels use `gettext/1` for i18n support.
 
   Helper functions:
-  - `active_class/2`: Determines active navigation item
-  - `build_localized_path/2`: Generates localized paths
+  - `build_localized_path/2`: Generates locale-prefixed paths for the language switcher
   """
   use FamichatWeb, :live_component
   alias FamichatWeb.Router.Helpers, as: Routes
@@ -48,56 +46,36 @@ defmodule FamichatWeb.Navigation do
       )
 
     ~H"""
-    <nav role="banner" class="grid grid-cols-12 items-center w-full">
-      <!-- Logo -->
+    <nav role="banner" class="flex items-center justify-between p-md">
       <.link
         navigate={Routes.home_path(@socket, :index, @user_locale)}
-        class="col-span-2"
-        aria-label={gettext("Zane Riley Famichat Logo")}
+        aria-label={gettext("Famichat home")}
       >
-        <.typography tag="span" size="2xl" font="cardinal">
-          Zane
-        </.typography>
+        <.typography tag="span" size="1xl" font="cardinal">Famichat</.typography>
       </.link>
-      <!-- Page navigation -->
-      <nav role="navigation" class="col-span-6 col-start-3">
-        <ul class="flex space-x-1xl"></ul>
-      </nav>
-      <!-- Theme switcher -->
-      <.theme_switcher class="col-start-9 col-end-11" />
-      <!-- Language switcher -->
-      <nav
-        aria-label={gettext("Language switcher")}
-        class="col-start-11 col-end-13 text-1xs"
-      >
-        <ul class="flex justify-end space-x-md">
-          <li>
-            <.link
-              href={@en_path}
-              aria-label={gettext("Switch to English")}
-              aria-current={if @user_locale == "en", do: "page", else: "false"}
-              class={"#{if @user_locale == "en", do: "font-bold", else: ""}"}
-            >
-              <.typography tag="span" size="1xs">
-                English
-              </.typography>
-            </.link>
-          </li>
-
-          <li>
-            <.link
-              href={@ja_path}
-              aria-label={gettext("Switch to Japanese")}
-              aria-current={if @user_locale == "ja", do: "page", else: "false"}
-              class={"#{if @user_locale == "ja", do: "font-bold", else: ""}"}
-            >
-              <.typography tag="span" size="1xs">
-                日本語
-              </.typography>
-            </.link>
-          </li>
-        </ul>
-      </nav>
+      <div class="flex items-center gap-md">
+        <.theme_switcher />
+        <nav aria-label={gettext("Language switcher")}>
+          <ul class="flex gap-md">
+            <li>
+              <.link
+                href={@en_path}
+                aria-current={if @user_locale == "en", do: "page", else: "false"}
+              >
+                <.typography tag="span" size="1xs" color={if @user_locale == "en", do: "main", else: "deemphasized"}>EN</.typography>
+              </.link>
+            </li>
+            <li>
+              <.link
+                href={@ja_path}
+                aria-current={if @user_locale == "ja", do: "page", else: "false"}
+              >
+                <.typography tag="span" size="1xs" color={if @user_locale == "ja", do: "main", else: "deemphasized"}>JA</.typography>
+              </.link>
+            </li>
+          </ul>
+        </nav>
+      </div>
     </nav>
     """
   end

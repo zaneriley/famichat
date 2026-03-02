@@ -1,0 +1,40 @@
+<div class="flex min-h-screen flex-col items-center justify-center p-2xl">
+  <div class="flex w-full max-w-sm flex-col gap-2xl">
+    <div class="flex flex-col gap-md">
+      <.typography tag="h1" size="2xl" color="main">
+        <%= gettext("Welcome back") %>
+      </.typography>
+      <.typography tag="p" size="md" color="deemphasized">
+        <%= gettext("Sign in to your family's private space.") %>
+      </.typography>
+    </div>
+
+    <div class="flex flex-col gap-md">
+      <button
+        id="passkey-login-btn"
+        phx-hook="PasskeyLogin"
+        type="button"
+        disabled={@loading}
+        class="ac-primary-button flex items-center justify-center gap-2xs rounded-lg p-md"
+      >
+        <%= if @loading do %>
+          <.typography tag="span" size="md" color="main">
+            <%= gettext("Signing you in…") %>
+          </.typography>
+        <% else %>
+          <.typography tag="span" size="md" color="main">
+            <%= gettext("Sign in with passkey") %>
+          </.typography>
+        <% end %>
+      </button>
+
+      <%= if @error do %>
+        <div role="alert" class="flex flex-col gap-3xs">
+          <.typography tag="p" size="1xs" color="callout">
+            <%= @error %>
+          </.typography>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

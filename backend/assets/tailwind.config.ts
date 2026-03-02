@@ -112,6 +112,11 @@ const config: Config = {
           "font-size-adjust": "ic-height from-font",
           "font-weight": "480",
         },
+        ".text-trim": {
+          "leading-trim": "both",
+          "text-box-trim": "both",
+          "text-box-edge": "cap alphabetic",
+        },
       };
       addUtilities(newUtilities, ["responsive"]);
     },

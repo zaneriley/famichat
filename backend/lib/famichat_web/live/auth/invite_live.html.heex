@@ -1,0 +1,95 @@
+<div class="flex flex-col gap-2xl p-2xl">
+  <%= case @step do %>
+    <% :loading -> %>
+      <%# SSR placeholder — replaced immediately by connected mount. %>
+      <div aria-busy="true" class="flex flex-col gap-md">
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Loading...") %>
+        </.typography>
+      </div>
+
+    <% :accept -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl">
+          <%= gettext("You're invited") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Someone who loves you set up a private space just for your family. Choose a name so they know it's you.") %>
+        </.typography>
+      </div>
+
+      <%= if @error do %>
+        <div role="alert" class="flex flex-col gap-2xs p-md">
+          <.typography tag="p" size="1xs" color="callout">
+            <%= error_message(@error) %>
+          </.typography>
+        </div>
+      <% end %>
+
+      <form phx-submit="submit-username" class="flex flex-col gap-md">
+        <div class="flex flex-col gap-2xs">
+          <label for="username" class="sr-only"><%= gettext("Your name") %></label>
+          <input
+            id="username"
+            type="text"
+            name="username"
+            value={@username}
+            placeholder={gettext("Your name")}
+            autocomplete="username"
+            autocapitalize="off"
+            spellcheck="false"
+            required
+            class="w-full rounded p-md text-base"
+          />
+        </div>
+
+        <button
+          type="submit"
+          class="rounded p-md text-base font-medium"
+        >
+          <%= gettext("Continue") %>
+        </button>
+      </form>
+
+    <% :register -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl">
+          <%= gettext("Set up your passkey") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("A passkey keeps your account secure — no password needed. Your device handles it for you, and only you can sign in.") %>
+        </.typography>
+      </div>
+
+      <%= if @error do %>
+        <div role="alert" class="flex flex-col gap-2xs p-md">
+          <.typography tag="p" size="1xs" color="callout">
+            <%= error_message(@error) %>
+          </.typography>
+        </div>
+      <% end %>
+
+      <div class="flex flex-col gap-md">
+        <button
+          id="passkey-register-btn"
+          phx-hook="PasskeyRegister"
+          data-registration-token={@registration_token}
+          data-username={@username}
+          type="button"
+          class="rounded p-md text-base font-medium"
+        >
+          <%= gettext("Set up passkey") %>
+        </button>
+      </div>
+
+    <% :invalid -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl">
+          <%= gettext("This invite link didn't work") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= error_message(@error) %>
+        </.typography>
+      </div>
+  <% end %>
+</div>

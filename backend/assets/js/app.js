@@ -5,6 +5,8 @@ import topbar from "topbar";
 
 import ThemeSwitcherHook from "./hooks/theme_switcher_hook";
 import MessageChannelHook from "./hooks/message_channel_hook";
+import PasskeyLoginHook from "./hooks/passkey_login_hook";
+import PasskeyRegisterHook from "./hooks/passkey_register_hook";
 
 // More advanced debugging
 if (window.location.search.includes("debug=1")) {
@@ -36,6 +38,8 @@ window.addEventListener("error", (event) => {
 const Hooks = {
   ThemeSwitcher: ThemeSwitcherHook,
   MessageChannel: MessageChannelHook,
+  PasskeyLogin: PasskeyLoginHook,
+  PasskeyRegister: PasskeyRegisterHook,
 };
 
 // Get CSRF token

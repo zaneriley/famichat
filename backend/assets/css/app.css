@@ -39,6 +39,10 @@ body {
   font-feature-settings: "fina" 1, "kern" 1, "liga" 1, "onum" 1, "zero" 1,
     "ss05" 1, "ss01" 1;
   font-synthesis: none;
+  /* Optical spacing trim for improved line-height alignment with gap-based layouts */
+  leading-trim: both;
+  text-box-trim: both;
+  text-box-edge: cap alphabetic;
 }
 
 .dropcap {
