@@ -6,6 +6,7 @@ spikes/openmls-wasm/dist/
 spikes/openmls-wasm/capacitor/ios/
 spikes/openmls-wasm/capacitor/android/
 spikes/openmls-wasm/spike-results.json
+spikes/openmls-wasm/test-results/
 
 # just for now
 

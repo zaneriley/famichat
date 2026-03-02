@@ -1,0 +1,195 @@
+{
+  "timestamp": "2026-03-01T13:20:50.311Z",
+  "url": "http://localhost:5173",
+  "verdict": "GO",
+  "status_banner": "All criteria PASS (8/8) — verdict: GO",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+  "criteria_from_dom": {
+    "S3": {
+      "dom_result": "PASS",
+      "dom_detail": "window.crypto.getRandomValues: non-zero, non-deterministic (32 bytes). health_check(): status=\"ok\", reason=\"wasm_openmls_initialized\" (1.2ms). getrandom wasm_js shim routes through window.crypto."
+    },
+    "S4": {
+      "dom_result": "PASS",
+      "dom_detail": "performance.now() advances: 5.20ms delta. Date.now()=1772371246663 (plausible post-2024). fluvio-wasm-timer shim routes Instant::now() and SystemTime::now() through Date.now(). Proven functional when group operations (create_group, add_member) succeed below in S5."
+    },
+    "S5": {
+      "dom_result": "PASS",
+      "dom_detail": "Alice→encrypt→Bob→decrypt: plaintext matched. Timings: create_group=13.3ms, create_member=3.2ms, add_member=27.5ms, join_group=8.8ms, encrypt=2.2ms, decrypt=2.1ms. Total: 62.6ms."
+    },
+    "S6": {
+      "dom_result": "PASS",
+      "dom_detail": "@famichat/mls-wasm imported successfully (bundler target). All 8 WASM functions exported. No ESM/MIME errors. vite-plugin-wasm + vite-plugin-top-level-await working."
+    },
+    "M4": {
+      "dom_result": "PASS",
+      "dom_detail": "CSP header present and includes 'wasm-unsafe-eval'; WASM loaded successfully. CSP: \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' ws:\""
+    },
+    "M1": {
+      "dom_result": "PASS",
+      "dom_detail": "All IndexedDB + WebCrypto checks passed"
+    },
+    "M2": {
+      "dom_result": "PASS",
+      "dom_detail": "All Worker postMessage round-trip checks passed"
+    },
+    "S8": {
+      "dom_result": "PASS",
+      "dom_detail": "warm P95=1.90ms, warm P50=1.40ms, warm P99=2.20ms, warm min=0.90ms, warm mean=1.41ms, warm max=3.30ms | cold P95=2.10ms, cold P50=1.50ms"
+    }
+  },
+  "spike_results": {
+    "timestamp": "2026-03-01T13:20:46.629Z",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+    "S6": {
+      "status": "PASS",
+      "detail": "@famichat/mls-wasm imported successfully (bundler target). All 8 WASM functions exported. No ESM/MIME errors. vite-plugin-wasm + vite-plugin-top-level-await working."
+    },
+    "M4": {
+      "status": "PASS",
+      "detail": "CSP header present and includes 'wasm-unsafe-eval'; WASM loaded successfully. CSP: \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' ws:\""
+    },
+    "S3": {
+      "status": "PASS",
+      "detail": "window.crypto.getRandomValues: non-zero, non-deterministic (32 bytes). health_check(): status=\"ok\", reason=\"wasm_openmls_initialized\" (1.2ms). getrandom wasm_js shim routes through window.crypto."
+    },
+    "S4": {
+      "status": "PASS",
+      "detail": "performance.now() advances: 5.20ms delta. Date.now()=1772371246663 (plausible post-2024). fluvio-wasm-timer shim routes Instant::now() and SystemTime::now() through Date.now(). Proven functional when group operations (create_group, add_member) succeed below in S5."
+    },
+    "S5": {
+      "status": "PASS",
+      "detail": "Alice→encrypt→Bob→decrypt: plaintext matched. Timings: create_group=13.3ms, create_member=3.2ms, add_member=27.5ms, join_group=8.8ms, encrypt=2.2ms, decrypt=2.1ms. Total: 62.6ms.",
+      "timings_ms": {
+        "create_group_ms": 13.300000190734863,
+        "create_member_ms": 3.200000286102295,
+        "add_member_ms": 27.5,
+        "join_group_ms": 8.800000190734863,
+        "process_commit_ms": 5.5,
+        "encrypt_message_ms": 2.1999998092651367,
+        "decrypt_message_ms": 2.1000003814697266
+      }
+    },
+    "M1": {
+      "status": "PASS",
+      "detail": "All IndexedDB + WebCrypto checks passed"
+    },
+    "M2": {
+      "status": "PASS",
+      "detail": "All Worker postMessage round-trip checks passed"
+    },
+    "S8": {
+      "status": "PASS",
+      "detail": "warm P95=1.90ms, warm P50=1.40ms, warm P99=2.20ms, warm min=0.90ms, warm mean=1.41ms, warm max=3.30ms | cold P95=2.10ms, cold P50=1.50ms",
+      "timing": {
+        "coldPath": {
+          "min": 0.8999996185302734,
+          "max": 3.9000000953674316,
+          "mean": 1.5175999994277953,
+          "p50": 1.5,
+          "p95": 2.0999999046325684,
+          "p99": 2.6999998092651367
+        },
+        "warmPath": {
+          "min": 0.8999996185302734,
+          "max": 3.3000001907348633,
+          "mean": 1.4090000019073485,
+          "p50": 1.4000000953674316,
+          "p95": 1.9000000953674316,
+          "p99": 2.1999998092651367
+        }
+      }
+    },
+    "verdict": "GO"
+  },
+  "console_log_count": 85,
+  "console_error_count": 0,
+  "console_errors": [],
+  "console_logs": [
+    "[console.debug] [vite] connecting...",
+    "[console.debug] [vite] connected.",
+    "[console.log] [harness] Starting WASM spike harness",
+    "[console.log] [harness] S6 PASS: @famichat/mls-wasm imported successfully (bundler target). All 8 WASM functions exported. No ESM/MIME errors. vite-plugin-wasm + vite-plugin-top-level-await working.",
+    "[console.log] [harness] M4 PASS: CSP header present and includes 'wasm-unsafe-eval'; WASM loaded successfully. CSP: \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' ws:\"",
+    "[console.log] [timing] health_check(): 1.20ms",
+    "[console.log] [harness] health_check() result: {ciphersuite: MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519, reason: wasm_openmls_initialized, status: ok}",
+    "[console.log] [harness] S3 PASS: window.crypto.getRandomValues: non-zero, non-deterministic (32 bytes). health_check(): status=\"ok\", reason=\"wasm_openmls_initialized\" (1.2ms). getrandom wasm_js shim routes through window.crypto.",
+    "[console.log] [harness] S4 PASS: performance.now() advances: 5.20ms delta. Date.now()=1772371246663 (plausible post-2024). fluvio-wasm-timer shim routes Instant::now() and SystemTime::now() through Date.now(). Proven functional when group operations (create_group, add_member) succeed below in S5.",
+    "[console.log] [S5] Step 1: create_group (Alice)",
+    "[console.log] [timing] create_group: 13.30ms",
+    "[console.log] [S5] Alice group_state length: 7603",
+    "[console.log] [S5] Step 2: create_member (Bob)",
+    "[console.log] [timing] create_member: 3.20ms",
+    "[console.log] [S5] Bob key_package length: 392",
+    "[console.log] [S5] Step 3: add_member (Alice adds Bob)",
+    "[console.log] [timing] add_member: 27.50ms",
+    "[console.log] [S5] welcome length: 1096 commit length: 956",
+    "[console.log] [S5] Step 4: join_group (Bob joins)",
+    "[console.log] [timing] join_group: 8.80ms",
+    "[console.log] [S5] Bob group_state length: 9811",
+    "[console.log] [S5] Step 5: process_commit (verify API — WrongEpoch expected for Welcome path)",
+    "[console.log] [S5] process_commit threw (expected — commit already applied via Welcome): process_message: ValidationError(WrongEpoch)",
+    "[console.log] [S5] Step 6: encrypt_message (Alice)",
+    "[console.log] [timing] encrypt_message: 2.20ms",
+    "[console.log] [S5] ciphertext length: 260",
+    "[console.log] [S5] Step 7: decrypt_message (Bob)",
+    "[console.log] [timing] decrypt_message: 2.10ms",
+    "[console.log] [harness] S5 PASS — plaintext: Hello from Alice to Bob — spike test 2026-03-01",
+    "[console.log] [harness] S5 PASS: Alice→encrypt→Bob→decrypt: plaintext matched. Timings: create_group=13.3ms, create_member=3.2ms, add_member=27.5ms, join_group=8.8ms, encrypt=2.2ms, decrypt=2.1ms. Total: 62.6ms.",
+    "[console.log]   [M1] INFO navigator.storage.persist() = false (true = eviction-resistant)",
+    "[console.log]   [M1] INFO storage estimate: used=0 bytes, quota=6005455762 bytes",
+    "[console.log]   [M1] PASS IndexedDB open: Database \"famichat-wasm-spike\" opened, store \"group-sessions\" ready",
+    "[console.log]   [M1] PASS Group state JSON structure is valid: storage has 11 entries, group_id present",
+    "[console.log]   [M1] PASS Group state encoded to Uint8Array: 11011 bytes (UTF-8 encoded JSON)",
+    "[console.log]   [M1] PASS PBKDF2 key derivation: AES-256-GCM key derived from passphrase via PBKDF2-SHA-256 (600000 iterations, non-extractable)",
+    "[console.log]   [M1] PASS AES-GCM encrypt group state: Encrypted: 11027 bytes (plaintext: 11011 bytes + 16-byte GCM tag)",
+    "[console.log]   [M1] PASS Encrypted blob does not contain plaintext JSON: group_id key string not found in ciphertext (encryption working)",
+    "[console.log]   [M1] PASS IndexedDB write: Stored encrypted blob (11027 bytes) + salt + iv for groupId=m1-idb-test-alice-1772371246741",
+    "[console.log]   [M1] PASS IndexedDB read: Retrieved 11027 byte blob, salt=32 bytes, iv=12 bytes",
+    "[console.log]   [M1] PASS PBKDF2 key re-derivation from stored salt: Key re-derived using passphrase + stored salt (simulates post-reload recovery)",
+    "[console.log]   [M1] PASS AES-GCM decrypt retrieved blob: Decrypted 11011 bytes → valid group state JSON (storage entries: 11)",
+    "[console.log]   [M1] PASS encrypt_message succeeds on WASM state restored from IndexedDB: Encrypted successfully after state restore from IndexedDB (ciphertext: 240 chars)",
+    "[console.log]   [M1] PASS Bob decrypts Alice's post-restore message (epoch consistency): Bob decrypted Alice's post-restore message: \"post-restore-message\"",
+    "[console.log]   [M1] Cleaned up IndexedDB record for groupId=m1-idb-test-alice-1772371246741",
+    "[console.log] \n  [M1] Summary: 12/12 checks passed",
+    "[console.log]   [M1] Key path: WASM state → UTF-8 → PBKDF2+AES-GCM → IndexedDB → retrieve → AES-GCM decrypt → WASM state",
+    "[console.log] [harness] M1 PASS All IndexedDB + WebCrypto checks passed",
+    "[console.log]   [M2] PASS Worker ready: Worker posted 'ready' in 141.5ms (includes WASM init + JIT)",
+    "[console.log]   [M2] PASS health_check via postMessage: health object received: status=ok",
+    "[console.log]   [M2] PASS create_group via worker: Worker stored group state for groupId=worker-m2-test-1772371247126 (main thread never saw raw state)",
+    "[console.log]   [M2] PASS create_member: keyPackage is transferable string: keyPackage: string of length 388",
+    "[console.log]   [M2] PASS create_member: memberState is transferable string: memberState: string of length 2709",
+    "[console.log]   [M2] PASS add_member: Welcome is transferable string: welcome: string of length 1104",
+    "[console.log]   [M2] PASS join_group via worker: Bob's session created with groupId=worker-m2-test-1772371247126-bob",
+    "[console.log]   [M2] PASS encrypt→decrypt message 1: plaintext matched in 3.7ms (postMessage + encrypt + decrypt)",
+    "[console.log]   [M2] PASS encrypt→decrypt message 2: plaintext matched in 2.9ms (postMessage + encrypt + decrypt)",
+    "[console.log]   [M2] PASS encrypt→decrypt message 3: plaintext matched in 2.6ms (postMessage + encrypt + decrypt)",
+    "[console.log]   [M2] PASS export_state: Uint8Array received without DataCloneError: Received Uint8Array of 11315 bytes from worker (structured clone)",
+    "[console.log]   [M2] PASS export_state: Uint8Array contains valid group state JSON: JSON parsed OK: storage has 11 entries",
+    "[console.log]   [M2] PASS import_state: Uint8Array accepted by worker (M1+M2 bridge): Session restored from Uint8Array under groupId=worker-m2-test-1772371247126-restored",
+    "[console.log]   [M2] PASS replay protection: old ciphertext rejected after epoch advance: Replay correctly rejected: [wasm_error] [object Object]",
+    "[console.log] \n  [M2] Summary: 14/14 checks passed",
+    "[console.log]   [M2] Avg postMessage round-trip (encrypt+decrypt via worker): 3.1ms",
+    "[console.log] [harness] M2 PASS All Worker postMessage round-trip checks passed",
+    "[console.log]   [S8] Setting up two-member MLS group for performance baseline...",
+    "[console.log]   [S8] PASS Group setup for performance test: Two-member group ready: groupId=s8-perf-s8-cold-1772371247156",
+    "[console.log]   [S8] Cold path: running 1000 iterations (each deserializes full state blob)...",
+    "[console.log]   [S8] PASS Cold path error rate (1000 iterations): 0/1000 errors (0.0%) — gate: <5%",
+    "[console.log]   [S8] PASS Cold path timing (informational — not gated): p50=1.50ms p95=2.10ms p99=2.70ms (deserialize+crypto+serialize per call)",
+    "[console.log]   [S8] Setting up fresh group for warm-path measurement...",
+    "[console.log]   [S8] Warm path: running 1000 iterations (state chained between calls)...",
+    "[console.log]   [S8] PASS Warm path error rate (1000 iterations): 0/1000 errors (0.0%) — gate: <5%",
+    "[console.log]   [S8] PASS Warm path P95 ≤ 50ms (ADR 012 S8 gate): P95=1.90ms → PASS",
+    "[console.log]   [S8] PASS Serialization overhead (cold.P95 - warm.P95): 0.20ms P95 overhead from state JSON serialize/deserialize per call",
+    "[console.log] \n  [S8] Timing Results (milliseconds):",
+    "[console.log]   Path                     min    mean     p50     p95     p99     max  Gate",
+    "[console.log]   ----------------------------------------------------------------------",
+    "[console.log]   Cold path (stateless)    0.90    1.52    1.50    2.10    2.70    3.90  PASS",
+    "[console.log]   Warm path (chained)     0.90    1.41    1.40    1.90    2.20    3.30  PASS",
+    "[console.log] \n  [S8] Gate result: PASS (warm-path P95=1.90ms, gate=50ms)",
+    "[console.log]   [S8] Note: warm path still includes serde_json overhead (production Worker design eliminates this)",
+    "[console.log]   [S8] 6/6 checks passed",
+    "[console.log] [harness] S8 PASS warm P95=1.90ms, warm P50=1.40ms, warm P99=2.20ms, warm min=0.90ms, warm mean=1.41ms, warm max=3.30ms | cold P95=2.10ms, cold P50=1.50ms",
+    "[console.log] [harness] Final verdict: GO {timestamp: 2026-03-01T13:20:46.629Z, userAgent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb…ML, like Gecko) Chrome/145.0.7632.6 Safari/537.36, S6: Object, M4: Object, S3: Object}"
+  ]
+}
