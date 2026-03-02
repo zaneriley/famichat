@@ -1,11 +1,13 @@
 <div class="flex min-h-screen flex-col items-center justify-center p-2xl">
   <div class="flex w-full max-w-sm flex-col gap-2xl">
+    <.typography tag="span" size="1xl" font="cardinal">Famichat</.typography>
+
     <div class="flex flex-col gap-md">
       <.typography tag="h1" size="2xl" color="main">
-        <%= gettext("Welcome back") %>
+        <%= gettext("Sign in to Famichat") %>
       </.typography>
       <.typography tag="p" size="md" color="deemphasized">
-        <%= gettext("Sign in to your family's private space.") %>
+        <%= gettext("Use your passkey to continue — your device will ask to confirm it's you.") %>
       </.typography>
     </div>
 
@@ -15,26 +17,29 @@
         phx-hook="PasskeyLogin"
         type="button"
         disabled={@loading}
-        class="ac-primary-button flex items-center justify-center gap-2xs rounded-lg p-md"
+        class="ac-primary-button flex items-center justify-center gap-2xs w-full"
       >
         <%= if @loading do %>
-          <.typography tag="span" size="md" color="main">
-            <%= gettext("Signing you in…") %>
-          </.typography>
+          <span class="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full" aria-hidden="true"></span>
+          <.typography tag="span" size="md" color="main"><%= gettext("Signing you in…") %></.typography>
         <% else %>
-          <.typography tag="span" size="md" color="main">
-            <%= gettext("Sign in with passkey") %>
-          </.typography>
+          <.typography tag="span" size="md" color="main"><%= gettext("Sign in with passkey") %></.typography>
         <% end %>
       </button>
 
       <%= if @error do %>
         <div role="alert" class="flex flex-col gap-3xs">
-          <.typography tag="p" size="1xs" color="callout">
+          <.typography tag="p" size="2xs" color="callout">
             <%= @error %>
           </.typography>
         </div>
       <% end %>
+
+      <div class="flex justify-center">
+        <a href={"/#{@user_locale}/login/otp"} class="opacity-60 hover:opacity-100">
+          <.typography tag="span" size="2xs" color="deemphasized"><%= gettext("Can't use a passkey? Sign in another way") %></.typography>
+        </a>
+      </div>
     </div>
   </div>
 </div>

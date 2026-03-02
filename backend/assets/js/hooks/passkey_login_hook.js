@@ -62,6 +62,40 @@ const PasskeyLoginHook = {
     // Nothing to clean up — the click listener is on `this.el` which is gone.
   },
 
+  // ── Error helpers ──────────────────────────────────────────────────────────
+
+  _friendlyError(err) {
+    if (!err) return "Something went wrong. Please try again.";
+    const name = err.name || "";
+    const msg = err.message || "";
+    if (name === "NotAllowedError" || msg.includes("not allowed") || msg.includes("timed out")) {
+      return "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt.";
+    }
+    if (name === "SecurityError") {
+      return "Sign-in requires a secure connection (HTTPS). Please check your URL.";
+    }
+    if (name === "NotSupportedError") {
+      return "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge on a modern device.";
+    }
+    if (name === "AbortError") {
+      return "Sign-in was interrupted. Please try again.";
+    }
+    if (name === "InvalidStateError") {
+      return "No passkey found for this device. Ask for an invite to set one up.";
+    }
+    return "Sign-in failed. Please try again.";
+  },
+
+  _friendlyServerError(code) {
+    const map = {
+      invalid_credentials: "We couldn't verify your passkey. Please try again.",
+      invalid_challenge: "The sign-in session expired. Tap the button to start again.",
+      rate_limited: "Too many attempts. Please wait a moment and try again.",
+      challenge_failed: "Couldn't start sign-in. Please try again.",
+    };
+    return map[code] || "Sign-in failed. Please try again.";
+  },
+
   // ── Main flow ──────────────────────────────────────────────────────────────
 
   async _startFlow() {
@@ -73,7 +107,7 @@ const PasskeyLoginHook = {
     ) {
       this.pushEvent("passkey-error", {
         message:
-          "Your browser does not support passkeys. Please use a modern browser over HTTPS.",
+          "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge on a modern device.",
       });
       return;
     }
@@ -86,7 +120,10 @@ const PasskeyLoginHook = {
       if (!challengeResponse.ok) {
         const body = await challengeResponse.json().catch(() => ({}));
         const code = body?.error?.code ?? "challenge_failed";
-        throw new Error(`Could not start sign-in (${code}).`);
+        this.pushEvent("passkey-error", {
+          message: this._friendlyServerError(code),
+        });
+        return;
       }
 
       const challengeData = await challengeResponse.json();
@@ -96,9 +133,10 @@ const PasskeyLoginHook = {
       const challengeHandle = challengeData.challenge_handle;
 
       if (!publicKeyOptions || !challengeHandle) {
-        throw new Error(
-          "Invalid challenge response from server: missing public_key_options or challenge_handle.",
-        );
+        this.pushEvent("passkey-error", {
+          message: this._friendlyServerError("challenge_failed"),
+        });
+        return;
       }
 
       // Step 2: decode binary fields for the WebAuthn API
@@ -122,14 +160,17 @@ const PasskeyLoginHook = {
       try {
         credential = await navigator.credentials.get(getOptions);
       } catch (err) {
-        if (err.name === "NotAllowedError") {
-          throw new Error("Sign-in was cancelled or timed out. Please try again.");
-        }
-        throw new Error(`Passkey error: ${err.message}`);
+        this.pushEvent("passkey-error", {
+          message: this._friendlyError(err),
+        });
+        return;
       }
 
       if (!credential) {
-        throw new Error("No credential returned by the browser.");
+        this.pushEvent("passkey-error", {
+          message: "Sign-in failed. Please try again.",
+        });
+        return;
       }
 
       // Step 4: encode binary fields back to base64url for JSON transport
@@ -148,21 +189,20 @@ const PasskeyLoginHook = {
       if (!assertResponse.ok) {
         const body = await assertResponse.json().catch(() => ({}));
         const code = body?.error?.code ?? "assert_failed";
-
-        if (code === "invalid_credentials" || code === "invalid_challenge") {
-          throw new Error("Passkey verification failed. Please try again.");
-        }
-        if (code === "rate_limited") {
-          throw new Error("Too many attempts. Please wait and try again.");
-        }
-        throw new Error(`Sign-in failed (${code}).`);
+        this.pushEvent("passkey-error", {
+          message: this._friendlyServerError(code),
+        });
+        return;
       }
 
       const sessionData = await assertResponse.json();
       const token = sessionData.access_token;
 
       if (!token) {
-        throw new Error("Server did not return an access token.");
+        this.pushEvent("passkey-error", {
+          message: "Sign-in failed. Please try again.",
+        });
+        return;
       }
 
       // Step 6: notify the LiveView — it will navigate to HomeLive
@@ -170,7 +210,7 @@ const PasskeyLoginHook = {
     } catch (err) {
       console.error("[PasskeyLogin] Error during flow:", err);
       this.pushEvent("passkey-error", {
-        message: err.message || "An unexpected error occurred. Please try again.",
+        message: this._friendlyError(err),
       });
     }
   },
