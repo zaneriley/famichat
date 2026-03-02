@@ -131,7 +131,7 @@ defmodule FamichatWeb.MessageTestControllerTest do
           "body" => "should not broadcast"
         })
 
-      assert json_response(conn, 401) == %{"error" => "unauthorized"}
+      assert json_response(conn, 401) == %{"error" => %{"code" => "unauthorized"}}
       assert_no_broadcast_on_topic(topic)
     end
 
@@ -151,7 +151,7 @@ defmodule FamichatWeb.MessageTestControllerTest do
           "body" => "should not broadcast"
         })
 
-      assert json_response(conn, 401) == %{"error" => "unauthorized"}
+      assert json_response(conn, 401) == %{"error" => %{"code" => "unauthorized"}}
       assert_no_broadcast_on_topic(topic)
     end
 
@@ -541,7 +541,7 @@ defmodule FamichatWeb.MessageTestControllerTest do
           "rejoin_token" => "token-missing-auth"
         })
 
-      assert json_response(conn, 401) == %{"error" => "unauthorized"}
+      assert json_response(conn, 401) == %{"error" => %{"code" => "unauthorized"}}
     end
 
     test "returns 422 when required recovery fields are missing", %{
@@ -637,7 +637,7 @@ defmodule FamichatWeb.MessageTestControllerTest do
           "conversation_id" => conversation.id
         })
 
-      assert json_response(conn, 401) == %{"error" => "unauthorized"}
+      assert json_response(conn, 401) == %{"error" => %{"code" => "unauthorized"}}
     end
 
     test "returns 404 for authenticated non-member", %{

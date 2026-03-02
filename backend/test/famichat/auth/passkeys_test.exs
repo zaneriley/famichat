@@ -124,6 +124,60 @@ defmodule Famichat.Auth.PasskeysTest do
     assert events == []
   end
 
+  # ---------------------------------------------------------------------------
+  # BUG-R4-005: issue_assertion_challenge must reject user_id maps
+  # ---------------------------------------------------------------------------
+  describe "issue_assertion_challenge — user_id enumeration prevention" do
+    test "user_id-only map returns {:error, :invalid_identifier}", %{user: user} do
+      # A map containing only user_id must be rejected before any DB lookup.
+      # Without this guard, Identity.resolve_user/1 would do a direct DB lookup
+      # and return different errors for existing vs nonexistent UUIDs, enabling
+      # user ID enumeration.
+      assert {:error, :invalid_identifier} =
+               Passkeys.issue_assertion_challenge(%{"user_id" => user.id})
+    end
+
+    test "nonexistent user_id returns the same error as a real user_id", %{user: user} do
+      real = Passkeys.issue_assertion_challenge(%{"user_id" => user.id})
+      fake = Passkeys.issue_assertion_challenge(%{"user_id" => "00000000-0000-0000-0000-000000000000"})
+
+      assert real == fake,
+             "Different results for existing (#{inspect(real)}) vs nonexistent " <>
+               "(#{inspect(fake)}) UUID — enables enumeration"
+    end
+
+    test "user_id alongside username is silently dropped and username wins", %{user: user} do
+      # If someone sends both user_id AND username, user_id must be ignored.
+      # The result must be identical to sending username alone.
+      result_with_both =
+        Passkeys.issue_assertion_challenge(%{
+          "user_id" => user.id,
+          "username" => user.username
+        })
+
+      result_username_only =
+        Passkeys.issue_assertion_challenge(%{"username" => user.username})
+
+      # Both should succeed (or fail for the same reason — e.g. no passkeys yet).
+      # The important thing is they are identical: user_id must not influence the result.
+      case {result_with_both, result_username_only} do
+        {{:ok, _}, {:ok, _}} ->
+          # Both succeeded — user_id was correctly ignored
+          :ok
+
+        {{:error, r1}, {:error, r2}} ->
+          assert r1 == r2,
+                 "user_id in map changed the error: #{inspect(r1)} vs #{inspect(r2)}"
+
+        _ ->
+          flunk(
+            "user_id changed the outcome: with_both=#{inspect(result_with_both)}, " <>
+              "username_only=#{inspect(result_username_only)}"
+          )
+      end
+    end
+  end
+
   defp latest_challenge(user) do
     Repo.one!(
       from c in Challenge,

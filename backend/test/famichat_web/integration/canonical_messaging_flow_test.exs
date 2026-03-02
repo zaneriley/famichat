@@ -172,7 +172,7 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
         "body" => "should not emit"
       })
 
-    assert json_response(conn, 401) == %{"error" => "unauthorized"}
+    assert json_response(conn, 401) == %{"error" => %{"code" => "unauthorized"}}
     refute_receive %Phoenix.Socket.Message{event: "new_msg"}, 100
   end
 

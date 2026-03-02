@@ -3,6 +3,9 @@ defmodule FamichatWeb.HomeLiveTest do
 
   import Phoenix.LiveViewTest
 
+  alias Famichat.Auth.Sessions
+  alias Famichat.ChatFixtures
+
   setup do
     previous = Application.get_env(:famichat, :mls_enforcement, false)
 
@@ -13,28 +16,56 @@ defmodule FamichatWeb.HomeLiveTest do
     :ok
   end
 
+  # Builds a conn with an access_token in the Plug session so HomeLive mounts
+  # in authenticated mode. Uses a real DB user and real Sessions.start_session.
+  defp authenticated_conn(conn) do
+    family = ChatFixtures.family_fixture()
+
+    user =
+      ChatFixtures.user_fixture(%{
+        household_id: family.id,
+        role: :member,
+        username: "home_live_test_user"
+      })
+
+    ChatFixtures.membership_fixture(user, family, :member)
+
+    {:ok, session} =
+      Sessions.start_session(
+        user,
+        %{id: Ecto.UUID.generate(), user_agent: "test-agent", ip: "127.0.0.1"},
+        remember_device?: true
+      )
+
+    conn =
+      conn
+      |> Plug.Test.init_test_session(%{})
+      |> Plug.Conn.put_session(:access_token, session.access_token)
+
+    {conn, user, session}
+  end
+
   describe "home chat harness" do
-    test "renders auth error when no token is provided", %{conn: conn} do
+    test "renders sign-in prompt when no token is provided", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/en")
 
-      assert has_element?(
-               view,
-               "#kitchen-table-chat[data-conversation-type='family']"
-             )
-
-      assert render(view) =~ "Authentication failed"
-      assert render(view) =~ "/admin/spike"
-      assert render(view) =~ "Device:"
+      # Unauthenticated: the #kitchen-table-chat div is not rendered.
+      # Instead the user sees a sign-in prompt.
+      refute has_element?(view, "#kitchen-table-chat")
+      assert render(view) =~ "Sign in"
     end
 
-    test "renders auth error when an invalid token is provided", %{conn: conn} do
+    test "renders session-expired message when an invalid token is provided", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/en?token=invalid-token")
 
-      assert render(view) =~ "Authentication failed"
+      # Invalid URL token: auth_error is set, template shows the expired message.
+      refute has_element?(view, "#kitchen-table-chat")
+      assert render(view) =~ "Session expired or invalid."
     end
 
     test "uses message_id for deterministic stream identity", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en")
+      {auth_conn, _user, _session} = authenticated_conn(conn)
+      {:ok, view, _html} = live(auth_conn, "/en")
 
       payload = %{
         "message_id" => "msg-123",
@@ -51,7 +82,8 @@ defmodule FamichatWeb.HomeLiveTest do
 
     test "does not render raw MLS wire payload in spike UI", %{conn: conn} do
       Application.put_env(:famichat, :mls_enforcement, true)
-      {:ok, view, _html} = live(conn, "/en")
+      {auth_conn, _user, _session} = authenticated_conn(conn)
+      {:ok, view, _html} = live(auth_conn, "/en")
 
       raw_hex_payload = String.duplicate("ab", 70)
 
@@ -69,7 +101,8 @@ defmodule FamichatWeb.HomeLiveTest do
     end
 
     test "drops channel payloads without message_id", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en")
+      {auth_conn, _user, _session} = authenticated_conn(conn)
+      {:ok, view, _html} = live(auth_conn, "/en")
 
       payload = %{
         "body" => "missing-id-body",
