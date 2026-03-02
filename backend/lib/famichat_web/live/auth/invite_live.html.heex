@@ -39,15 +39,15 @@
             autocapitalize="off"
             spellcheck="false"
             required
-            class="w-full rounded p-md text-base"
+            class="ac-text-input w-full"
           />
         </div>
 
         <button
           type="submit"
-          class="rounded p-md text-base font-medium"
+          class="ac-primary-button w-full"
         >
-          <%= gettext("Continue") %>
+          <.typography tag="span" size="md" color="main"><%= gettext("Continue") %></.typography>
         </button>
       </form>
 
@@ -76,9 +76,9 @@
           data-registration-token={@registration_token}
           data-username={@username}
           type="button"
-          class="rounded p-md text-base font-medium"
+          class="ac-primary-button w-full"
         >
-          <%= gettext("Set up passkey") %>
+          <.typography tag="span" size="md" color="main"><%= gettext("Set up passkey") %></.typography>
         </button>
       </div>
 

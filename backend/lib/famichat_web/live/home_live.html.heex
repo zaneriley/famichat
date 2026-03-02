@@ -21,80 +21,80 @@
 >
   <header class="ac-header flex items-center justify-between gap-sm p-md">
     <div class="flex flex-col gap-1">
-      <h1 class="text-lg font-bold text-[var(--text-base)] leading-none">
-        Spike Chat
-      </h1>
-      <p class="text-xs text-[var(--text-muted)]">
+      <.typography tag="h1" size="1xl" color="main">Spike Chat</.typography>
+      <.typography tag="p" size="2xs" color="deemphasized">
         Actor: <span class="font-mono"><%= @test_username %></span>
         · Device: <span class="font-mono"><%= @device_id || "none" %></span>
-      </p>
+      </.typography>
     </div>
     <button
       phx-click="connect-channel"
       class={[
-        "ac-primary-button rounded-full px-3 py-2 text-xs",
+        "ac-primary-button rounded-full px-3 py-2",
         if(@channel_joined,
           do: "bg-[var(--signal-error)]",
           else: "bg-[var(--signal-success)]"
         )
       ]}
     >
-      <%= if @channel_joined, do: "Disconnect", else: "Connect" %>
+      <.typography tag="span" size="2xs" color="callout"><%= if @channel_joined, do: "Disconnect", else: "Connect" %></.typography>
     </button>
   </header>
 
-  <section class="px-md pb-sm text-xs text-[var(--text-muted)]">
-    <p>
+  <section class="px-md pb-sm">
+    <.typography tag="p" size="2xs" color="deemphasized">
       Use <a href="/admin/spike" class="underline">/admin/spike</a>
       to open/share actor links.
       This is a throwaway design-spike harness over real backend paths.
-    </p>
-    <p class="mt-1">
+    </.typography>
+    <.typography tag="p" size="2xs" color="deemphasized">
       Topic status: <span class="font-mono"><%= @topic || "not_joined" %></span>
       · MLS enforcement:
       <span class="font-mono">
         <%= if @mls_enforcement_enabled, do: "on", else: "off" %>
       </span>
-    </p>
+    </.typography>
     <%= if not @mls_enforcement_enabled do %>
-      <p class="mt-1">
+      <.typography tag="p" size="2xs" color="deemphasized">
         MLS is disabled in this runtime. To test MLS paths in the spike, set
         <span class="font-mono">FAMICHAT_MLS_ENFORCEMENT=true</span>
         and restart the app.
-      </p>
+      </.typography>
     <% end %>
     <%= if @recovery_last_status do %>
-      <p class="mt-1">
+      <.typography tag="p" size="2xs" color="deemphasized">
         Recovery: <span class="font-mono"><%= @recovery_last_status %></span>
-      </p>
+      </.typography>
     <% end %>
   </section>
 
   <%= if @security_reason not in [nil, ""] do %>
-    <div class="mx-md mb-sm rounded-md border border-[var(--signal-warning)] bg-white px-3 py-2 text-xs text-[var(--text-base)]">
-      <strong>Security state:</strong>
-      <span class="font-mono"><%= @security_reason %></span>
-      <%= if @security_action not in [nil, ""] do %>
-        · action: <span class="font-mono"><%= @security_action %></span>
-      <% end %>
+    <div class="mx-md mb-sm rounded-md border border-[var(--signal-warning)] bg-white px-3 py-2">
+      <.typography tag="p" size="2xs" color="main">
+        <strong>Security state:</strong>
+        <span class="font-mono"><%= @security_reason %></span>
+        <%= if @security_action not in [nil, ""] do %>
+          · action: <span class="font-mono"><%= @security_action %></span>
+        <% end %>
+      </.typography>
     </div>
   <% end %>
 
   <%= if @error_message do %>
     <div
       id="home-chat-error"
-      class="mx-md mb-sm rounded-md border border-[var(--signal-error)] bg-white px-3 py-2 text-xs text-[var(--signal-error)]"
+      class="mx-md mb-sm rounded-md border border-[var(--signal-error)] bg-white px-3 py-2"
     >
-      <%= @error_message %>
+      <.typography tag="p" size="2xs" color="callout"><%= @error_message %></.typography>
     </div>
   <% end %>
 
-  <section class="mx-md mb-sm grid grid-cols-1 gap-2 rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3 text-xs md:grid-cols-2">
+  <section class="mx-md mb-sm grid grid-cols-1 gap-2 rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3 md:grid-cols-2">
     <div class="flex items-end gap-2">
       <div class="min-w-0 grow">
-        <label class="mb-1 block text-[var(--text-muted)]">
+        <.typography tag="label" size="2xs" color="deemphasized">
           Revoke device id
-        </label>
+        </.typography>
         <input
           type="text"
           class="ac-text-input w-full"
@@ -115,7 +115,7 @@
 
     <div class="flex items-end gap-2">
       <div class="min-w-0 grow">
-        <label class="mb-1 block text-[var(--text-muted)]">Recovery ref</label>
+        <.typography tag="label" size="2xs" color="deemphasized">Recovery ref</.typography>
         <input
           type="text"
           class="ac-text-input w-full"
@@ -165,12 +165,8 @@
         ]}
       >
         <div class="mb-1 flex items-baseline gap-2">
-          <span class="text-sm font-bold text-[var(--text-base)]">
-            <%= message.sender_name %>
-          </span>
-          <span class="text-xs text-[var(--text-muted)]">
-            <%= Calendar.strftime(message.timestamp, "%H:%M:%S") %>
-          </span>
+          <.typography tag="span" size="md" color="main"><%= message.sender_name %></.typography>
+          <.typography tag="span" size="2xs" color="deemphasized"><%= Calendar.strftime(message.timestamp, "%H:%M:%S") %></.typography>
         </div>
         <div class={[
           "ac-chat-bubble",
@@ -185,9 +181,7 @@
               "ac-chat-bubble-incoming"
           end
         ]}>
-          <p class="leading-relaxed text-[var(--text-base)]">
-            <%= message.body %>
-          </p>
+          <.typography tag="p" size="md" color="main"><%= message.body %></.typography>
         </div>
       </div>
     <% end %>

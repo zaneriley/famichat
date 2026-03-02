@@ -95,6 +95,7 @@ defmodule FamichatWeb.Router do
     pipe_through [:api, :api_authenticated]
 
     get "/me/conversations", ChatReadController, :index_me_conversations
+    post "/conversations", ConversationController, :create
     get "/conversations/:id/messages", ChatReadController, :index_messages
     post "/conversations/:id/messages", ChatWriteController, :create_message
 
