@@ -308,26 +308,19 @@ defmodule Famichat.Chat.ConversationService do
   end
 
   defp shared_family_id(user1_id, user2_id) do
-    query =
-      from m in HouseholdMembership,
-        where: m.user_id == ^user1_id,
-        select: m.family_id
+    result =
+      from(m1 in HouseholdMembership,
+        join: m2 in HouseholdMembership,
+        on: m1.family_id == m2.family_id,
+        where: m1.user_id == ^user1_id and m2.user_id == ^user2_id,
+        limit: 1,
+        select: m1.family_id
+      )
+      |> Repo.one()
 
-    case Repo.all(query) do
-      [] ->
-        {:error, :not_in_family}
-
-      families ->
-        query2 =
-          from m in HouseholdMembership,
-            where: m.user_id == ^user2_id and m.family_id in ^families,
-            limit: 1,
-            select: m.family_id
-
-        case Repo.one(query2) do
-          nil -> {:error, :different_families}
-          family_id -> {:ok, family_id}
-        end
+    case result do
+      nil -> {:error, :different_families}
+      family_id -> {:ok, family_id}
     end
   end
 
