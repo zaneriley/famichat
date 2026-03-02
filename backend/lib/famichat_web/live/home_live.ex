@@ -3,158 +3,142 @@ defmodule FamichatWeb.HomeLive do
   import Ecto.Query
   require Logger
 
-  alias Famichat.Auth.{Households, Identity, Sessions}
+  alias Famichat.Auth.{Identity, Sessions}
+  alias Famichat.Chat.{Conversation, ConversationParticipant, ConversationSecurityStateStore}
+  alias Famichat.Accounts.HouseholdMembership
   alias Famichat.Chat
-  alias Famichat.Chat.{Conversation, ConversationSecurityStateStore, Family}
   alias Famichat.Repo
-
-  @default_test_username_prefix "ac-user"
-  @default_device_prefix "device"
-  @default_recovery_ref_prefix "spike-recovery"
 
   @impl true
   def mount(params, _session, socket) do
-    test_username = resolve_test_username(params)
-    device_label = resolve_device_label(params)
-    revoke_target = resolve_revoke_target(params)
-    recovery_ref = default_recovery_ref()
+    token = params["token"]
 
-    case ensure_test_user_and_session(test_username, device_label) do
-      {:ok,
-       %{
-         access_token: access_token,
-         device_id: device_id,
-         user: user,
-         conversation_id: conversation_id
-       }} ->
-        {:ok,
-         socket
-         |> assign(
-           channel_joined: false,
-           conversation_type: "family",
-           conversation_id: conversation_id,
-           current_message: "",
-           user_id: user.id,
-           device_id: device_id,
-           device_label: device_label,
-           test_username: test_username,
-           actor_tag: "#{test_username}/#{device_label}",
-           error_message: nil,
-           auth_token: access_token,
-           topic: nil,
-           security_reason: nil,
-           security_action: nil,
-           revoke_target: revoke_target,
-           recovery_ref: recovery_ref,
-           recovery_last_status: nil,
-           last_seen_message_id: nil,
-           mls_enforcement_enabled:
-             Application.get_env(:famichat, :mls_enforcement, false)
-         )
-         |> load_messages(conversation_id, user.id)}
+    with {:ok, {user_id, device_id}} <- ensure_token_valid(token),
+         {:ok, user} <- Identity.fetch_user(user_id),
+         {:ok, conversations} <- get_user_conversations(user_id) do
+      base_socket = assign_socket_state(socket, user, device_id, token, params)
 
-      {:error, reason} ->
-        Logger.error("Failed to create test session: #{inspect(reason)}")
+      case conversations do
+        [conversation | _] ->
+          {:ok,
+           base_socket
+           |> assign(conversation_id: conversation.id)
+           |> load_messages(conversation.id, user.id)}
 
-        {:ok,
-         socket
-         |> assign(
-           channel_joined: false,
-           conversation_type: "family",
-           conversation_id: nil,
-           current_message: "",
-           user_id: nil,
-           device_id: nil,
-           device_label: device_label,
-           test_username: test_username,
-           actor_tag: "#{test_username}/#{device_label}",
-           error_message:
-             "Failed to initialize test session: #{inspect(reason)}",
-           auth_token: nil,
-           topic: nil,
-           security_reason: nil,
-           security_action: nil,
-           revoke_target: revoke_target,
-           recovery_ref: recovery_ref,
-           recovery_last_status: nil,
-           last_seen_message_id: nil,
-           mls_enforcement_enabled:
-             Application.get_env(:famichat, :mls_enforcement, false)
-         )
-         |> stream(:messages, [], reset: true)}
+        [] ->
+          {:ok,
+           base_socket
+           |> assign(
+             conversation_id: nil,
+             error_message: "No conversations found for this user."
+           )
+           |> stream(:messages, [], reset: true)}
+      end
+    else
+      {:error, reason} -> assign_auth_error(socket, reason)
     end
   end
 
-  defp ensure_test_user_and_session(test_username, device_label) do
-    Repo.transaction(fn ->
-      family = ensure_test_family!()
-      user = ensure_test_user!(test_username)
-
-      ensure_membership!(user.id, family.id)
-      conversation = ensure_family_conversation!(family.id)
-
-      session_data = start_test_session!(user, test_username, device_label)
-      Map.put(session_data, :conversation_id, conversation.id)
-    end)
+  # Sets all common socket assigns shared across every mount path (success and
+  # empty-conversations). Keeping this in one place means adding a new assign
+  # only requires touching this function and assign_auth_error/2.
+  defp assign_socket_state(socket, user, device_id, token, params) do
+    assign(socket,
+      channel_joined: false,
+      conversation_type: "family",
+      current_message: "",
+      user_id: user.id,
+      device_id: device_id,
+      test_username: nil,
+      error_message: nil,
+      auth_error: nil,
+      auth_token: token,
+      topic: nil,
+      security_reason: nil,
+      security_action: nil,
+      revoke_target: params["revoke_target"] |> to_string() |> String.trim(),
+      recovery_ref: default_recovery_ref(),
+      recovery_last_status: nil,
+      last_seen_message_id: nil,
+      mls_enforcement_enabled: Application.get_env(:famichat, :mls_enforcement, false)
+    )
   end
 
-  defp ensure_test_family! do
-    Repo.get_by(Family, name: "Test Family") ||
-      %Family{}
-      |> Family.changeset(%{name: "Test Family"})
-      |> Repo.insert!()
-  end
-
-  defp ensure_test_user!(test_username) do
-    case Identity.ensure_user(%{"username" => test_username}) do
-      {:ok, user} -> user
-      {:error, reason} -> Repo.rollback(reason)
+  # NOTE: verify_access_token/1 already checks device existence, user_id
+  # ownership, revocation status, and trust window in a single DeviceStore
+  # lookup. A second call to device_access_state/2 at mount time would fetch
+  # the same DB row again with identical checks — so it is omitted here.
+  #
+  # device_access_state/2 is still used in handle_event("connect-channel")
+  # because that check happens later at channel-join time, after the initial
+  # mount, when the device state may have changed (e.g. revoked mid-session).
+  defp ensure_token_valid(token) when is_binary(token) do
+    with {:ok, %{user_id: user_id, device_id: device_id}} <-
+           Sessions.verify_access_token(token) do
+      {:ok, {user_id, device_id}}
     end
   end
 
-  defp ensure_family_conversation!(family_id) do
+  defp ensure_token_valid(_), do: {:error, :missing_token}
+
+  defp get_user_conversations(user_id) do
+    explicit_ids =
+      from p in ConversationParticipant,
+        where: p.user_id == ^user_id,
+        select: p.conversation_id
+
+    implicit_ids =
+      from c in Conversation,
+        join: m in HouseholdMembership,
+        on: m.family_id == c.family_id,
+        where: c.conversation_type == :family and m.user_id == ^user_id,
+        select: c.id
+
     query =
       from c in Conversation,
-        where: c.family_id == ^family_id and c.conversation_type == :family,
-        order_by: [asc: c.inserted_at],
-        limit: 1
+        distinct: true,
+        where:
+          c.id in subquery(explicit_ids) or
+            c.id in subquery(implicit_ids),
+        order_by: [desc: c.inserted_at]
 
-    case Repo.one(query) do
-      %Conversation{} = conversation ->
-        conversation
+    {:ok, Repo.all(query)}
+  rescue
+    e in Ecto.QueryError ->
+      Logger.error(
+        "Query error loading conversations for user #{user_id}: #{Exception.message(e)}"
+      )
 
-      nil ->
-        %Conversation{}
-        |> Conversation.create_changeset(%{
-          family_id: family_id,
-          conversation_type: :family,
-          metadata: %{"name" => "Family Chat"}
-        })
-        |> Repo.insert!()
-    end
+      {:error, :db_error}
   end
 
-  defp start_test_session!(user, test_username, device_label) do
-    device_info = %{
-      id: stable_device_id(test_username, device_label),
-      user_agent: "HomeLive/#{device_label}",
-      ip: "127.0.0.1"
-    }
-
-    case Sessions.start_session(user, device_info, remember_device?: false) do
-      {:ok, %{access_token: access_token, device_id: device_id}} ->
-        %{access_token: access_token, device_id: device_id, user: user}
-
-      {:error, reason} ->
-        Repo.rollback(reason)
-    end
-  end
-
-  defp ensure_membership!(user_id, family_id) do
-    case Households.upsert_membership(user_id, family_id, :admin) do
-      {:ok, _membership} -> :ok
-      {:error, reason} -> Repo.rollback(reason)
-    end
+  # NOTE: Ideally this would redirect to the login page, but the login page
+  # doesn't exist yet (L1 work in progress). Until then, render inline error.
+  # TODO: Replace with push_navigate(socket, to: "/login") once login page exists.
+  defp assign_auth_error(socket, reason) do
+    {:ok,
+     socket
+     |> assign(
+       channel_joined: false,
+       conversation_type: "family",
+       conversation_id: nil,
+       current_message: "",
+       user_id: nil,
+       device_id: nil,
+       test_username: nil,
+       error_message: "Authentication failed: #{inspect(reason)}",
+       auth_error: reason,
+       auth_token: nil,
+       topic: nil,
+       security_reason: nil,
+       security_action: nil,
+       revoke_target: "",
+       recovery_ref: default_recovery_ref(),
+       recovery_last_status: nil,
+       last_seen_message_id: nil,
+       mls_enforcement_enabled: Application.get_env(:famichat, :mls_enforcement, false)
+     )
+     |> stream(:messages, [], reset: true)}
   end
 
   @impl true
@@ -466,71 +450,8 @@ defmodule FamichatWeb.HomeLive do
     {:noreply, socket}
   end
 
-  defp resolve_test_username(params) do
-    params
-    |> Map.get("user")
-    |> normalize_test_username()
-    |> case do
-      nil -> unique_test_username()
-      username -> username
-    end
-  end
-
-  defp normalize_test_username(username) when is_binary(username) do
-    username
-    |> String.trim()
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9_-]+/, "-")
-    |> String.trim("-")
-    |> case do
-      "" -> nil
-      sanitized -> sanitized
-    end
-  end
-
-  defp normalize_test_username(_), do: nil
-
-  defp unique_test_username do
-    "#{@default_test_username_prefix}-#{System.unique_integer([:positive])}"
-  end
-
-  defp resolve_device_label(params) do
-    params
-    |> Map.get("device")
-    |> normalize_device_label()
-    |> case do
-      nil -> "#{@default_device_prefix}-#{System.unique_integer([:positive])}"
-      label -> label
-    end
-  end
-
-  defp normalize_device_label(label) when is_binary(label) do
-    label
-    |> String.trim()
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9_-]+/, "-")
-    |> String.trim("-")
-    |> case do
-      "" -> nil
-      sanitized -> sanitized
-    end
-  end
-
-  defp normalize_device_label(_), do: nil
-
-  defp resolve_revoke_target(params) do
-    params
-    |> Map.get("revoke_target", "")
-    |> to_string()
-    |> String.trim()
-  end
-
-  defp stable_device_id(test_username, device_label) do
-    "spike-#{test_username}-#{device_label}"
-  end
-
   defp default_recovery_ref do
-    "#{@default_recovery_ref_prefix}-#{System.unique_integer([:positive])}"
+    "spike-recovery-#{System.unique_integer([:positive])}"
   end
 
   defp load_messages(socket, nil, _user_id) do

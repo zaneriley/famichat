@@ -14,33 +14,27 @@ defmodule FamichatWeb.HomeLiveTest do
   end
 
   describe "home chat harness" do
-    test "defaults to shared family conversation for cross-user QA", %{
-      conn: conn
-    } do
-      {:ok, view, _html} = live(conn, "/en?user=alice")
+    test "renders auth error when no token is provided", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/en")
 
       assert has_element?(
                view,
                "#kitchen-table-chat[data-conversation-type='family']"
              )
 
-      assert render(view) =~ "Actor:"
-      assert render(view) =~ "alice"
+      assert render(view) =~ "Authentication failed"
       assert render(view) =~ "/admin/spike"
       assert render(view) =~ "Device:"
-      assert has_element?(view, "#message-input:not([disabled])")
     end
 
-    test "uses deterministic device id from query for shareable actor links", %{
-      conn: conn
-    } do
-      {:ok, view, _html} = live(conn, "/en?user=alice&device=device-2")
+    test "renders auth error when an invalid token is provided", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/en?token=invalid-token")
 
-      assert render(view) =~ "spike-alice-device-2"
+      assert render(view) =~ "Authentication failed"
     end
 
     test "uses message_id for deterministic stream identity", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en?user=alice")
+      {:ok, view, _html} = live(conn, "/en")
 
       payload = %{
         "message_id" => "msg-123",
@@ -57,7 +51,7 @@ defmodule FamichatWeb.HomeLiveTest do
 
     test "does not render raw MLS wire payload in spike UI", %{conn: conn} do
       Application.put_env(:famichat, :mls_enforcement, true)
-      {:ok, view, _html} = live(conn, "/en?user=alice")
+      {:ok, view, _html} = live(conn, "/en")
 
       raw_hex_payload = String.duplicate("ab", 70)
 
@@ -75,7 +69,7 @@ defmodule FamichatWeb.HomeLiveTest do
     end
 
     test "drops channel payloads without message_id", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en?user=alice")
+      {:ok, view, _html} = live(conn, "/en")
 
       payload = %{
         "body" => "missing-id-body",
