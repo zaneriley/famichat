@@ -1,6 +1,6 @@
 # Famichat NOW
 
-**Last updated:** 2026-03-01
+**Last updated:** 2026-03-02
 
 Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [ADR 012](decisions/012-spa-wasm-client-architecture.md).
 
@@ -8,96 +8,105 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-Architecture is locked. WASM spike passed. No real user-facing UI exists yet. Critical path is: build the front door (LiveView auth + invite flow), onboard the spouse, then build the SPA while the app is in daily use.
+The front door is built but not walkable end-to-end from a browser. Routing and auth-gating work. Registration is broken at the JS layer and there is no browser-accessible way to bootstrap a new instance. Critical path: fix the P0 passkey bug, build a dev setup page, onboard the spouse.
 
 ---
 
-## What just happened
+## What just happened (2026-03-02)
 
-- **Full SPA architecture decided and documented** — ADR 012 supersedes ADR 011 (archived). Svelte 5 + SvelteKit 2 SPA for message surfaces; LiveView for auth/onboarding/admin; Capacitor for mobile at L3.
-- **WASM spike passed GO** (10/12 criteria, 2026-03-01):
-  - S1–S6, S8, M1, M2, M4 all PASS in headless Chromium
-  - Warm-path P95 = 1.90ms (gate 50ms — 26× under); bundle 481.8 kB gzip (gate 500 kB)
-  - S7 + M3 pending physical iOS device — must confirm before L3
-  - Spike artifacts: `spikes/openmls-wasm/`, results at `.tmp/2026-03-01-SPA/spike/spike-results-final.md`
-- **Codebase audit completed** — the backend auth API exists and has tests, but almost nothing has been validated end-to-end with real infrastructure. No user-facing UI exists at all. See below.
+- **Front door LiveView built** — login page, invite accept flow, passkey registration step, auth-gated `HomeLive` all exist and mostly render. Not fully working yet (see bugs below).
+- **API hardened** — `fetch_session` added to `:api` pipeline (was crashing all auth endpoints), `POST /api/v1/conversations` added, `/health`, `/me`, catch-all 404 all wired.
+- **Routing fixed** — `/` → `/en` → `/en/login` for unauthenticated users. `locale_path/2` helper added to `LiveHelpers`; hardcoded `/#{locale}/...` strings eliminated from all LiveViews.
+- **Bug bash** — 6 bugs found and fixed via curl-based QA: portfolio content in 404, `dynamic_home_url` compile crash, invalid invite fallthrough to 404, disconnected flash not translated, `ValidateInviteToken` plug swallowing invite errors before LiveView.
+- **Critical regression introduced then fixed** — 404 agent deleted `dynamic_home_url/0` from `error_html.ex` without checking 410/500 templates, which still called it. Took app down. Fixed immediately but the lesson is: **commit nothing without curling the endpoint first**.
 
 ---
 
-## Actual state of the codebase
+## Actual state of the CUJ (as verified by curl, 2026-03-02)
 
-### What genuinely works
-- Phoenix Channel messaging — <200ms latency, MLS crypto, PubSub, DB persistence all confirmed
-- MLS NIF — fully hardened (Track A), 17/17 Rust tests pass
-- Auth API — passkey register/assert (Wax), session refresh, device revocation — code exists and has unit tests
+| URL | Status | Notes |
+|-----|--------|-------|
+| `/` | ✓ 302 → `/en` | Works |
+| `/en` | ✓ 302 → `/en/login` | Works — unauthenticated redirect fixed |
+| `/en/login` | ✓ 200 | Renders correctly |
+| `/en/login/otp` | ✗ **404** | Route never built — "Sign in another way" link is dead |
+| `/en/invites/:token` | ✓ 200 | Renders invite flow — but passkey step crashes (P0 below) |
+| `/api/v1/health` | ✓ 200 | Works |
+| Admin bootstrap | ✗ **browser-inaccessible** | Requires curl; no UI exists |
 
-### What exists in code but is NOT validated end-to-end
-- **Magic link / OTP auth** — no email client is configured; magic links cannot actually be sent. Backend logic exists, real delivery does not.
-- **Invite flow** — three-step pipeline exists and has HTTP tests; no browser page consumes it; never been run with a real user
-- **Passkey flows** — WebAuthn backend is correct; no browser JS calls `navigator.credentials.create()` or `.get()` anywhere
+---
 
-### What does not exist at all
-- Any real user-facing UI (login page, registration, invite acceptance, messaging UI with real auth)
-- `POST /api/v1/conversations` — conversations can only be created via seeds/test context
-- `/app/*` catch-all route and static file serving for the SPA
-- CSP updated for WASM Web Worker (`worker-src 'self' blob:`)
-- Key package endpoints (deferred — post-spike, pre-L3)
-- `GET /api/v1/devices` (own device list)
+## Known bugs (blocking L1)
 
-### The only end-to-end path that works
-`HomeLive` spike harness → hardcoded test users ("zane" / "wife") → Phoenix Channel → MLS encrypt/decrypt → PostgreSQL. This bypasses all real auth. It is throwaway.
+### P0 — Passkey registration crashes, no new user can register
+
+`passkey_register_hook.js` passes the full challenge response object to `decodeCreationOptions` instead of `challengeData.public_key_options`. Accessing `.user.id` on the wrong object throws `TypeError` immediately. The login hook does this correctly; the register hook does not.
+
+**Fix:** One-line change in `passkey_register_hook.js`. Curl and verify before committing.
+
+### P1 — No browser path to bootstrap or register
+
+To register, an admin must first be bootstrapped via `POST /api/v1/setup` (curl only), then issue an invite via `POST /api/v1/auth/invites` (curl, authenticated). There is no UI for either step.
+
+**Fix needed:** A dev-mode setup page (e.g. `/admin/setup` behind basic auth) that bootstraps the instance and issues the first invite link.
+
+### P1 — `/en/login/otp` is a dead link (404)
+
+The OTP login LiveView and route do not exist. The link is rendered on every login page load.
+
+**Fix needed:** Either build the OTP LiveView or remove the link until the route exists.
+
+### P2 — Inviter name never shown on invite page
+
+`invite_live.html.heex` renders `"%{name} invited you"` when `@payload[:inviter_username]` is set. It never is — `Onboarding.accept_invite/1` likely uses a string key or different atom. Always falls back to "You're invited."
+
+### P2 — Three font files 404
+
+`CardinalFruitWeb-Medium-Trial.woff2`, `GT-Flexa-Trial-VF.woff2`, `noto-sans-jp.ttf` all 404 on every page load. Console polluted with font errors, masking real errors.
+
+### P2 — Bootstrap API field names not documented
+
+`POST /api/v1/setup` expects `username` and `family_name`. Using `admin_handle`/`household_name` returns a non-descriptive 400.
 
 ---
 
 ## Immediate next steps (in order)
 
-### 1. Build the front door (LiveView — throwaway, ~3 days)
+### 1. Fix P0 passkey register hook (one line)
+`decodeCreationOptions(challengeData)` → `decodeCreationOptions(challengeData.public_key_options)` in `passkey_register_hook.js`. Curl the challenge endpoint and verify the shape before touching the file.
 
-These are intentionally throwaway per SPEC — write them tightly coupled, no abstraction, no design investment. They exist to get a real second user into the app for L1 validation.
+### 2. Build dev setup page (~1–2 hours)
+LiveView at `/admin/setup` (behind existing basic auth) that bootstraps the instance and issues the first invite link. Without this, dogfooding requires curl to enter the app at all.
 
-**a. Passkey login page**
-- `navigator.credentials.get()` calling `/api/v1/auth/passkeys/assertion-challenge` → `/api/v1/auth/passkeys/assert`
-- OTP fallback (note: magic link requires email infra — skip for now, OTP only)
-- Store access token in memory, refresh token in `sessionStorage` for now (upgrade before L2)
+### 3. Fix or remove the OTP link (~30 min)
+Remove "Sign in another way" from the login page until the route exists. Or stub it with a "coming soon" page.
 
-**b. Passkey registration page**
-- `navigator.credentials.create()` calling challenge → register endpoints
-- Wire to invite token from URL
+### 4. Onboard the spouse
+Real-world L1 test. Not a dev task. If anything causes friction, fix it first.
 
-**c. Invite accept flow**
-- Consume invite token from URL → username form → hand off to passkey registration
-- Route: `/invites/:token`
+---
 
-**d. Auth-gated message view**
-- Refactor `HomeLive` to require real session (not hardcoded users)
-- Minimal: conversation list + message thread + send box
-- No design investment — this will be deleted when the SPA ships
+## What was completed (no longer in the build queue)
 
-### 2. Add `POST /api/v1/conversations` (~half day)
-Needed to create a new 1:1 conversation from the UI. Conversations currently only exist via seeds.
-
-### 3. Onboard the spouse
-This is the L1 gate. Not a dev task — a real-world test. If the invite + passkey registration flow causes friction, fix it before declaring L1.
-
-### 4. Build the SPA scaffold (while app is in daily use)
-After L1 is validated with the throwaway LiveView:
-- Create `frontend/` directory per ADR 012 §12
-- Wire `/app/*` catch-all route + `:spa` pipeline in router
-- Update CSP plug for `worker-src 'self' blob:` + `'wasm-unsafe-eval'`
-- Build Svelte conversation list + message view with real Phoenix Channel connection
-- Swap LiveView message view for SPA; delete throwaway
+- ✓ Login page (LiveView) — passkey button, loading state, friendly errors
+- ✓ Invite accept flow (LiveView) — token consumed, username form, passkey step, success state
+- ✓ `HomeLive` requires real auth (hardcoded test users removed)
+- ✓ `POST /api/v1/conversations` — idempotent, auto-called on registration
+- ✓ `locale_path/2` — DRY locale-prefixed navigation throughout LiveViews
+- ✓ Unauthenticated `/en` redirects to `/en/login`
+- ✓ Invalid invite tokens show `:invalid` step (not generic 404)
 
 ---
 
 ## What NOT to build now
 
-- Full WASM E2EE (Path C) — L3 work, not L1. Server-side decryption is acceptable while you are the only operator.
-- Key package endpoints, Welcome routing, multi-device join — L3 gate items
-- Magic link email infrastructure — OTP is sufficient for L1
-- Photo sharing, message threads — explicitly deferrable per SPEC
-- Design system, shared components, any LiveView abstraction — throwaway views, don't invest
-- QR pairing UI — invite link is sufficient for 2-person use
-- Push notifications — L3 scope
+- **OTP email delivery** — infra not configured; skip for L1
+- **Full WASM E2EE (Path C)** — L3 work
+- **Key package endpoints, Welcome routing, multi-device join** — L3 gate items
+- **Photo sharing, message threads, reactions** — deferrable per SPEC
+- **Design system, LiveView abstractions** — throwaway views, don't invest
+- **QR pairing UI** — invite link is sufficient for 2-person L1
+- **Push notifications** — L3 scope
 
 ---
 
@@ -106,29 +115,25 @@ After L1 is validated with the throwaway LiveView:
 | Decision | Details |
 |---|---|
 | E2EE path | Path C: Svelte SPA + OpenMLS WASM in Web Worker; spike passed GO |
-| Frontend model | Full SPA (not LiveView hybrid) — ADR 012, supersedes old NOW.md |
+| Frontend model | Full SPA — ADR 012 |
 | LiveView scope | Auth, onboarding, admin only — tightly coupled, explicitly deletable |
-| NIF fate | Keep during L0/L1 dogfooding; remove at L3 gate (before other families trust the server) |
-| Mobile | Capacitor 7 at L3; `ASWebAuthenticationSession` for passkeys (self-hosting constraint) |
-| Security stance | "Impossible, not guarded" — don't hold data you don't need to hold |
+| NIF fate | Keep during L0/L1; remove at L3 gate |
+| Mobile | Capacitor 7 at L3; `ASWebAuthenticationSession` for passkeys |
+| Security stance | Server decrypts during L0/L1; Path C before L3 |
 
 ---
 
-## Known gaps
+## Known gaps — blocking L3
 
-**Blocking L1 (no real users until fixed):**
-- No login page, no registration page, no invite UI
-- `POST /api/v1/conversations` missing
-- Magic link delivery not configured (use OTP only for now)
-
-**Blocking E2EE / L3 gate:**
 - Key package table + distribution endpoints not built
 - No Welcome message routing for offline devices
 - `/app/*` SPA catch-all route not wired
-- CSP not updated for WASM Web Worker
+- CSP not updated for WASM Web Worker (`worker-src 'self' blob:`)
 - `device_id` → MLS leaf index mapping gap (blocks revoke → MLS removal)
-- S7 + M3 spike criteria pending physical iOS device
+- S7 + M3 WASM spike criteria pending physical iOS device
 
-**Pre-existing, not blocking L1:**
-- 66 pre-existing test failures in lifecycle, channel, MLS contract modules
-- `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME` env vars not configured for production
+## Known gaps — pre-existing, not blocking L1
+
+- 66 pre-existing test failures in lifecycle, channel, MLS modules
+- `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME` not configured for production
+- `GET /api/v1/devices` endpoint not built
