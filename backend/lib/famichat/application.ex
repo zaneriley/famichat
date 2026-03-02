@@ -24,6 +24,7 @@ defmodule Famichat.Application do
        query: Application.get_env(:famichat, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Famichat.PubSub},
       {Finch, name: Famichat.Finch},
+      {Task.Supervisor, name: Famichat.TaskSupervisor},
       Famichat.Chat.MessageRateLimiter,
       FamichatWeb.Endpoint,
       Famichat.Cache

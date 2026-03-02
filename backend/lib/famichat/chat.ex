@@ -216,6 +216,15 @@ defmodule Famichat.Chat do
 
   ## Conversation Visibility
 
+  alias Famichat.Chat.ConversationService
+
+  @doc """
+  Creates a direct conversation between two users.
+
+  Delegates to `Famichat.Chat.ConversationService.create_direct_conversation/2`.
+  """
+  defdelegate create_direct_conversation(user1_id, user2_id), to: ConversationService
+
   alias Famichat.Chat.Conversation
   alias Famichat.Chat.ConversationSecurityKeyPackagePolicy
   alias Famichat.Chat.ConversationSecurityRecoveryLifecycle

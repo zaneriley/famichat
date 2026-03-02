@@ -604,6 +604,50 @@ defmodule FamichatWeb.AuthController do
     |> json(%{error: %{code: "invalid_parameters"}})
   end
 
+  def bootstrap_admin(conn, %{"username" => username} = params) do
+    opts = %{
+      "family_name" => Map.get(params, "family_name")
+    }
+
+    case Onboarding.bootstrap_admin(username, opts) do
+      {:ok, %{user: user, family: family}} ->
+        conn
+        |> put_status(:created)
+        |> json(%{
+          data: %{
+            user_id: user.id,
+            username: user.username,
+            family_id: family.id,
+            family_name: family.name
+          }
+        })
+
+      {:error, :admin_exists} ->
+        conn
+        |> put_status(:conflict)
+        |> json(%{error: %{code: "admin_exists", message: "Bootstrap already completed"}})
+
+      {:error, :username_required} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: %{code: "username_required"}})
+
+      {:error, :invalid_input} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: %{code: "invalid_input"}})
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        unexpected_error(conn, "bootstrap_admin", changeset, "bootstrap_failed")
+    end
+  end
+
+  def bootstrap_admin(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
+  end
+
   defp maybe_ip(conn) do
     conn.remote_ip
     |> case do

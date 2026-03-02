@@ -52,6 +52,7 @@ defmodule FamichatWeb.Router do
     pipe_through :api
 
     get "/hello", HelloController, :index
+    post "/setup", AuthController, :bootstrap_admin
     post "/auth/invites", AuthController, :issue_invite
     post "/auth/invites/accept", AuthController, :accept_invite
     post "/auth/invites/complete", AuthController, :complete_invite

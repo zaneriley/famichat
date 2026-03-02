@@ -17,6 +17,8 @@ defmodule Famichat.Auth.Onboarding do
       Famichat.Auth.Tokens
     ]
 
+  import Ecto.Query, only: [from: 2]
+
   alias Famichat.Accounts.User
   alias Famichat.Auth.Households
   alias Famichat.Auth.Identity
@@ -64,13 +66,92 @@ defmodule Famichat.Auth.Onboarding do
 
   def issue_invite(_, _, _), do: {:error, :invalid_role}
 
+  @spec bootstrap_admin(String.t(), map()) ::
+          {:ok, %{user: User.t(), family: Famichat.Chat.Family.t()}}
+          | {:error, :admin_exists}
+          | {:error, :invalid_input}
+          | {:error, :username_required}
+          | {:error, Ecto.Changeset.t()}
+  def bootstrap_admin(username, opts \\ %{}) do
+    with {:ok, normalized_username} <- validate_bootstrap_username(username) do
+      family_name = Map.get(opts, :family_name) || Map.get(opts, "family_name") || "My Family"
+
+      result =
+        Ecto.Multi.new()
+        |> Ecto.Multi.run(:check_admin, fn repo, _changes ->
+          count = repo.one(from u in User, select: count(u.id))
+
+          if count > 0 do
+            {:error, :admin_exists}
+          else
+            {:ok, :no_admin}
+          end
+        end)
+        |> Ecto.Multi.insert(:family, Famichat.Chat.Family.changeset(%Famichat.Chat.Family{}, %{name: family_name}))
+        |> Ecto.Multi.run(:user, fn _repo, _changes ->
+          user_attrs =
+            opts
+            |> Identity.permit_user_attrs()
+            |> Map.put(:username, normalized_username)
+            |> Map.put(:status, :active)
+            |> Map.put(:confirmed_at, DateTime.utc_now())
+
+          %User{}
+          |> User.changeset(user_attrs)
+          |> Repo.insert()
+        end)
+        |> Ecto.Multi.run(:membership, fn _repo, %{user: user, family: family} ->
+          Households.add_member(family.id, user.id, :admin)
+        end)
+        |> Repo.transaction()
+
+      case result do
+        {:ok, %{user: user, family: family}} ->
+          :telemetry.execute(
+            [:famichat, :auth, :onboarding, :bootstrap_admin_created],
+            %{count: 1},
+            %{user_id: user.id, family_id: family.id}
+          )
+
+          {:ok, %{user: user, family: family}}
+
+        {:error, :check_admin, :admin_exists, _} ->
+          {:error, :admin_exists}
+
+        {:error, _step, %Ecto.Changeset{} = changeset, _} ->
+          {:error, changeset}
+
+        {:error, _step, reason, _} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  defp validate_bootstrap_username(username) when is_binary(username) do
+    normalized = Identity.normalize_username(username)
+
+    cond do
+      is_nil(normalized) or String.trim(normalized) == "" ->
+        {:error, :username_required}
+
+      String.length(normalized) < 3 ->
+        {:error, :invalid_input}
+
+      true ->
+        {:ok, normalized}
+    end
+  end
+
+  defp validate_bootstrap_username(nil), do: {:error, :username_required}
+  defp validate_bootstrap_username(_), do: {:error, :invalid_input}
+
   defp do_issue_invite(inviter_id, email, payload, household_id) do
     Repo.transaction(fn ->
       with {:ok, inviter} <- Identity.fetch_user(inviter_id),
            {:ok, _membership} <-
              Households.ensure_admin_membership(inviter.id, household_id),
            {:ok, _family} <- fetch_family(household_id),
-           payload_map <- invite_payload(payload, email),
+           payload_map <- invite_payload(payload, email, inviter_id),
            {:ok, %IssuedToken{raw: invite_raw, record: invite_record}} <-
              Tokens.issue(:invite, payload_map),
            {:ok, pairing_bundle} <-
@@ -106,7 +187,8 @@ defmodule Famichat.Auth.Onboarding do
           "family_id" => payload["household_id"] || payload["family_id"],
           "role" => payload["role"],
           "email_ciphertext" => Map.get(invite.payload, "email_ciphertext"),
-          "email_fingerprint" => Map.get(invite.payload, "email_fingerprint")
+          "email_fingerprint" => Map.get(invite.payload, "email_fingerprint"),
+          "inviter_id" => Map.get(invite.payload, "inviter_id")
         })
 
       emit_onboarding_event(:invite_accepted, %{
@@ -199,8 +281,16 @@ defmodule Famichat.Auth.Onboarding do
                {:error, reason} -> Repo.rollback(reason)
              end
            end) do
-        {:ok, result} -> {:ok, result}
-        {:error, reason} -> {:error, reason}
+        {:ok, result} ->
+          schedule_direct_conversation_creation(
+            Map.get(claims, "inviter_id"),
+            result.user.id
+          )
+
+          {:ok, result}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end
@@ -209,13 +299,14 @@ defmodule Famichat.Auth.Onboarding do
 
   ## Helpers ----------------------------------------------------------------
 
-  defp invite_payload(payload, email) do
+  defp invite_payload(payload, email, inviter_id) do
     household_id = household_id_from_payload(payload)
 
     %{
       "household_id" => household_id,
       "family_id" => household_id,
-      "role" => format_role(payload[:role] || payload["role"])
+      "role" => format_role(payload[:role] || payload["role"]),
+      "inviter_id" => inviter_id
     }
     |> maybe_put_email_secret(email)
   end
@@ -379,5 +470,32 @@ defmodule Famichat.Auth.Onboarding do
       %{count: 1},
       metadata
     )
+  end
+
+  defp schedule_direct_conversation_creation(nil, _invitee_id), do: :ok
+
+  defp schedule_direct_conversation_creation(inviter_id, invitee_id)
+       when is_binary(inviter_id) and is_binary(invitee_id) do
+    # Fire-and-forget: create direct conversation between inviter and invitee
+    # without blocking registration. Failures are logged but do not roll back registration.
+    Task.Supervisor.start_child(Famichat.TaskSupervisor, fn ->
+      case Famichat.Chat.create_direct_conversation(inviter_id, invitee_id) do
+        {:ok, _conversation} ->
+          :telemetry.execute(
+            [:famichat, :auth, :onboarding, :direct_conversation_created],
+            %{count: 1},
+            %{inviter_id: inviter_id, invitee_id: invitee_id}
+          )
+
+        {:error, reason} ->
+          require Logger
+
+          Logger.warning(
+            "[Onboarding] Failed to create direct conversation: #{inspect(reason)}, inviter=#{inviter_id}, invitee=#{invitee_id}"
+          )
+      end
+    end)
+
+    :ok
   end
 end
