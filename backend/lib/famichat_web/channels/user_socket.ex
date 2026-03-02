@@ -21,7 +21,18 @@ defmodule FamichatWeb.UserSocket do
   # performing token verification on connect.
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do
-    case Sessions.verify_access_token(token) do
+    # Try channel bootstrap token first (preferred path from LiveView hook).
+    # Fall back to access token for direct/API clients (backward compat).
+    result =
+      case Sessions.verify_channel_token(token) do
+        {:ok, claims} ->
+          {:ok, claims}
+
+        {:error, _} ->
+          Sessions.verify_access_token(token)
+      end
+
+    case result do
       {:ok, %{user_id: user_id, device_id: device_id}} ->
         Logger.debug(
           "User connected with user_id=#{user_id} device_id=#{device_id}"

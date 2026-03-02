@@ -26,13 +26,22 @@ const MessageChannelHook = {
       this.connected = false;
       this.seenMessageIds = new Set();
 
-      // If we need to auto-connect on mount
+      // Auto-connect without a server-issued channel token is no longer
+      // supported. The LiveView must push connect_channel with the token.
       if (this.el.dataset.autoConnect === "true") {
-        this.connect();
+        console.warn("[MessageChannel] autoConnect requires server-issued token; ignored.");
       }
 
-      // Listen for events from the LiveView
-      this.handleEvent("connect_channel", () => this.connect());
+      // connect_channel now carries the channel bootstrap token in its payload.
+      // The token is delivered over the LiveView WebSocket — never in the DOM.
+      this.handleEvent("connect_channel", ({ channel_token }) => {
+        if (!channel_token) {
+          console.error("[MessageChannel] connect_channel received without channel_token");
+          this.pushEvent("socket_error", { reason: "missing_channel_token" });
+          return;
+        }
+        this.connect(channel_token);
+      });
       this.handleEvent("disconnect_channel", () => this.disconnect());
       this.handleEvent("send_message", (payload) => this.sendMessage(payload));
 
@@ -46,18 +55,15 @@ const MessageChannelHook = {
     }
   },
 
-  connect() {
+  connect(channelToken) {
     try {
       console.log("[MessageChannel] Connecting...");
 
-      // Generate auth token for the Socket
-      // In a real app, this would come from the server
-      // Here we're taking it from the data attribute
-      const token = this.el.dataset.authToken || "";
-
-      // Initialize Socket connection
+      // channelToken is a short-lived bootstrap token delivered over the
+      // LiveView WebSocket. It is used exactly once to authenticate the
+      // Phoenix Socket connection. The access token is never placed in the DOM.
       this.socket = new Socket("/socket", {
-        params: { token: token },
+        params: { token: channelToken },
       });
 
       // Connect to the socket
@@ -205,13 +211,15 @@ const MessageChannelHook = {
     this.conversationId = newId;
     this.userId = newUserId;
 
-    // If conversation parameters changed and we're connected, reconnect
+    // If conversation parameters changed and we're connected, reconnect.
+    // We disconnect and request a new channel token from the server via the
+    // connect-channel event — the server will push connect_channel with a
+    // fresh token. We do not call connect() directly here because we no longer
+    // have the token available in the hook after the initial connect.
     if (this.connected && nextTopic !== previousTopic) {
       console.log("[MessageChannel] Conversation changed, reconnecting");
       this.disconnect();
-
-      // Reconnect with new parameters
-      this.connect();
+      this.pushEvent("connect-channel", {});
     }
   },
 
