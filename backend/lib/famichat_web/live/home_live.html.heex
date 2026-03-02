@@ -11,6 +11,14 @@
     </a>
   </div>
 <% else %>
+  <%= if is_nil(@conversation_id) do %>
+    <div class="flex h-screen flex-col items-center justify-center gap-md p-2xl">
+      <.typography tag="h1" size="2xl" color="main"><%= gettext("No conversation yet") %></.typography>
+      <.typography tag="p" size="md" color="deemphasized">
+        <%= gettext("Once you've invited a family member, your conversation will appear here.") %>
+      </.typography>
+    </div>
+  <% else %>
 <div
   id="kitchen-table-chat"
   class="ac-canvas flex h-[100dvh] w-full flex-col overflow-hidden md:mx-auto md:max-w-3xl md:border-x-2 md:border-[var(--color-brown-200)] md:shadow-2xl"
@@ -21,52 +29,52 @@
 >
   <header class="ac-header flex items-center justify-between gap-sm p-md">
     <div class="flex flex-col gap-1">
-      <.typography tag="h1" size="1xl" color="main">Spike Chat</.typography>
-      <.typography tag="p" size="2xs" color="deemphasized">
-        Actor: <span class="font-mono"><%= @test_username %></span>
-        · Device: <span class="font-mono"><%= @device_id || "none" %></span>
-      </.typography>
+      <.typography tag="h1" size="1xl" color="main">Famichat</.typography>
     </div>
     <button
       phx-click="connect-channel"
       class={[
-        "ac-primary-button rounded-full px-3 py-2",
+        "ac-primary-button rounded-full px-3 py-2xs",
         if(@channel_joined,
           do: "bg-[var(--signal-error)]",
           else: "bg-[var(--signal-success)]"
         )
       ]}
     >
-      <.typography tag="span" size="2xs" color="callout"><%= if @channel_joined, do: "Disconnect", else: "Connect" %></.typography>
+      <.typography tag="span" size="2xs" color="callout">
+        <%= if @channel_joined, do: gettext("Connected"), else: gettext("Connect") %>
+      </.typography>
     </button>
   </header>
 
-  <section class="px-md pb-sm">
-    <.typography tag="p" size="2xs" color="deemphasized">
-      Use <a href="/admin/spike" class="underline">/admin/spike</a>
-      to open/share actor links.
-      This is a throwaway design-spike harness over real backend paths.
-    </.typography>
-    <.typography tag="p" size="2xs" color="deemphasized">
-      Topic status: <span class="font-mono"><%= @topic || "not_joined" %></span>
-      · MLS enforcement:
-      <span class="font-mono">
-        <%= if @mls_enforcement_enabled, do: "on", else: "off" %>
-      </span>
-    </.typography>
-    <%= if not @mls_enforcement_enabled do %>
+  <%= if @dev_mode do %>
+    <section class="px-md pb-sm">
       <.typography tag="p" size="2xs" color="deemphasized">
-        MLS is disabled in this runtime. To test MLS paths in the spike, set
-        <span class="font-mono">FAMICHAT_MLS_ENFORCEMENT=true</span>
-        and restart the app.
+        Use <a href="/admin/spike" class="underline">/admin/spike</a>
+        to open/share actor links.
+        This is a throwaway design-spike harness over real backend paths.
       </.typography>
-    <% end %>
-    <%= if @recovery_last_status do %>
       <.typography tag="p" size="2xs" color="deemphasized">
-        Recovery: <span class="font-mono"><%= @recovery_last_status %></span>
+        Topic status: <span class="font-mono"><%= @topic || "not_joined" %></span>
+        · MLS enforcement:
+        <span class="font-mono">
+          <%= if @mls_enforcement_enabled, do: "on", else: "off" %>
+        </span>
       </.typography>
-    <% end %>
-  </section>
+      <%= if not @mls_enforcement_enabled do %>
+        <.typography tag="p" size="2xs" color="deemphasized">
+          MLS is disabled in this runtime. To test MLS paths in the spike, set
+          <span class="font-mono">FAMICHAT_MLS_ENFORCEMENT=true</span>
+          and restart the app.
+        </.typography>
+      <% end %>
+      <%= if @recovery_last_status do %>
+        <.typography tag="p" size="2xs" color="deemphasized">
+          Recovery: <span class="font-mono"><%= @recovery_last_status %></span>
+        </.typography>
+      <% end %>
+    </section>
+  <% end %>
 
   <%= if @security_reason not in [nil, ""] do %>
     <div class="mx-md mb-sm rounded-md border border-[var(--signal-warning)] bg-white px-3 py-2">
@@ -89,63 +97,65 @@
     </div>
   <% end %>
 
-  <section class="mx-md mb-sm grid grid-cols-1 gap-2 rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3 md:grid-cols-2">
-    <div class="flex items-end gap-2">
-      <div class="min-w-0 grow">
-        <.typography tag="label" size="2xs" color="deemphasized">
-          Revoke device id
-        </.typography>
-        <input
-          type="text"
-          class="ac-text-input w-full"
-          value={@revoke_target}
-          phx-keyup="update-revoke-target"
-          phx-debounce="150"
-          name="value"
-          placeholder="spike-zane-device-2"
-        />
+  <%= if @dev_mode do %>
+    <section class="mx-md mb-sm grid grid-cols-1 gap-2 rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3 md:grid-cols-2">
+      <div class="flex items-end gap-2">
+        <div class="min-w-0 grow">
+          <.typography tag="label" size="2xs" color="deemphasized">
+            Revoke device id
+          </.typography>
+          <input
+            type="text"
+            class="ac-text-input w-full"
+            value={@revoke_target}
+            phx-keyup="update-revoke-target"
+            phx-debounce="150"
+            name="value"
+            placeholder="spike-zane-device-2"
+          />
+        </div>
+        <button
+          class="ac-primary-button whitespace-nowrap px-3 py-2"
+          phx-click="revoke-target-device"
+        >
+          Revoke
+        </button>
       </div>
-      <button
-        class="ac-primary-button whitespace-nowrap px-3 py-2"
-        phx-click="revoke-target-device"
-      >
-        Revoke
-      </button>
-    </div>
 
-    <div class="flex items-end gap-2">
-      <div class="min-w-0 grow">
-        <.typography tag="label" size="2xs" color="deemphasized">Recovery ref</.typography>
-        <input
-          type="text"
-          class="ac-text-input w-full"
-          value={@recovery_ref}
-          phx-keyup="update-recovery-ref"
-          phx-debounce="150"
-          name="value"
-          placeholder="spike-recovery-..."
-        />
+      <div class="flex items-end gap-2">
+        <div class="min-w-0 grow">
+          <.typography tag="label" size="2xs" color="deemphasized">Recovery ref</.typography>
+          <input
+            type="text"
+            class="ac-text-input w-full"
+            value={@recovery_ref}
+            phx-keyup="update-recovery-ref"
+            phx-debounce="150"
+            name="value"
+            placeholder="spike-recovery-..."
+          />
+        </div>
+        <button
+          class="ac-primary-button whitespace-nowrap px-3 py-2"
+          phx-click="recover-conversation-security-state"
+        >
+          Recover
+        </button>
       </div>
-      <button
-        class="ac-primary-button whitespace-nowrap px-3 py-2"
-        phx-click="recover-conversation-security-state"
-      >
-        Recover
-      </button>
-    </div>
 
-    <div class="flex gap-2 md:col-span-2">
-      <button
-        class="ac-primary-button px-3 py-2"
-        phx-click="reset-conversation-security-state"
-      >
-        Reset Security State
-      </button>
-      <button class="ac-primary-button px-3 py-2" phx-click="reload-history">
-        Reload History
-      </button>
-    </div>
-  </section>
+      <div class="flex gap-2 md:col-span-2">
+        <button
+          class="ac-primary-button px-3 py-2"
+          phx-click="reset-conversation-security-state"
+        >
+          Reset Security State
+        </button>
+        <button class="ac-primary-button px-3 py-2" phx-click="reload-history">
+          Reload History
+        </button>
+      </div>
+    </section>
+  <% end %>
 
   <div
     id="messages-scroll-container"
@@ -156,7 +166,7 @@
       <div
         id={dom_id}
         class={[
-          "flex max-w-[92%] flex-col",
+          "flex max-w-sm flex-col",
           cond do
             message.system_message -> "self-center items-center"
             message.outgoing -> "self-end items-end"
@@ -165,8 +175,9 @@
         ]}
       >
         <div class="mb-1 flex items-baseline gap-2">
+          <%!-- sender_name renders the resolved username; "Family Member" is a fallback when sender record is not preloaded --%>
           <.typography tag="span" size="md" color="main"><%= message.sender_name %></.typography>
-          <.typography tag="span" size="2xs" color="deemphasized"><%= Calendar.strftime(message.timestamp, "%H:%M:%S") %></.typography>
+          <.typography tag="span" size="2xs" color="deemphasized"><%= Calendar.strftime(message.timestamp, "%H:%M") %></.typography>
         </div>
         <div class={[
           "ac-chat-bubble",
@@ -188,26 +199,26 @@
   </div>
 
   <div class="ac-input-area shrink-0 p-md pb-xl">
-    <div class="relative flex items-center gap-sm">
+    <form phx-submit="send-message" class="relative flex items-center gap-sm">
       <input
         type="text"
         id="message-input"
         class="ac-text-input grow"
-        placeholder="Type a message..."
+        placeholder={gettext("Type a message…")}
         value={@current_message}
         phx-keyup="update-message"
         phx-debounce="100"
-        onkeyup="if(event.key === 'Enter') { document.getElementById('send-message-button').click(); }"
+        name="value"
       />
       <button
         id="send-message-button"
+        type="submit"
         class="ac-primary-button shrink-0"
-        phx-click="send-message"
         disabled={!@channel_joined or String.trim(@current_message || "") == ""}
       >
         <Heroicons.paper_airplane solid class="h-5 w-5" />
       </button>
-    </div>
+    </form>
   </div>
 
   <script>
@@ -221,4 +232,5 @@
     document.addEventListener('DOMContentLoaded', scrollToBottom);
   </script>
 </div>
+  <% end %>
 <% end %>

@@ -20,17 +20,24 @@ defmodule FamichatWeb.HomeLive do
 
       case conversations do
         [conversation | _] ->
-          {:ok,
-           base_socket
-           |> assign(conversation_id: conversation.id)
-           |> load_messages(conversation.id, user.id)}
+          result_socket =
+            base_socket
+            |> assign(conversation_id: conversation.id)
+            |> load_messages(conversation.id, user.id)
+
+          # Auto-connect the channel when the LiveView is connected (not static render).
+          if connected?(result_socket) do
+            send(self(), :auto_connect)
+          end
+
+          {:ok, result_socket}
 
         [] ->
           {:ok,
            base_socket
            |> assign(
              conversation_id: nil,
-             error_message: "No conversations found for this user."
+             error_message: nil
            )
            |> stream(:messages, [], reset: true)}
       end
@@ -61,7 +68,8 @@ defmodule FamichatWeb.HomeLive do
       recovery_ref: default_recovery_ref(),
       recovery_last_status: nil,
       last_seen_message_id: nil,
-      mls_enforcement_enabled: Application.get_env(:famichat, :mls_enforcement, false)
+      mls_enforcement_enabled: Application.get_env(:famichat, :mls_enforcement, false),
+      dev_mode: Application.get_env(:famichat, :environment) == :dev
     )
   end
 
@@ -136,7 +144,8 @@ defmodule FamichatWeb.HomeLive do
        recovery_ref: default_recovery_ref(),
        recovery_last_status: nil,
        last_seen_message_id: nil,
-       mls_enforcement_enabled: Application.get_env(:famichat, :mls_enforcement, false)
+       mls_enforcement_enabled: Application.get_env(:famichat, :mls_enforcement, false),
+       dev_mode: Application.get_env(:famichat, :environment) == :dev
      )
      |> stream(:messages, [], reset: true)}
   end
@@ -450,6 +459,44 @@ defmodule FamichatWeb.HomeLive do
        error_message: "Security state: #{reason} (#{action})"
      )
      |> put_system_notice("Security state changed: #{reason} (#{action}).")}
+  end
+
+  @impl true
+  def handle_info(:auto_connect, socket) do
+    # Triggered on connected mount to join the channel without user interaction.
+    # Reuses the same logic as handle_event("connect-channel").
+    if socket.assigns.channel_joined do
+      {:noreply, socket}
+    else
+      user_id = socket.assigns.user_id
+      device_id = socket.assigns.device_id
+      live_socket_id = socket.id
+
+      case Sessions.issue_channel_token(user_id, device_id, live_socket_id) do
+        {:ok, channel_token} ->
+          {:noreply, push_event(socket, "connect_channel", %{channel_token: channel_token})}
+
+        {:error, reason} when reason in [:revoked, :device_not_found, :trust_required, :trust_expired] ->
+          reason_text = reason_to_string(reason)
+
+          {:noreply,
+           socket
+           |> assign(
+             channel_joined: false,
+             topic: nil,
+             security_reason: reason_text,
+             security_action: security_action_for_reason(reason_text),
+             error_message: "Cannot connect: #{message_error_text(reason_text)}"
+           )
+           |> put_system_notice("Connection blocked: #{reason_text}.")}
+
+        {:error, reason} ->
+          {:noreply,
+           assign(socket,
+             error_message: "Cannot issue channel token: #{inspect(reason)}"
+           )}
+      end
+    end
   end
 
   @impl true
