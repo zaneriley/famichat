@@ -34,6 +34,7 @@ defmodule Famichat.Auth.Sessions do
 
   @access_kind :access
   @refresh_kind :session_refresh
+  @channel_bootstrap_kind :channel_bootstrap
   @refresh_ttl Policy.default_ttl(@refresh_kind)
   @client_revocation_reason "auth_device_revoked"
   @user_revocation_reason "auth_user_revoked"
@@ -175,6 +176,46 @@ defmodule Famichat.Auth.Sessions do
       {:ok, %{user_id: device.user_id, device_id: device.device_id}}
     else
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Issues a short-lived channel bootstrap token scoped to the given device
+  and live socket ID. The token is for one-time use on WS connect only
+  and is delivered over the already-authenticated LiveView WebSocket,
+  never placed in the DOM.
+  """
+  @spec issue_channel_token(Ecto.UUID.t(), String.t(), String.t()) ::
+          {:ok, String.t()} | {:error, term()}
+  def issue_channel_token(user_id, device_id, socket_id)
+      when is_binary(user_id) and is_binary(device_id) and is_binary(socket_id) do
+    with :ok <- device_access_state(user_id, device_id) do
+      payload = %{
+        "user_id" => user_id,
+        "device_id" => device_id,
+        "socket_id" => socket_id
+      }
+
+      case Tokens.issue(@channel_bootstrap_kind, payload) do
+        {:ok, %IssuedToken{raw: raw}} -> {:ok, raw}
+        error -> error
+      end
+    end
+  end
+
+  @doc """
+  Verifies a channel bootstrap token. Returns the user_id and device_id
+  on success. The caller (UserSocket) is responsible for final device
+  state checks after verification.
+  """
+  @spec verify_channel_token(String.t()) ::
+          {:ok, %{user_id: Ecto.UUID.t(), device_id: String.t()}} | {:error, term()}
+  def verify_channel_token(token) when is_binary(token) do
+    with {:ok, payload} <- Tokens.verify(@channel_bootstrap_kind, token),
+         {:ok, device} <- DeviceStore.fetch(payload["device_id"]),
+         :ok <- ensure_device_matches(device, payload["user_id"]),
+         :ok <- ensure_trust_active(device, allow_nil: true) do
+      {:ok, %{user_id: device.user_id, device_id: device.device_id}}
     end
   end
 

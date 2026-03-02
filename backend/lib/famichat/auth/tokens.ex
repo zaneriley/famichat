@@ -35,6 +35,7 @@ defmodule Famichat.Auth.Tokens do
           | :recovery
           | :access
           | :session_refresh
+          | :channel_bootstrap
 
   @typedoc "Legacy aliases accepted temporarily for compatibility."
   @type legacy_kind_alias :: :passkey_reg | :passkey_assert | :device_refresh

@@ -10,8 +10,8 @@ defmodule FamichatWeb.HomeLive do
   alias Famichat.Repo
 
   @impl true
-  def mount(params, _session, socket) do
-    token = params["token"]
+  def mount(params, session, socket) do
+    token = session["access_token"] || params["token"]
 
     with {:ok, {user_id, device_id}} <- ensure_token_valid(token),
          {:ok, user} <- Identity.fetch_user(user_id),
@@ -42,7 +42,7 @@ defmodule FamichatWeb.HomeLive do
   # Sets all common socket assigns shared across every mount path (success and
   # empty-conversations). Keeping this in one place means adding a new assign
   # only requires touching this function and assign_auth_error/2.
-  defp assign_socket_state(socket, user, device_id, token, params) do
+  defp assign_socket_state(socket, user, device_id, _token, params) do
     assign(socket,
       channel_joined: false,
       conversation_type: "family",
@@ -52,7 +52,8 @@ defmodule FamichatWeb.HomeLive do
       test_username: nil,
       error_message: nil,
       auth_error: nil,
-      auth_token: token,
+      # auth_token is intentionally NOT assigned — it must not appear in the DOM.
+      # The channel bootstrap token is issued on demand via handle_event("connect-channel").
       topic: nil,
       security_reason: nil,
       security_action: nil,
@@ -128,7 +129,6 @@ defmodule FamichatWeb.HomeLive do
        test_username: nil,
        error_message: "Authentication failed: #{inspect(reason)}",
        auth_error: reason,
-       auth_token: nil,
        topic: nil,
        security_reason: nil,
        security_action: nil,
@@ -146,14 +146,20 @@ defmodule FamichatWeb.HomeLive do
     if socket.assigns.channel_joined do
       {:noreply, push_event(socket, "disconnect_channel", %{})}
     else
-      case Sessions.device_access_state(
-             socket.assigns.user_id,
-             socket.assigns.device_id
-           ) do
-        :ok ->
-          {:noreply, push_event(socket, "connect_channel", %{})}
+      user_id = socket.assigns.user_id
+      device_id = socket.assigns.device_id
+      # socket.id is the LiveView socket ID — a stable identifier for this
+      # specific LiveView process. Scoping the channel token to it means
+      # the token cannot be replayed in a different LiveView session.
+      live_socket_id = socket.id
 
-        {:error, reason} ->
+      case Sessions.issue_channel_token(user_id, device_id, live_socket_id) do
+        {:ok, channel_token} ->
+          # Push the token to the hook. It is delivered over the
+          # already-authenticated LiveView WebSocket — not in the DOM.
+          {:noreply, push_event(socket, "connect_channel", %{channel_token: channel_token})}
+
+        {:error, reason} when reason in [:revoked, :device_not_found, :trust_required, :trust_expired] ->
           reason_text = reason_to_string(reason)
 
           {:noreply,
@@ -166,6 +172,12 @@ defmodule FamichatWeb.HomeLive do
              error_message: "Cannot connect: #{message_error_text(reason_text)}"
            )
            |> put_system_notice("Connection blocked: #{reason_text}.")}
+
+        {:error, reason} ->
+          {:noreply,
+           assign(socket,
+             error_message: "Cannot issue channel token: #{inspect(reason)}"
+           )}
       end
     end
   end

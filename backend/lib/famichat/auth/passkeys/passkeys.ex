@@ -93,18 +93,58 @@ defmodule Famichat.Auth.Passkeys do
   end
 
   defp do_issue_assertion_for_identifier(identifier) do
-    key = passkey_identifier_key(identifier)
+    # Reject any map that supplies only `user_id` and no accepted public lookup
+    # key. The unauthenticated assert-challenge endpoint must not accept UUID
+    # lookups: a nonexistent UUID returns a different path through Identity than
+    # a missing identifier, enabling user-ID enumeration. Only `username` (or
+    # `email` as a fallback) are valid for unauthenticated challenges.
+    with :ok <- reject_user_id_only(identifier) do
+      normalized = normalize_identifier(identifier)
+      key = passkey_identifier_key(normalized)
 
-    with :ok <-
-           RateLimit.check(:"passkey.assertion", key, limit: 10, interval: 60),
-         {:ok, user} <- Identity.resolve_user(identifier),
-         {:ok, challenge} <- issue_assertion_challenge(user, []) do
-      {:ok, challenge}
-    else
-      {:error, {:rate_limited, retry}} -> {:error, {:rate_limited, retry}}
-      other -> other
+      with :ok <-
+             RateLimit.check(:"passkey.assertion", key, limit: 10, interval: 60),
+           {:ok, user} <- Identity.resolve_user(reject_user_id_key(normalized)),
+           {:ok, challenge} <- issue_assertion_challenge(user, []) do
+        {:ok, challenge}
+      else
+        {:error, {:rate_limited, retry}} -> {:error, {:rate_limited, retry}}
+        other -> other
+      end
     end
   end
+
+  defp normalize_identifier(params) when is_map(params) do
+    case Map.pop(params, "identifier") do
+      {nil, params} -> params
+      {value, params} -> Map.put(params, "username", value)
+    end
+  end
+
+  defp normalize_identifier(params), do: params
+
+  # Returns {:error, :invalid_identifier} when the map supplies `user_id` but
+  # no `username` or `email`. A binary identifier (raw string) is always allowed.
+  defp reject_user_id_only(identifier) when is_map(identifier) do
+    has_user_id = Map.has_key?(identifier, "user_id")
+    has_public_key = Map.has_key?(identifier, "username") or Map.has_key?(identifier, "email")
+
+    if has_user_id and not has_public_key do
+      {:error, :invalid_identifier}
+    else
+      :ok
+    end
+  end
+
+  defp reject_user_id_only(_identifier), do: :ok
+
+  # Strips the `user_id` key from a map before forwarding to Identity.resolve_user/1
+  # so that even a map containing both `user_id` and `username` cannot trigger
+  # the user_id lookup path in Identity.resolve_user/1.
+  defp reject_user_id_key(identifier) when is_map(identifier),
+    do: Map.delete(identifier, "user_id")
+
+  defp reject_user_id_key(identifier), do: identifier
 
   @doc """
   Issues an assertion (authentication) challenge for the provided user.
@@ -612,21 +652,12 @@ defmodule Famichat.Auth.Passkeys do
         @assertion_type -> assertion_options(user, challenge_b64, opts)
       end
 
-    legacy_payload = %{
+    %{
       "challenge" => challenge_b64,
       "challenge_handle" => handle,
       "expires_at" => expires_at,
       "public_key_options" => public_key_options
     }
-
-    atom_payload = %{
-      challenge: challenge_b64,
-      challenge_handle: handle,
-      expires_at: expires_at,
-      public_key_options: public_key_options
-    }
-
-    Map.merge(legacy_payload, atom_payload)
   end
 
   defp registration_options(user, challenge_b64, _opts) do

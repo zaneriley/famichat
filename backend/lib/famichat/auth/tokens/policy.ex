@@ -138,6 +138,15 @@ defmodule Famichat.Auth.Tokens.Policy do
                 max_ttl: 90 * 24 * 60 * 60,
                 audience: :device,
                 subject_strategy: :device_id
+              },
+              channel_bootstrap: %Definition{
+                kind: :channel_bootstrap,
+                storage: :signed,
+                ttl: 60,
+                max_ttl: 120,
+                audience: :device,
+                signing_salt: "channel_bootstrap_v1",
+                subject_strategy: :device_id
               }
             })
 
@@ -152,7 +161,8 @@ defmodule Famichat.Auth.Tokens.Policy do
     otp: "otp",
     recovery: "recovery",
     access: nil,
-    session_refresh: "device_refresh"
+    session_refresh: "device_refresh",
+    channel_bootstrap: nil
   }
 
   @doc "Returns the canonical policy for the provided token kind."

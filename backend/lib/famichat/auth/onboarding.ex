@@ -67,7 +67,7 @@ defmodule Famichat.Auth.Onboarding do
   def issue_invite(_, _, _), do: {:error, :invalid_role}
 
   @spec bootstrap_admin(String.t(), map()) ::
-          {:ok, %{user: User.t(), family: Famichat.Chat.Family.t()}}
+          {:ok, %{user: User.t(), family: Famichat.Chat.Family.t(), passkey_register_token: String.t()}}
           | {:error, :admin_exists}
           | {:error, :invalid_input}
           | {:error, :username_required}
@@ -113,7 +113,12 @@ defmodule Famichat.Auth.Onboarding do
             %{user_id: user.id, family_id: family.id}
           )
 
-          {:ok, %{user: user, family: family}}
+          {:ok, %IssuedToken{raw: register_token}} =
+            Tokens.issue(:passkey_registration, %{"user_id" => user.id},
+              user_id: user.id
+            )
+
+          {:ok, %{user: user, family: family, passkey_register_token: register_token}}
 
         {:error, :check_admin, :admin_exists, _} ->
           {:error, :admin_exists}
@@ -168,6 +173,25 @@ defmodule Famichat.Auth.Onboarding do
     end)
   end
 
+  @doc """
+  Validates an invite token without consuming it.
+
+  Returns `:ok` if the token exists and is valid (not expired, not used).
+  Returns `{:error, :invalid}`, `{:error, :expired}`, or `{:error, :used}`
+  for invalid tokens.
+
+  Used by `FamichatWeb.Plugs.ValidateInviteToken` to gate the invite route
+  at the HTTP layer before the LiveView mounts.
+  """
+  @spec validate_invite_token(String.t()) ::
+          :ok | {:error, :invalid | :expired | :used}
+  def validate_invite_token(raw_token) when is_binary(raw_token) do
+    case Tokens.fetch(:invite, raw_token) do
+      {:ok, _invite} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @spec accept_invite(String.t()) ::
           {:ok, %{payload: map(), registration_token: String.t()}}
           | {:error, term()}
@@ -200,6 +224,59 @@ defmodule Famichat.Auth.Onboarding do
     else
       {:error, {:rate_limited, retry}} -> {:error, {:rate_limited, retry}}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Fetches the sanitized payload of a previously-accepted invite token and
+  re-issues a fresh registration token. Does NOT consume the token. Used by
+  InviteLive to recover payload on WebSocket reconnect after the invite has
+  already been accepted (the `:used` path).
+
+  Returns `{:ok, payload, registration_token}` even if `used_at` is set (i.e.,
+  already consumed), as long as the token exists and has not expired.
+  Returns `{:error, :invalid}` if the token does not exist.
+  Returns `{:error, :expired}` if the token has expired.
+  Returns `{:error, :reinvite_needed}` if a new registration token cannot be
+  issued (e.g. missing required payload fields).
+  """
+  @spec peek_invite(String.t()) ::
+          {:ok, map(), String.t()} | {:error, :invalid | :expired | :reinvite_needed}
+  def peek_invite(raw_token) when is_binary(raw_token) do
+    hash = TokenStorage.hash(raw_token)
+    context = Famichat.Auth.Tokens.Policy.legacy_context(:invite)
+
+    case Repo.get_by(Famichat.Accounts.UserToken,
+           context: context,
+           token_hash: hash
+         ) do
+      nil ->
+        {:error, :invalid}
+
+      %Famichat.Accounts.UserToken{expires_at: expires_at} = token ->
+        if DateTime.compare(expires_at, DateTime.utc_now()) == :lt do
+          {:error, :expired}
+        else
+          payload = sanitize_invite_payload(token.payload)
+
+          reg_token_result =
+            sign_invite_registration_token(%{
+              "invite_token_id" => token.id,
+              "family_id" => token.payload["household_id"] || token.payload["family_id"],
+              "role" => token.payload["role"],
+              "email_ciphertext" => Map.get(token.payload, "email_ciphertext"),
+              "email_fingerprint" => Map.get(token.payload, "email_fingerprint"),
+              "inviter_id" => Map.get(token.payload, "inviter_id")
+            })
+
+          case reg_token_result do
+            registration_token when is_binary(registration_token) ->
+              {:ok, payload, registration_token}
+
+            _ ->
+              {:error, :reinvite_needed}
+          end
+        end
     end
   end
 
@@ -246,10 +323,19 @@ defmodule Famichat.Auth.Onboarding do
 
   @spec complete_registration(String.t(), map()) ::
           {:ok, %{user: User.t(), passkey_register_token: String.t()}}
-          | {:error, term()}
+          | {:error, :invalid_registration_token}
+          | {:error, :expired_registration_token}
+          | {:error, :invalid_registration}
+          | {:error, :rate_limited, retry_in :: pos_integer()}
+          | {:error, :user_not_found}
+          | {:error, :email_required}
+          | {:error, :email_mismatch}
+          | {:error, :family_not_found}
+          | {:error, Ecto.Changeset.t()}
   def complete_registration(registration_token, attrs)
       when is_binary(registration_token) and is_map(attrs) do
-    with {:ok, claims} <- verify_invite_registration_token(registration_token),
+    with {:verify, {:ok, claims}} <-
+           {:verify, verify_invite_registration_token(registration_token)},
          rate_key <- claims["invite_token_id"] || registration_token,
          :ok <-
            RateLimit.check(@invite_complete_bucket, rate_key,
@@ -292,6 +378,21 @@ defmodule Famichat.Auth.Onboarding do
         {:error, reason} ->
           {:error, reason}
       end
+    else
+      {:verify, {:error, :expired}} ->
+        {:error, :expired_registration_token}
+
+      {:verify, {:error, :invalid}} ->
+        {:error, :invalid_registration_token}
+
+      {:verify, {:error, :missing}} ->
+        {:error, :invalid_registration_token}
+
+      {:error, {:rate_limited, retry_in}} ->
+        {:error, {:rate_limited, retry_in}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
