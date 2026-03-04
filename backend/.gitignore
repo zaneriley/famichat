@@ -22,6 +22,9 @@
 priv/content
 priv/static/*
 !priv/static/.keep
+priv/native/*.so
+priv/native/*.dylib
+priv/native/*.dll
 
 .env*
 !.env.example

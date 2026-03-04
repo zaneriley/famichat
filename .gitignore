@@ -30,6 +30,9 @@ spikes/openmls-wasm/test-results/
 priv/content
 priv/static/*
 !priv/static/.keep
+backend/priv/native/*.so
+backend/priv/native/*.dylib
+backend/priv/native/*.dll
 
 .env*
 !.env.example
