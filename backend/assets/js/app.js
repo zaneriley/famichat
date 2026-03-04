@@ -7,6 +7,8 @@ import ThemeSwitcherHook from "./hooks/theme_switcher_hook";
 import MessageChannelHook from "./hooks/message_channel_hook";
 import PasskeyLoginHook from "./hooks/passkey_login_hook";
 import PasskeyRegisterHook from "./hooks/passkey_register_hook";
+import PasskeyAdminSetupHook from "./hooks/passkey_admin_setup_hook";
+import CopyToClipboardHook from "./hooks/copy_to_clipboard_hook";
 
 // More advanced debugging
 if (window.location.search.includes("debug=1")) {
@@ -40,6 +42,8 @@ const Hooks = {
   MessageChannel: MessageChannelHook,
   PasskeyLogin: PasskeyLoginHook,
   PasskeyRegister: PasskeyRegisterHook,
+  PasskeyAdminSetup: PasskeyAdminSetupHook,
+  CopyToClipboard: CopyToClipboardHook,
 };
 
 // Get CSRF token

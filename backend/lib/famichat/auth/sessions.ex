@@ -51,46 +51,58 @@ defmodule Famichat.Auth.Sessions do
 
   defp do_start_session(%User{} = user, device_info, opts)
        when is_map(device_info) do
-    want_remember? =
-      Keyword.get(opts, :remember_device?, Keyword.get(opts, :remember, false))
+    with :ok <- assert_user_sessionable(user) do
+      want_remember? =
+        Keyword.get(opts, :remember_device?, Keyword.get(opts, :remember, false))
 
-    can_remember? = policy_allows_remembering?(user)
-    should_remember? = want_remember? and can_remember?
+      can_remember? = policy_allows_remembering?(user)
+      should_remember? = want_remember? and can_remember?
 
-    if want_remember? and not can_remember? do
-      Logger.info(
-        "[Sessions] Device remember requested but denied by user policy",
-        user_id: user.id
-      )
-    end
-
-    Repo.transaction(fn ->
-      with {:ok, normalized} <- DeviceStore.normalize_info(device_info),
-           {:ok, device} <-
-             DeviceStore.upsert(
-               user,
-               normalized,
-               should_remember?,
-               @refresh_ttl
-             ),
-           {:ok, tokens, _user_id, updated_device} <-
-             issue_session_tokens(user, device) do
-        telemetry(:start, %{
-          user_id: user.id,
-          device_id: updated_device.device_id,
-          remembered: should_remember?
-        })
-
-        tokens
-      else
-        {:error, reason} -> Repo.rollback(reason)
+      if want_remember? and not can_remember? do
+        Logger.info(
+          "[Sessions] Device remember requested but denied by user policy",
+          user_id: user.id
+        )
       end
-    end)
+
+      Repo.transaction(fn ->
+        with {:ok, normalized} <- DeviceStore.normalize_info(device_info),
+             {:ok, device} <-
+               DeviceStore.upsert(
+                 user,
+                 normalized,
+                 should_remember?,
+                 @refresh_ttl
+               ),
+             {:ok, tokens, _user_id, updated_device} <-
+               issue_session_tokens(user, device) do
+          telemetry(:start, %{
+            user_id: user.id,
+            device_id: updated_device.device_id,
+            remembered: should_remember?
+          })
+
+          tokens
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+    end
   end
 
   defp do_start_session(user, device_info, opts) do
     do_start_session(user, Map.new(device_info), opts)
   end
+
+  # Reject users that are not yet fully active. Pending users have no passkey
+  # yet and must complete the registration ceremony before getting a session.
+  # Locked and deleted users must not be able to start sessions.
+  defp assert_user_sessionable(%User{status: status})
+       when status in [:locked, :deleted, :pending] do
+    {:error, :user_not_active}
+  end
+
+  defp assert_user_sessionable(%User{}), do: :ok
 
   @spec refresh_session(String.t(), String.t()) ::
           {:ok, map()} | {:error, term()}

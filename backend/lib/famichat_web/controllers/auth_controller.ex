@@ -168,12 +168,13 @@ defmodule FamichatWeb.AuthController do
   end
 
   def complete_invite(conn, params) do
-    # Token is the auth credential — validate it cryptographically first,
-    # before checking other params like username.
+    # Token is the auth credential — validate it by fetching the ledgered record
+    # first, before checking other params like username. Fetching (not verifying)
+    # enforces single-use: a consumed token returns {:error, :used} here.
     with {:token, {:ok, registration_token}} <-
            {:token, registration_token_from(conn, params)},
-         {:verify, {:ok, _claims}} <-
-           {:verify, Tokens.verify(:invite_registration, registration_token)} do
+         {:fetch, {:ok, _reg_record}} <-
+           {:fetch, Tokens.fetch(:invite_registration, registration_token)} do
       rate_limit_token!(conn, :invite_register, registration_token)
 
       username = Map.get(params, "username")
@@ -205,6 +206,11 @@ defmodule FamichatWeb.AuthController do
             |> put_status(:unauthorized)
             |> json(%{error: %{code: "expired_registration_token"}})
 
+          {:error, :used_registration_token} ->
+            conn
+            |> put_status(:gone)
+            |> json(%{error: %{code: "used_registration_token"}})
+
           {:error, :user_not_found} ->
             conn
             |> put_status(:not_found)
@@ -224,6 +230,11 @@ defmodule FamichatWeb.AuthController do
             conn
             |> put_status(:unprocessable_entity)
             |> json(%{error: %{code: "email_mismatch"}})
+
+          {:error, :username_taken} ->
+            conn
+            |> put_status(:conflict)
+            |> json(%{error: %{code: "username_taken"}})
 
           {:error, %Ecto.Changeset{}} ->
             conn
@@ -250,12 +261,17 @@ defmodule FamichatWeb.AuthController do
         |> put_status(:unauthorized)
         |> json(%{error: %{code: "missing_registration_token"}})
 
-      {:verify, {:error, :expired}} ->
+      {:fetch, {:error, :expired}} ->
         conn
         |> put_status(:unauthorized)
         |> json(%{error: %{code: "expired_registration_token"}})
 
-      {:verify, {:error, _}} ->
+      {:fetch, {:error, :used}} ->
+        conn
+        |> put_status(:gone)
+        |> json(%{error: %{code: "used_registration_token"}})
+
+      {:fetch, {:error, _}} ->
         conn
         |> put_status(:unauthorized)
         |> json(%{error: %{code: "invalid_registration_token"}})

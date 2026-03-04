@@ -1,35 +1,26 @@
 /**
- * PasskeyRegisterHook — Phoenix LiveView hook for passkey registration.
+ * PasskeyAdminSetupHook — Phoenix LiveView hook for admin passkey registration.
  *
- * Reads `registration_token` and `username` from the element's data attributes,
- * then drives the full WebAuthn registration ceremony:
+ * Like PasskeyRegisterHook but SKIPS step 1 (complete_invite). The passkey
+ * register token is provided directly via the element's data-passkey-register-token
+ * attribute, set by the LiveView after bootstrap_admin succeeds.
  *
- *   1. POST /api/v1/auth/invites/complete  → passkey_register_token
+ *   1. Read data-passkey-register-token from the element
  *   2. POST /api/v1/auth/passkeys/register/challenge → WebAuthn options
  *   3. navigator.credentials.create(options)
- *   4. POST /api/v1/auth/passkeys/register  → success
- *   5. pushEvent("register-success") → LiveView redirects to login
+ *   4. POST /api/v1/auth/passkeys/register → success
+ *   5. pushEvent("register-success") → LiveView advances to next step
  *
- * On any failure pushEvent("register-error", { code, message }) so the LiveView
- * can surface a user-visible error.
+ * On any failure: pushEvent("register-error", { code, message })
  *
  * Retry logic
  * -----------
- * Steps 1 and 2 are expensive and consume server-side resources. When the user
- * cancels the biometric prompt (NotAllowedError) and taps the button again, we
- * skip as many already-completed steps as possible:
+ * When the user cancels the biometric prompt (NotAllowedError) and taps the
+ * button again, we skip Step 2 if a fresh challenge_handle is cached:
  *
- *   Priority 1 — hasFreshHandle:
- *     this._challengeHandle, this._challengeExpiresAt, and this._cachedPublicKey
- *     are set after Step 2. If the handle has not expired, skip Steps 1 and 2
- *     and jump directly to Step 3 using the cached values.
- *
- *   Priority 2 — this._passkeyRegisterToken:
- *     Set after Step 1. If present (but no fresh challenge), skip Step 1 only
- *     and re-run Step 2 to get a fresh challenge.
- *
- *   Priority 3 — no cache:
- *     Full flow from Step 1.
+ *   hasFreshHandle: this._challengeHandle, this._challengeExpiresAt, and
+ *     this._cachedPublicKey are all set after Step 2. If the handle has not
+ *     expired, jump directly to Step 3 using the cached values.
  *
  * State is cleared on fatal errors (NotSupportedError) and on success.
  * State is preserved on recoverable errors (NotAllowedError, AbortError, network).
@@ -41,9 +32,9 @@ import { bufferToBase64url, base64urlToBuffer, getCsrfToken, friendlyWebAuthnErr
 // Hook
 // ---------------------------------------------------------------------------
 
-const PasskeyRegisterHook = {
+const PasskeyAdminSetupHook = {
   mounted() {
-    console.log("[PasskeyRegister] Hook mounted", { el: this.el.id });
+    console.log("[PasskeyAdminSetup] Hook mounted", { el: this.el.id });
 
     this._csrfToken = getCsrfToken();
     this._clickHandler = () => this.startRegistration();
@@ -59,18 +50,16 @@ const PasskeyRegisterHook = {
    * Clears all cached retry state. Call on fatal errors and on success.
    */
   _clearRetryState() {
-    this._passkeyRegisterToken = null;
     this._challengeHandle = null;
     this._challengeExpiresAt = null;
     this._cachedPublicKey = null;
   },
 
   async startRegistration() {
-    const registrationToken = this.el.dataset.registrationToken;
-    const username = this.el.dataset.username;
+    const passkeyRegisterToken = this.el.dataset.passkeyRegisterToken;
 
-    if (!registrationToken) {
-      console.error("[PasskeyRegister] Missing registration_token on element");
+    if (!passkeyRegisterToken) {
+      console.error("[PasskeyAdminSetup] Missing data-passkey-register-token on element");
       this.pushEvent("register-error", {
         code: "missing_registration_token",
         message: this._friendlyServerError("missing_registration_token"),
@@ -78,22 +67,11 @@ const PasskeyRegisterHook = {
       return;
     }
 
-    if (!username) {
-      console.error("[PasskeyRegister] Missing username on element");
-      this.pushEvent("register-error", {
-        code: "network",
-        message: friendlyWebAuthnError(null),
-      });
-      return;
-    }
-
     // -------------------------------------------------------------------------
-    // Determine which steps to skip based on cached retry state.
+    // Determine whether to skip Step 2 based on cached retry state.
     //
-    // Priority order (most skips first):
-    //   1. Fresh challenge_handle + cached decoded options → skip Steps 1 and 2
-    //   2. Cached passkeyRegisterToken → skip Step 1 only
-    //   3. No cache → full flow
+    // If a fresh challenge_handle is cached (from a previous attempt in this
+    // hook's lifetime), skip the challenge fetch entirely and jump to Step 3.
     // -------------------------------------------------------------------------
     const now = new Date();
     const handleExpiry = this._challengeExpiresAt ? new Date(this._challengeExpiresAt) : null;
@@ -110,66 +88,15 @@ const PasskeyRegisterHook = {
       if (hasFreshHandle) {
         // -----------------------------------------------------------------------
         // Fast path: reuse cached challenge_handle and decoded public key options.
-        // Skips Steps 1 and 2 entirely — the invite token is not re-consumed.
+        // Skips Step 2 — no additional server round-trip needed.
         // -----------------------------------------------------------------------
-        console.log("[PasskeyRegister] Reusing cached challenge_handle, skipping Steps 1+2");
+        console.log("[PasskeyAdminSetup] Reusing cached challenge_handle, skipping Step 2");
         challengeHandle = this._challengeHandle;
         publicKeyOptions = this._cachedPublicKey;
       } else {
         // -----------------------------------------------------------------------
-        // Step 1: Complete invite registration — exchange registration_token +
-        //         username for a passkey_register_token.
-        //         Skipped if we already have a cached token from a prior attempt.
-        // -----------------------------------------------------------------------
-        let passkeyRegisterToken;
-
-        if (this._passkeyRegisterToken) {
-          console.log("[PasskeyRegister] Reusing cached passkey_register_token, skipping Step 1");
-          passkeyRegisterToken = this._passkeyRegisterToken;
-        } else {
-          const completeRes = await fetch("/api/v1/auth/invites/complete", {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-              "x-csrf-token": this._csrfToken,
-            },
-            body: JSON.stringify({
-              registration_token: registrationToken,
-              username: username,
-            }),
-          });
-
-          if (!completeRes.ok) {
-            const body = await completeRes.json().catch(() => ({}));
-            const code = body?.error?.code || "invite_completion_failed";
-            console.error("[PasskeyRegister] complete_invite failed", code);
-            this.pushEvent("register-error", {
-              code: code,
-              message: this._friendlyServerError(code),
-            });
-            return;
-          }
-
-          const completeData = await completeRes.json();
-          passkeyRegisterToken = completeData.passkey_register_token;
-
-          if (!passkeyRegisterToken) {
-            console.error("[PasskeyRegister] No passkey_register_token in response");
-            this.pushEvent("register-error", {
-              code: "passkey_registration_failed",
-              message: this._friendlyServerError("passkey_registration_failed"),
-            });
-            return;
-          }
-
-          // Cache the token so subsequent retries skip Step 1.
-          this._passkeyRegisterToken = passkeyRegisterToken;
-          this.pushEvent("step1-complete", { passkey_register_token: passkeyRegisterToken });
-        }
-
-        // -----------------------------------------------------------------------
-        // Step 2: Fetch WebAuthn registration challenge.
+        // Step 2: Fetch WebAuthn registration challenge using the passkey register
+        //         token directly (no invite completion step needed for admin setup).
         // -----------------------------------------------------------------------
         const challengeRes = await fetch(
           "/api/v1/auth/passkeys/register/challenge",
@@ -187,7 +114,7 @@ const PasskeyRegisterHook = {
         if (!challengeRes.ok) {
           const body = await challengeRes.json().catch(() => ({}));
           const code = body?.error?.code || "challenge_failed";
-          console.error("[PasskeyRegister] challenge request failed", code);
+          console.error("[PasskeyAdminSetup] challenge request failed", code);
           this.pushEvent("register-error", {
             code: code,
             message: this._friendlyServerError(code),
@@ -200,11 +127,11 @@ const PasskeyRegisterHook = {
         publicKeyOptions = this.decodeCreationOptions(challengeData.public_key_options);
 
         // Cache challenge_handle, decoded options, and expiry so the next retry
-        // can skip Steps 1 and 2 entirely.
+        // can skip Step 2 entirely.
         this._challengeHandle = challengeHandle;
         this._challengeExpiresAt = challengeData.expires_at || null;
         this._cachedPublicKey = publicKeyOptions;
-        console.log("[PasskeyRegister] Cached challenge_handle for retry", {
+        console.log("[PasskeyAdminSetup] Cached challenge_handle for retry", {
           expiresAt: this._challengeExpiresAt,
         });
       }
@@ -218,7 +145,7 @@ const PasskeyRegisterHook = {
           publicKey: publicKeyOptions,
         });
       } catch (err) {
-        console.error("[PasskeyRegister] navigator.credentials.create failed", err);
+        console.error("[PasskeyAdminSetup] navigator.credentials.create failed", err);
         const name = err?.name || "";
 
         if (name === "NotSupportedError") {
@@ -252,7 +179,7 @@ const PasskeyRegisterHook = {
       if (!registerRes.ok) {
         const body = await registerRes.json().catch(() => ({}));
         const code = body?.error?.code || "passkey_registration_failed";
-        console.error("[PasskeyRegister] passkey register failed", code);
+        console.error("[PasskeyAdminSetup] passkey register failed", code);
         this.pushEvent("register-error", {
           code: code,
           message: this._friendlyServerError(code),
@@ -261,13 +188,14 @@ const PasskeyRegisterHook = {
       }
 
       // -----------------------------------------------------------------------
-      // Step 5: Success — tell the LiveView to redirect and clear retry state.
+      // Step 5: Success — tell the LiveView to advance to issue_invite step
+      //         and clear retry state.
       // -----------------------------------------------------------------------
-      console.log("[PasskeyRegister] Registration complete");
+      console.log("[PasskeyAdminSetup] Registration complete");
       this._clearRetryState();
       this.pushEvent("register-success", {});
     } catch (err) {
-      console.error("[PasskeyRegister] Unexpected error during registration", err);
+      console.error("[PasskeyAdminSetup] Unexpected error during registration", err);
       this.pushEvent("register-error", {
         code: "network",
         message: friendlyWebAuthnError(err),
@@ -282,16 +210,15 @@ const PasskeyRegisterHook = {
    */
   _friendlyServerError(code) {
     const map = {
-      expired: "This invite has expired. Ask for a new one.",
-      used: "This invite has already been used.",
-      invalid: "This invite link is not valid.",
+      expired: "This setup session has expired. Please reload the page and start again.",
+      used: "This setup token has already been used. Please reload the page.",
+      invalid: "This setup token is not valid. Please reload the page.",
+      invalid_token: "Session expired. Please reload the page and start again.",
       rate_limited: "Too many attempts. Please wait a moment.",
       invalid_challenge: "The setup session expired. Please reload the page.",
       passkey_registration_failed: "Passkey setup failed. Please try again.",
-      missing_registration_token: "Session expired. Please start the invite flow again.",
-      invite_completion_failed: "Registration failed. Please try again.",
+      missing_registration_token: "Session expired. Please reload the page and start again.",
       challenge_failed: "Could not start passkey creation. Please try again.",
-      username_taken: "That name is already taken. Go back and choose a different one.",
     };
     return map[code] || "Something went wrong. Please try again.";
   },
@@ -337,7 +264,6 @@ const PasskeyRegisterHook = {
       attestation_object: bufferToBase64url(response.attestationObject),
     };
   },
-
 };
 
-export default PasskeyRegisterHook;
+export default PasskeyAdminSetupHook;

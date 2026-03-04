@@ -9,6 +9,8 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
   import Phoenix.Controller, only: [redirect: 2]
   require Logger
 
+  alias Famichat.Accounts.FirstRun
+
   @supported_locales Application.compile_env!(:famichat, :supported_locales)
   @default_locale Application.compile_env!(:famichat, :default_locale)
   @max_redirects 4
@@ -54,7 +56,20 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
       # If the URL already contains a supported locale, no redirection is needed
       locale_from_url in @supported_locales ->
         log(:debug, "Supported locale #{locale_from_url} found in URL.")
-        put_session(conn, :redirect_count, 0)
+
+        # First-run gate: if no users exist, redirect to setup page.
+        remaining = conn.assigns[:path_without_locale] || "/"
+
+        if not FirstRun.bootstrapped?() and remaining not in ["/setup", "/setup/"] do
+          log(:info, "First-run detected — redirecting to /#{locale_from_url}/setup")
+
+          conn
+          |> put_session(:redirect_count, 0)
+          |> redirect(to: "/#{locale_from_url}/setup")
+          |> halt()
+        else
+          put_session(conn, :redirect_count, 0)
+        end
 
       # Check if it's a single segment path that's not a locale
       String.split(path, "/", trim: true) |> length() == 1 and

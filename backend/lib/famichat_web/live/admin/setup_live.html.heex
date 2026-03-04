@@ -1,0 +1,236 @@
+<div class="flex flex-col gap-2xl p-2xl">
+  <%= case @step do %>
+    <% :check -> %>
+      <div aria-busy="true" class="flex flex-col items-center gap-md">
+        <span class="animate-spin inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full" aria-hidden="true"></span>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Getting things ready\u2026") %>
+        </.typography>
+      </div>
+
+    <% :bootstrap -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("Welcome to your family space.") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Let\u2019s get you set up. Tell us who you are \u2014 your family will see this name.") %>
+        </.typography>
+      </div>
+
+      <form phx-submit="submit-bootstrap" class="flex flex-col gap-md">
+        <div class="flex flex-col gap-2xs">
+          <label for="username" class="sr-only"><%= gettext("Your name") %></label>
+          <input
+            id="username"
+            type="text"
+            name="username"
+            value={@username}
+            placeholder={gettext("Your name (e.g. Mum, Dad, Grandpa)")}
+            autocomplete="nickname"
+            autocapitalize="words"
+            spellcheck="false"
+            required
+            class="ac-text-input w-full"
+          />
+          <.typography tag="p" size="2xs" color="deemphasized">
+            <%= gettext("This is how your family will know it\u2019s you.") %>
+          </.typography>
+        </div>
+
+        <div class="flex flex-col gap-2xs">
+          <label for="family_name" class="sr-only"><%= gettext("Family name") %></label>
+          <input
+            id="family_name"
+            type="text"
+            name="family_name"
+            value={@family_name}
+            placeholder={gettext("Family name (e.g. The Rileys) \u2014 optional")}
+            autocomplete="organization"
+            spellcheck="false"
+            class="ac-text-input w-full"
+          />
+          <.typography tag="p" size="2xs" color="deemphasized">
+            <%= gettext("Used as the name of your shared space. You can change this later.") %>
+          </.typography>
+        </div>
+
+        <%= if @error do %>
+          <div role="alert">
+            <.typography tag="p" size="2xs" color="callout"><%= error_message(@error) %></.typography>
+          </div>
+        <% end %>
+
+        <button type="submit" class="ac-primary-button w-full">
+          <.typography tag="span" size="md" color="main"><%= gettext("Continue") %></.typography>
+        </button>
+      </form>
+
+    <% :register_passkey -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("Secure your account with a passkey.") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("A passkey is like a fingerprint for your account \u2014 it uses your device\u2019s built-in security (Face ID, Touch ID, Windows Hello, or a PIN) so only you can sign in. No password to forget or lose.") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Your device will ask to confirm it\u2019s you. Follow the prompt and you\u2019re done.") %>
+        </.typography>
+      </div>
+
+      <%= case @error do %>
+        <% {:fatal, _msg} -> %>
+          <div role="alert" class="flex flex-col gap-2xs">
+            <.typography tag="p" size="1xs" color="callout">
+              <%= error_message(@error) %>
+            </.typography>
+          </div>
+          <div class="flex flex-col gap-md">
+            <a href="" class="ac-secondary-button w-full text-center">
+              <.typography tag="span" size="md" color="deemphasized"><%= gettext("Reload page") %></.typography>
+            </a>
+          </div>
+        <% {:retryable, _msg} -> %>
+          <div role="alert" class="flex flex-col gap-2xs">
+            <.typography tag="p" size="1xs" color="callout">
+              <%= error_message(@error) %>
+            </.typography>
+            <.typography tag="p" size="2xs" color="deemphasized">
+              <%= gettext("Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably).") %>
+            </.typography>
+          </div>
+          <div class="flex flex-col gap-md">
+            <button
+              id="passkey-admin-setup-btn"
+              phx-hook="PasskeyAdminSetup"
+              data-passkey-register-token={@passkey_register_token}
+              type="button"
+              class="ac-primary-button w-full"
+            >
+              <.typography tag="span" size="md" color="main"><%= gettext("Try again") %></.typography>
+            </button>
+            <.typography tag="p" size="2xs" color="deemphasized">
+              <%= gettext("If this doesn\u2019t work, try refreshing the page or switching to a different browser.") %>
+            </.typography>
+          </div>
+        <% _ -> %>
+          <%= if @error do %>
+            <div role="alert" class="flex flex-col gap-2xs">
+              <.typography tag="p" size="1xs" color="callout">
+                <%= error_message(@error) %>
+              </.typography>
+              <.typography tag="p" size="2xs" color="deemphasized">
+                <%= gettext("Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably).") %>
+              </.typography>
+            </div>
+          <% end %>
+          <div class="flex flex-col gap-md">
+            <button
+              id="passkey-admin-setup-btn"
+              phx-hook="PasskeyAdminSetup"
+              data-passkey-register-token={@passkey_register_token}
+              type="button"
+              class="ac-primary-button w-full"
+            >
+              <.typography tag="span" size="md" color="main"><%= gettext("Set up passkey") %></.typography>
+            </button>
+            <.typography tag="p" size="2xs" color="deemphasized">
+              <%= gettext("If this doesn\u2019t work, try refreshing the page or switching to a different browser.") %>
+            </.typography>
+          </div>
+      <% end %>
+
+    <% :issue_invite -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("You\u2019re in. Now let\u2019s bring your family.") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Each family member needs their own invite link \u2014 Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two.") %>
+        </.typography>
+      </div>
+
+      <%= if @error do %>
+        <div role="alert" class="flex flex-col gap-2xs">
+          <.typography tag="p" size="2xs" color="callout">
+            <%= error_message(@error) %>
+          </.typography>
+        </div>
+      <% end %>
+
+      <button type="button" phx-click="generate_invite" class="ac-primary-button w-full">
+        <.typography tag="span" size="md" color="main"><%= gettext("Generate invite link") %></.typography>
+      </button>
+
+    <% :show_invite -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("Invite link ready to send.") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Share this link with one family member. It works once and expires in 10 minutes, so send it when they\u2019re ready to join.") %>
+        </.typography>
+      </div>
+
+      <div class="flex flex-col gap-2xs">
+        <label for="invite-url" class="sr-only"><%= gettext("Invite link") %></label>
+        <input
+          id="invite-url"
+          type="text"
+          readonly
+          value={@invite_url}
+          class="ac-text-input w-full"
+          onclick="this.select()"
+        />
+      </div>
+
+      <div class="flex flex-col gap-md">
+        <button
+          id="copy-invite-btn"
+          phx-hook="CopyToClipboard"
+          data-copy-value={@invite_url}
+          type="button"
+          class="ac-primary-button w-full"
+          aria-label={if @copied, do: gettext("Invite link copied to clipboard"), else: gettext("Copy link")}
+        >
+          <.typography tag="span" size="md" color="main">
+            <%= if @copied, do: gettext("Copied!"), else: gettext("Copy link") %>
+          </.typography>
+        </button>
+
+        <button type="button" phx-click="generate_another" class="ac-secondary-button w-full">
+          <.typography tag="span" size="md" color="deemphasized"><%= gettext("Generate another invite") %></.typography>
+        </button>
+
+        <a href={locale_path(@socket, "/login")} class="ac-secondary-button w-full text-center">
+          <.typography tag="span" size="md" color="deemphasized"><%= gettext("Sign in to your family space") %></.typography>
+        </a>
+      </div>
+
+    <% :already_bootstrapped -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("This family space is already set up.") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Sign in with your passkey to get back to your family space. If you need to invite a new member, you can do that after signing in.") %>
+        </.typography>
+      </div>
+
+      <div class="flex flex-col gap-md">
+        <a href={locale_path(@socket, "/login")} class="ac-primary-button w-full text-center">
+          <.typography tag="span" size="md" color="main"><%= gettext("Sign in") %></.typography>
+        </a>
+        <%= if @admin_user_id && @family_id do %>
+          <button type="button" phx-click="generate_invite" class="ac-secondary-button w-full">
+            <.typography tag="span" size="md" color="deemphasized"><%= gettext("Generate an invite link") %></.typography>
+          </button>
+        <% else %>
+          <.typography tag="p" size="2xs" color="deemphasized">
+            <%= gettext("Sign in first, then return to this page to invite someone new.") %>
+          </.typography>
+        <% end %>
+      </div>
+  <% end %>
+</div>

@@ -5,8 +5,10 @@ defmodule FamichatWeb.HomeLive do
 
   alias Famichat.Auth.{Identity, Sessions}
   alias Famichat.Chat.{Conversation, ConversationParticipant, ConversationSecurityStateStore}
-  alias Famichat.Accounts.HouseholdMembership
+  alias Famichat.Accounts.{HouseholdMembership, User}
   alias Famichat.Chat
+  alias Famichat.Chat.Family
+  alias Famichat.Auth.Onboarding
   alias Famichat.Repo
 
   @impl true
@@ -16,7 +18,18 @@ defmodule FamichatWeb.HomeLive do
     with {:ok, {user_id, device_id}} <- ensure_token_valid(token),
          {:ok, user} <- Identity.fetch_user(user_id),
          {:ok, conversations} <- get_user_conversations(user_id) do
-      base_socket = assign_socket_state(socket, user, device_id, token, params)
+      {family, family_members, is_admin} = load_family_data(user_id)
+      base_socket =
+        socket
+        |> assign_socket_state(user, device_id, token, params)
+        |> assign(
+          current_user: user,
+          family: family,
+          family_members: family_members,
+          is_admin: is_admin,
+          conversations: conversations,
+          invite_url: nil
+        )
 
       case conversations do
         [conversation | _] ->
@@ -122,7 +135,17 @@ defmodule FamichatWeb.HomeLive do
   end
 
   defp assign_auth_error(socket, _reason) do
-    {:ok, push_navigate(socket, to: locale_path(socket, "/login"))}
+    {:ok,
+     socket
+     |> assign(
+       current_user: nil,
+       family: nil,
+       family_members: [],
+       is_admin: false,
+       conversations: [],
+       invite_url: nil
+     )
+     |> push_navigate(to: locale_path(socket, "/login"))}
   end
 
   @impl true
@@ -357,6 +380,11 @@ defmodule FamichatWeb.HomeLive do
   end
 
   @impl true
+  def handle_event("copied", _params, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_event("join_error", %{"reason" => reason}, socket) do
     Logger.error("Failed to join channel: #{inspect(reason)}")
 
@@ -482,6 +510,64 @@ defmodule FamichatWeb.HomeLive do
   @impl true
   def handle_info(_msg, socket) do
     {:noreply, socket}
+  end
+
+  ## -- Family data loading ---------------------------------------------------
+
+  defp load_family_data(user_id) do
+    membership =
+      from(m in HouseholdMembership,
+        where: m.user_id == ^user_id,
+        order_by: [asc: m.inserted_at],
+        limit: 1,
+        preload: [:family]
+      )
+      |> Repo.one()
+
+    case membership do
+      nil ->
+        {nil, [], false}
+
+      %HouseholdMembership{family: family, role: role} ->
+        members =
+          from(u in User,
+            join: m in HouseholdMembership,
+            on: m.user_id == u.id,
+            where: m.family_id == ^family.id and u.id != ^user_id,
+            select: %{id: u.id, username: u.username}
+          )
+          |> Repo.all()
+
+        {family, members, role == :admin}
+    end
+  rescue
+    e ->
+      Logger.error("Failed to load family data for user #{user_id}: #{Exception.message(e)}")
+      {nil, [], false}
+  end
+
+  ## -- Change 3: Invite generation from home screen --------------------------
+
+  @impl true
+  def handle_event("generate_invite", _params, socket) do
+    user = socket.assigns[:current_user]
+    family = socket.assigns[:family]
+
+    cond do
+      is_nil(user) or is_nil(family) ->
+        {:noreply, assign(socket, error_message: "You must be in a family to generate an invite.")}
+
+      true ->
+        case Onboarding.issue_invite(user.id, nil, %{household_id: family.id, role: "member"}) do
+          {:ok, %{invite: invite_token}} ->
+            invite_url = "#{FamichatWeb.Endpoint.url()}/#{socket.assigns[:user_locale] || "en"}/invites/#{invite_token}"
+            {:noreply, assign(socket, invite_url: invite_url, error_message: nil)}
+
+          {:error, reason} ->
+            Logger.warning("[HomeLive] issue_invite error: #{inspect(reason)}")
+            {:noreply, assign(socket, error_message: "Could not generate invite link.")}
+        end
+    end
   end
 
   defp default_recovery_ref do

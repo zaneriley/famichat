@@ -28,6 +28,9 @@ msgstr "例：お母さん、お父さん、おばあちゃん"
 msgid "Famichat"
 msgstr "Famichat"
 
+msgid "Go back"
+msgstr "戻る"
+
 msgid "Famichat home"
 msgstr "Famichatのホームへ"
 
@@ -70,8 +73,32 @@ msgstr "サインインがキャンセルまたはタイムアウトしました
 msgid "Use your passkey to continue — your device will ask to confirm it's you."
 msgstr "続けるにはパスキーを使用してください。デバイスが本人確認を行います。"
 
+msgid "Your device will ask to confirm it's you — the same way it unlocks your phone."
+msgstr "デバイスがあなた本人か確認します。スマホのロック解除と同じ方法です。"
+
+msgid "New to Famichat? You need an invite link from a family member to get started."
+msgstr "Famichatは初めてですか？始めるには家族からの招待リンクが必要です。"
+
 msgid "Just a name your family will recognise"
 msgstr "家族が認識できる名前を入力してください"
+
+msgid "Just a name your family will see. We don't ask for your real name, phone number, or email."
+msgstr "家族に表示される名前だけで大丈夫です。本名、電話番号、メールアドレスは必要ありません。"
+
+msgid "Famichat is invite-only. There's no public sign-up — that's the point."
+msgstr "Famichatは招待制です。公開サインアップはありません。それがポイントです。"
+
+msgid "%{name} set up a private family space and wants you in it. Choose a name so they know it's you."
+msgstr "%{name} さんがプライベートな家族スペースを作り、あなたを招いています。あなたとわかる名前を入れてください。"
+
+msgid "Your device will ask to confirm it's you — it takes about 2 seconds."
+msgstr "デバイスが本人確認を求めます。約2秒で完了します。"
+
+msgid "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
+msgstr "パスキーはデバイスの外に出ることはありません。Famichatが指紋や顔を見ることはありません。"
+
+msgid "Invite links are single-use and expire after 10 minutes. This keeps the space private."
+msgstr "招待リンクは一度しか使えず、10分で期限切れになります。これがプライバシーを守る仕組みです。"
 
 msgid "Loading…"
 msgstr "読み込み中…"
@@ -117,3 +144,222 @@ msgstr "セッションが終了しました。もう一度サインインして
 
 msgid "close"
 msgstr "閉じる"
+
+msgid "Admin Setup"
+msgstr "管理者設定"
+
+msgid "Checking setup status…"
+msgstr "セットアップ状態を確認中…"
+
+msgid "Welcome to Famichat"
+msgstr "Famichatへようこそ"
+
+msgid "Let's get you set up. Create your admin account to get started."
+msgstr "セットアップを始めましょう。管理者アカウントを作成してください。"
+
+msgid "Your name (e.g. Mum, Dad)"
+msgstr "お名前（例：お母さん、お父さん）"
+
+msgid "The name your family will see"
+msgstr "家族に表示される名前"
+
+msgid "Family name (optional, defaults to \"My Family\")"
+msgstr "ファミリー名（任意、省略時は「My Family」になります）"
+
+msgid "The name for your family group"
+msgstr "家族グループの名前"
+
+msgid "Create admin account"
+msgstr "管理者アカウントを作成"
+
+msgid "Please enter a username."
+msgstr "ユーザー名を入力してください。"
+
+msgid "Username must be at least 3 characters."
+msgstr "ユーザー名は3文字以上で入力してください。"
+
+msgid "Something went wrong. Please try again."
+msgstr "エラーが発生しました。もう一度お試しください。"
+
+msgid "Could not generate an invite link. Please try again."
+msgstr "招待リンクを生成できませんでした。もう一度お試しください。"
+
+msgid "You must complete setup first before generating an invite."
+msgstr "招待リンクを生成する前にセットアップを完了してください。"
+
+msgid "Something went wrong."
+msgstr "問題が発生しました。"
+
+msgid "Passkey set up!"
+msgstr "パスキー設定完了！"
+
+msgid "Your admin account is ready. Now invite your family members — each person needs their own invite link."
+msgstr "管理者アカウントの準備ができました。家族を招待しましょう。各自に個別の招待リンクが必要です。"
+
+msgid "Generate invite link"
+msgstr "招待リンクを生成する"
+
+msgid "Invite link ready"
+msgstr "招待リンクの準備ができました"
+
+msgid "Share this link with the person you want to invite. Each link can only be used once."
+msgstr "このリンクを招待したい方と共有してください。各リンクは一度だけ使用できます。"
+
+msgid "Invite link"
+msgstr "招待リンク"
+
+msgid "Generate another invite"
+msgstr "別の招待リンクを生成"
+
+msgid "Go to login"
+msgstr "ログインへ移動"
+
+msgid "Admin already exists"
+msgstr "管理者はすでに存在します"
+
+msgid "This Famichat instance has already been set up. Sign in with your passkey to manage your family space."
+msgstr "このFamichatインスタンスはすでに設定済みです。パスキーでサインインしてファミリースペースを管理してください。"
+
+msgid "Generate an invite"
+msgstr "招待リンクを生成する"
+
+msgid "To generate an invite link, sign in first and return to this page."
+msgstr "招待リンクを生成するには、まずサインインしてこのページに戻ってください。"
+
+msgid "Unknown error"
+msgstr "不明なエラー"
+
+msgid "Set up your family space"
+msgstr "ファミリースペースをセットアップ"
+
+msgid "Getting things ready…"
+msgstr "準備しています…"
+
+msgid "Welcome to your family space."
+msgstr "ファミリースペースへようこそ。"
+
+msgid "Let's get you set up. Tell us who you are — your family will see this name."
+msgstr "セットアップを始めましょう。あなたのお名前を教えてください。家族にはこの名前が表示されます。"
+
+msgid "Your name (e.g. Mum, Dad, Grandpa)"
+msgstr "お名前（例：お母さん、お父さん、おじいちゃん）"
+
+msgid "This is how your family will know it's you."
+msgstr "家族があなたとわかる名前にしましょう。"
+
+msgid "Family name (e.g. The Rileys) — optional"
+msgstr "ファミリー名（例：鈴木家）— 任意"
+
+msgid "Used as the name of your shared space. You can change this later."
+msgstr "共有スペースの名前として使われます。後で変更できます。"
+
+msgid "Please enter your name."
+msgstr "お名前を入力してください。"
+
+msgid "Your name needs to be at least 3 characters."
+msgstr "お名前は3文字以上で入力してください。"
+
+msgid "Something went wrong — please try again."
+msgstr "エラーが発生しました。もう一度お試しください。"
+
+msgid "Complete setup first, then you can generate an invite."
+msgstr "先にセットアップを完了してから、招待リンクを生成できます。"
+
+msgid "Secure your account with a passkey."
+msgstr "パスキーでアカウントを守りましょう。"
+
+msgid "A passkey is like a fingerprint for your account — it uses your device's built-in security (Face ID, Touch ID, Windows Hello, or a PIN) so only you can sign in. No password to forget or lose."
+msgstr "パスキーはアカウントの指紋のようなものです。デバイスの内蔵セキュリティ（Face ID、Touch ID、Windows Hello、またはPIN）を使うので、サインインできるのはあなただけ。パスワードを忘れたり失くしたりする心配もありません。"
+
+msgid "Your device will ask to confirm it's you. Follow the prompt and you're done."
+msgstr "デバイスが本人確認を求めます。指示に従えば完了です。"
+
+msgid "Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably)."
+msgstr "もう一度試すか、別のブラウザに切り替えてください（ChromeとSafariがパスキーを最も確実にサポートしています）。"
+
+msgid "If this doesn't work, try refreshing the page or switching to a different browser."
+msgstr "うまくいかない場合は、ページを更新するか別のブラウザをお試しください。"
+
+msgid "You're in. Now let's bring your family."
+msgstr "アカウント完了。家族を呼びましょう。"
+
+msgid "Each family member needs their own invite link — Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
+msgstr "家族全員にそれぞれ個別の招待リンクが必要です。Famichatはプライベートなので、招待した人だけが参加できます。リンクを生成して、お好きな方法（SMS、メール、なんでも）で送れば、1〜2分で参加できます。"
+
+msgid "Invite link ready to send."
+msgstr "招待リンクが準備できました。送りましょう。"
+
+msgid "Share this link with one family member. It works once and expires in 10 minutes, so send it when they're ready to join."
+msgstr "このリンクを家族の一人に送ってください。一度だけ使え、10分で期限切れになります。相手が参加できる状態のときに送ってください。"
+
+msgid "Copy link"
+msgstr "リンクをコピー"
+
+msgid "Copied!"
+msgstr "コピーしました！"
+
+msgid "Invite link copied to clipboard"
+msgstr "招待リンクをクリップボードにコピーしました"
+
+msgid "Sign in to your family space"
+msgstr "ファミリースペースにサインイン"
+
+msgid "This family space is already set up."
+msgstr "このファミリースペースはすでに設定済みです。"
+
+msgid "Sign in with your passkey to get back to your family space. If you need to invite a new member, you can do that after signing in."
+msgstr "パスキーでサインインして、ファミリースペースに戻りましょう。新しいメンバーを招待したい場合は、サインイン後に行えます。"
+
+msgid "Sign in"
+msgstr "サインイン"
+
+msgid "Generate an invite link"
+msgstr "招待リンクを生成する"
+
+msgid "Sign in first, then return to this page to invite someone new."
+msgstr "先にサインインしてから、このページに戻って招待してください。"
+
+msgid "Your family space is ready."
+msgstr "ファミリースペースの準備ができました。"
+
+msgid "Invite someone to start the conversation."
+msgstr "家族を招待して、会話を始めましょう。"
+
+msgid "You're in. Say hello to %{name}."
+msgstr "参加しました。%{name}さんに挨拶しましょう。"
+
+msgid "You're in. Your family space is ready."
+msgstr "参加しました。ファミリースペースへようこそ。"
+
+msgid "Members"
+msgstr "メンバー"
+
+msgid "%{name} (you)"
+msgstr "%{name}（あなた）"
+
+msgid "Invite a family member"
+msgstr "家族を招待する"
+
+msgid "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
+msgstr "このリンクを招待したい方に送ってください。10分で期限切れになり、一度しか使えません。"
+
+msgid "Copy"
+msgstr "コピー"
+
+msgid "My Family"
+msgstr "マイファミリー"
+
+msgid "Say hello…"
+msgstr "挨拶してみましょう…"
+
+msgid "Type a message…"
+msgstr "メッセージを入力…"
+
+msgid "Invite"
+msgstr "招待"
+
+msgid "Connected"
+msgstr "接続中"
+
+msgid "Connect"
+msgstr "接続"

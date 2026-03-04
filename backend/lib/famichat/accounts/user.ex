@@ -19,11 +19,12 @@ defmodule Famichat.Accounts.User do
           username_fingerprint: binary() | nil,
           email: binary() | nil,
           email_fingerprint: binary() | nil,
-          status: :invited | :active | :locked | :deleted | nil,
+          status: :invited | :pending | :active | :locked | :deleted | nil,
           password_hash: String.t() | nil,
           confirmed_at: DateTime.t() | nil,
           last_login_at: DateTime.t() | nil,
-          enrollment_required_since: DateTime.t() | nil
+          enrollment_required_since: DateTime.t() | nil,
+          registration_token_id: Ecto.UUID.t() | nil
         }
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -35,8 +36,10 @@ defmodule Famichat.Accounts.User do
     field :email_fingerprint, :binary
 
     field :status, Ecto.Enum,
-      values: [:invited, :active, :locked, :deleted],
+      values: [:invited, :pending, :active, :locked, :deleted],
       default: :invited
+
+    field :registration_token_id, :binary_id
 
     field :password_hash, :string
     field :confirmed_at, :utc_datetime_usec
@@ -62,7 +65,8 @@ defmodule Famichat.Accounts.User do
       :password_hash,
       :confirmed_at,
       :last_login_at,
-      :enrollment_required_since
+      :enrollment_required_since,
+      :registration_token_id
     ])
     |> sanitize_username()
     |> validate_required([:username])

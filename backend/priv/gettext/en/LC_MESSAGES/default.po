@@ -28,6 +28,9 @@ msgstr "e.g. Mum, Dad, Grandma Rose"
 msgid "Famichat"
 msgstr "Famichat"
 
+msgid "Go back"
+msgstr "Go back"
+
 msgid "Famichat home"
 msgstr "Famichat home"
 
@@ -67,8 +70,32 @@ msgstr "Signing you in…"
 msgid "Use your passkey to continue — your device will ask to confirm it's you."
 msgstr "Use your passkey to continue — your device will ask to confirm it's you."
 
+msgid "Your device will ask to confirm it's you — the same way it unlocks your phone."
+msgstr "Your device will ask to confirm it's you — the same way it unlocks your phone."
+
+msgid "New to Famichat? You need an invite link from a family member to get started."
+msgstr "New to Famichat? You need an invite link from a family member to get started."
+
 msgid "Just a name your family will recognise"
 msgstr "Just a name your family will recognise"
+
+msgid "Just a name your family will see. We don't ask for your real name, phone number, or email."
+msgstr "Just a name your family will see. We don't ask for your real name, phone number, or email."
+
+msgid "Famichat is invite-only. There's no public sign-up — that's the point."
+msgstr "Famichat is invite-only. There's no public sign-up — that's the point."
+
+msgid "%{name} set up a private family space and wants you in it. Choose a name so they know it's you."
+msgstr "%{name} set up a private family space and wants you in it. Choose a name so they know it's you."
+
+msgid "Your device will ask to confirm it's you — it takes about 2 seconds."
+msgstr "Your device will ask to confirm it's you — it takes about 2 seconds."
+
+msgid "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
+msgstr "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
+
+msgid "Invite links are single-use and expire after 10 minutes. This keeps the space private."
+msgstr "Invite links are single-use and expire after 10 minutes. This keeps the space private."
 
 msgid "Loading…"
 msgstr "Loading…"
@@ -114,3 +141,222 @@ msgstr "Your session ended. Sign in again to pick up where you left off."
 
 msgid "close"
 msgstr "close"
+
+msgid "Admin Setup"
+msgstr "Admin Setup"
+
+msgid "Checking setup status…"
+msgstr "Checking setup status…"
+
+msgid "Welcome to Famichat"
+msgstr "Welcome to Famichat"
+
+msgid "Let's get you set up. Create your admin account to get started."
+msgstr "Let's get you set up. Create your admin account to get started."
+
+msgid "Your name (e.g. Mum, Dad)"
+msgstr "Your name (e.g. Mum, Dad)"
+
+msgid "The name your family will see"
+msgstr "The name your family will see"
+
+msgid "Family name (optional, defaults to \"My Family\")"
+msgstr "Family name (optional, defaults to \"My Family\")"
+
+msgid "The name for your family group"
+msgstr "The name for your family group"
+
+msgid "Create admin account"
+msgstr "Create admin account"
+
+msgid "Please enter a username."
+msgstr "Please enter a username."
+
+msgid "Username must be at least 3 characters."
+msgstr "Username must be at least 3 characters."
+
+msgid "Something went wrong. Please try again."
+msgstr "Something went wrong. Please try again."
+
+msgid "Could not generate an invite link. Please try again."
+msgstr "Could not generate an invite link. Please try again."
+
+msgid "You must complete setup first before generating an invite."
+msgstr "You must complete setup first before generating an invite."
+
+msgid "Something went wrong."
+msgstr "Something went wrong."
+
+msgid "Passkey set up!"
+msgstr "Passkey set up!"
+
+msgid "Your admin account is ready. Now invite your family members — each person needs their own invite link."
+msgstr "Your admin account is ready. Now invite your family members — each person needs their own invite link."
+
+msgid "Generate invite link"
+msgstr "Generate invite link"
+
+msgid "Invite link ready"
+msgstr "Invite link ready"
+
+msgid "Share this link with the person you want to invite. Each link can only be used once."
+msgstr "Share this link with the person you want to invite. Each link can only be used once."
+
+msgid "Invite link"
+msgstr "Invite link"
+
+msgid "Generate another invite"
+msgstr "Generate another invite"
+
+msgid "Go to login"
+msgstr "Go to login"
+
+msgid "Admin already exists"
+msgstr "Admin already exists"
+
+msgid "This Famichat instance has already been set up. Sign in with your passkey to manage your family space."
+msgstr "This Famichat instance has already been set up. Sign in with your passkey to manage your family space."
+
+msgid "Generate an invite"
+msgstr "Generate an invite"
+
+msgid "To generate an invite link, sign in first and return to this page."
+msgstr "To generate an invite link, sign in first and return to this page."
+
+msgid "Unknown error"
+msgstr "Unknown error"
+
+msgid "Set up your family space"
+msgstr "Set up your family space"
+
+msgid "Getting things ready…"
+msgstr "Getting things ready…"
+
+msgid "Welcome to your family space."
+msgstr "Welcome to your family space."
+
+msgid "Let's get you set up. Tell us who you are — your family will see this name."
+msgstr "Let's get you set up. Tell us who you are — your family will see this name."
+
+msgid "Your name (e.g. Mum, Dad, Grandpa)"
+msgstr "Your name (e.g. Mum, Dad, Grandpa)"
+
+msgid "This is how your family will know it's you."
+msgstr "This is how your family will know it's you."
+
+msgid "Family name (e.g. The Rileys) — optional"
+msgstr "Family name (e.g. The Rileys) — optional"
+
+msgid "Used as the name of your shared space. You can change this later."
+msgstr "Used as the name of your shared space. You can change this later."
+
+msgid "Please enter your name."
+msgstr "Please enter your name."
+
+msgid "Your name needs to be at least 3 characters."
+msgstr "Your name needs to be at least 3 characters."
+
+msgid "Something went wrong — please try again."
+msgstr "Something went wrong — please try again."
+
+msgid "Complete setup first, then you can generate an invite."
+msgstr "Complete setup first, then you can generate an invite."
+
+msgid "Secure your account with a passkey."
+msgstr "Secure your account with a passkey."
+
+msgid "A passkey is like a fingerprint for your account — it uses your device's built-in security (Face ID, Touch ID, Windows Hello, or a PIN) so only you can sign in. No password to forget or lose."
+msgstr "A passkey is like a fingerprint for your account — it uses your device's built-in security (Face ID, Touch ID, Windows Hello, or a PIN) so only you can sign in. No password to forget or lose."
+
+msgid "Your device will ask to confirm it's you. Follow the prompt and you're done."
+msgstr "Your device will ask to confirm it's you. Follow the prompt and you're done."
+
+msgid "Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably)."
+msgstr "Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably)."
+
+msgid "If this doesn't work, try refreshing the page or switching to a different browser."
+msgstr "If this doesn't work, try refreshing the page or switching to a different browser."
+
+msgid "You're in. Now let's bring your family."
+msgstr "You're in. Now let's bring your family."
+
+msgid "Each family member needs their own invite link — Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
+msgstr "Each family member needs their own invite link — Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
+
+msgid "Invite link ready to send."
+msgstr "Invite link ready to send."
+
+msgid "Share this link with one family member. It works once and expires in 10 minutes, so send it when they're ready to join."
+msgstr "Share this link with one family member. It works once and expires in 10 minutes, so send it when they're ready to join."
+
+msgid "Copy link"
+msgstr "Copy link"
+
+msgid "Copied!"
+msgstr "Copied!"
+
+msgid "Invite link copied to clipboard"
+msgstr "Invite link copied to clipboard"
+
+msgid "Sign in to your family space"
+msgstr "Sign in to your family space"
+
+msgid "This family space is already set up."
+msgstr "This family space is already set up."
+
+msgid "Sign in with your passkey to get back to your family space. If you need to invite a new member, you can do that after signing in."
+msgstr "Sign in with your passkey to get back to your family space. If you need to invite a new member, you can do that after signing in."
+
+msgid "Sign in"
+msgstr "Sign in"
+
+msgid "Generate an invite link"
+msgstr "Generate an invite link"
+
+msgid "Sign in first, then return to this page to invite someone new."
+msgstr "Sign in first, then return to this page to invite someone new."
+
+msgid "Your family space is ready."
+msgstr "Your family space is ready."
+
+msgid "Invite someone to start the conversation."
+msgstr "Invite someone to start the conversation."
+
+msgid "You're in. Say hello to %{name}."
+msgstr "You're in. Say hello to %{name}."
+
+msgid "You're in. Your family space is ready."
+msgstr "You're in. Your family space is ready."
+
+msgid "Members"
+msgstr "Members"
+
+msgid "%{name} (you)"
+msgstr "%{name} (you)"
+
+msgid "Invite a family member"
+msgstr "Invite a family member"
+
+msgid "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
+msgstr "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
+
+msgid "Copy"
+msgstr "Copy"
+
+msgid "My Family"
+msgstr "My Family"
+
+msgid "Say hello…"
+msgstr "Say hello…"
+
+msgid "Type a message…"
+msgstr "Type a message…"
+
+msgid "Invite"
+msgstr "Invite"
+
+msgid "Connected"
+msgstr "Connected"
+
+msgid "Connect"
+msgstr "Connect"

@@ -13,16 +13,37 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     3. `:register` — after username submission, shows the passkey registration
        button. A JS hook (`PasskeyRegister`) drives the WebAuthn flow entirely
        client-side, then pushes `"register-success"` or `"register-error"` back
-       to this LiveView.
+       to this LiveView. The hook may also push `"step1-complete"` with a
+       `passkey_register_token` once the invite is consumed server-side, enabling
+       token-skip on retry.
     4. `:success` — shown for 1.5 s after successful registration before
        `Process.send_after/3` fires `:redirect_home` and navigates to `/locale/`.
+
+  ## Error taxonomy
+
+  `register-error` events carry a `code` field that classifies the failure:
+
+    * Recoverable — `"cancelled"`, `"aborted"`, `"network"`,
+      `"passkey_registration_failed"`, `"challenge_failed"`,
+      `"invalid_challenge"`, `"expired"`, `"used"` — the error is shown and
+      the registration button remains visible so the user can try again.
+
+    * Fatal — `"unsupported"`, `"already_registered"`,
+      `"missing_registration_token"` — the button is hidden and a message
+      with a Go back option is shown instead.
   """
 
   use FamichatWeb, :live_view
 
   require Logger
 
+  alias Famichat.Auth.Identity
   alias Famichat.Auth.Onboarding
+
+  @recoverable_codes ~w(cancelled aborted network passkey_registration_failed
+                        challenge_failed invalid_challenge expired used)
+
+  @fatal_codes ~w(unsupported already_registered missing_registration_token)
 
   @impl true
   def mount(%{"token" => token}, _session, socket) do
@@ -35,6 +56,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
        socket
        |> assign(:step, :loading)
        |> assign(:registration_token, nil)
+       |> assign(:passkey_register_token, nil)
        |> assign(:payload, %{})
        |> assign(:username, "")
        |> assign(:error, nil)
@@ -78,6 +100,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     socket
     |> assign(:step, :accept)
     |> assign(:registration_token, registration_token)
+    |> assign(:passkey_register_token, nil)
     |> assign(:payload, payload)
     |> assign(:username, "")
     |> assign(:error, nil)
@@ -88,6 +111,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     socket
     |> assign(:step, :invalid)
     |> assign(:registration_token, nil)
+    |> assign(:passkey_register_token, nil)
     |> assign(:payload, %{})
     |> assign(:username, "")
     |> assign(:error, error_atom)
@@ -103,7 +127,10 @@ defmodule FamichatWeb.AuthLive.InviteLive do
         {:noreply, assign(socket, :error, :username_required)}
 
       String.length(username) < 2 ->
-        {:noreply, assign(socket, :error, :username_too_short)}
+        {:noreply, socket |> assign(:error, :username_too_short) |> assign(:username, username)}
+
+      username_taken?(username) ->
+        {:noreply, socket |> assign(:error, :username_taken) |> assign(:username, username)}
 
       true ->
         {:noreply,
@@ -115,9 +142,63 @@ defmodule FamichatWeb.AuthLive.InviteLive do
   end
 
   @impl true
+  def handle_event("go-back", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:step, :accept)
+     |> assign(:error, nil)}
+  end
+
+  @impl true
   def handle_event("register-success", _params, socket) do
     Process.send_after(self(), :redirect_home, 1500)
     {:noreply, assign(socket, :step, :success)}
+  end
+
+  # Fired by the PasskeyRegister hook after complete_invite succeeds
+  # server-side. Stores the token so the hook can skip Step 1 on retry
+  # without hitting the server again.
+  @impl true
+  def handle_event("step1-complete", %{"passkey_register_token" => token}, socket) do
+    {:noreply, assign(socket, :passkey_register_token, token)}
+  end
+
+  @impl true
+  def handle_event("register-error", %{"code" => "username_taken"}, socket) do
+    {:noreply,
+     socket
+     |> assign(:step, :accept)
+     |> assign(:error, :username_taken)}
+  end
+
+  # Recoverable errors — show the message, keep the button visible.
+  @impl true
+  def handle_event(
+        "register-error",
+        %{"code" => code, "message" => message},
+        socket
+      )
+      when code in @recoverable_codes do
+    Logger.info("[InviteLive] Recoverable passkey error (#{code}): #{message}")
+    {:noreply, assign(socket, :error, {:recoverable, message})}
+  end
+
+  # Fatal errors — replace the button with a permanent error + go-back.
+  def handle_event("register-error", %{"code" => code}, socket)
+      when code in @fatal_codes do
+    Logger.warning("[InviteLive] Fatal passkey error: #{inspect(code)}")
+    {:noreply, assign(socket, :error, {:fatal, code})}
+  end
+
+  # Fallback for events that carry only a message and no known code.
+  def handle_event("register-error", %{"message" => message}, socket) do
+    Logger.warning("[InviteLive] Passkey registration error (no code): #{message}")
+    {:noreply, assign(socket, :error, {:recoverable, message})}
+  end
+
+  # Bare catch-all.
+  def handle_event("register-error", _params, socket) do
+    {:noreply, assign(socket, :error, {:recoverable, gettext("Unknown error")})}
   end
 
   @impl true
@@ -125,24 +206,28 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     {:noreply, push_navigate(socket, to: locale_path(socket, "/"))}
   end
 
-  @impl true
-  def handle_event("register-error", %{"message" => message}, socket) do
-    Logger.warning("[InviteLive] Passkey registration error: #{inspect(message)}")
-    {:noreply, assign(socket, :error, {:register_failed, message})}
+  defp username_taken?(username) do
+    case Identity.fetch_user_by_username(username) do
+      {:ok, _} -> true
+      {:error, :user_not_found} -> false
+    end
   end
 
-  @impl true
-  def handle_event("register-error", _params, socket) do
-    {:noreply, assign(socket, :error, {:register_failed, "Unknown error"})}
-  end
+  defp error_message(:expired), do: gettext("This invite link has expired. Ask for a new one.")
+  defp error_message(:used), do: gettext("This invite link has already been used.")
+  defp error_message(:invalid), do: gettext("This invite link is not valid.")
+  defp error_message(:rate_limited), do: gettext("Too many attempts. Please try again later.")
+  defp error_message(:unknown), do: gettext("Something went wrong. Please try again.")
+  defp error_message(:username_required), do: gettext("Please enter a username.")
+  defp error_message(:username_too_short), do: gettext("Username must be at least 2 characters.")
 
-  defp error_message(:expired), do: "This invite link has expired. Ask for a new one."
-  defp error_message(:used), do: "This invite link has already been used."
-  defp error_message(:invalid), do: "This invite link is not valid."
-  defp error_message(:rate_limited), do: "Too many attempts. Please try again later."
-  defp error_message(:unknown), do: "Something went wrong. Please try again."
-  defp error_message(:username_required), do: "Please enter a username."
-  defp error_message(:username_too_short), do: "Username must be at least 2 characters."
-  defp error_message({:register_failed, msg}) when is_binary(msg), do: msg
-  defp error_message(_), do: "Something went wrong."
+  defp error_message(:username_taken),
+    do: gettext("That name is already taken. Please choose a different one.")
+
+  defp error_message({:recoverable, msg}) when is_binary(msg), do: msg
+  defp error_message({:fatal, "missing_registration_token"}),
+    do: gettext("Registration token missing. Please go back and try again.")
+
+  defp error_message({:fatal, _code}), do: gettext("Something went wrong. Please go back and try again.")
+  defp error_message(_), do: gettext("Something went wrong.")
 end

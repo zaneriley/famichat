@@ -140,6 +140,7 @@ defmodule FamichatWeb.Router do
       # Keep non-LiveView routes outside the live_session
       live_dashboard "/dashboard", metrics: FamichatWeb.Telemetry
     end
+
   end
 
   scope "/", FamichatWeb do
@@ -162,9 +163,14 @@ defmodule FamichatWeb.Router do
     end
   end
 
-  scope "/api", FamichatWeb do
-    pipe_through :api
-    match :*, "/*path", FallbackController, :not_found
+  # First-run admin setup — no auth required, locale-prefixed.
+  # The LiveView itself gates on "admin already exists" and redirects away.
+  scope "/:locale", FamichatWeb do
+    pipe_through [:browser, :locale]
+
+    live_session :admin_setup, on_mount: {FamichatWeb.LiveHelpers, :default} do
+      live "/setup", AdminLive.SetupLive, :index
+    end
   end
 
   # All other locale-scoped routes.
@@ -175,22 +181,17 @@ defmodule FamichatWeb.Router do
       live "/", HomeLive, :index
       live "/login", AuthLive.LoginLive, :index
     end
+
+    # Redirect any unknown locale-scoped GET path to login rather than showing
+    # the debug page (dev) or a 500 (prod). Only GET is handled because
+    # POST/PUT/DELETE to unknown paths are not reachable via browser navigation.
+    get "/*path", LocaleCatchAllController, :redirect_to_login
   end
 
-  # Enable LiveDashboard and Swoosh mailbox preview in development
-  if Application.compile_env(:new, :dev_routes) do
-    # If you want to use the LiveDashboard in production, you should put
-    # it behind authentication and allow only admins to access it.
-    # If your application does not have an admins-only section yet,
-    # you can use Plug.BasicAuth to set up some basic authentication
-    # as long as you are also using SSL (which you should anyway).
-    import Phoenix.LiveDashboard.Router
-
-    scope "/dev" do
-      pipe_through :browser
-
-      live_dashboard "/dashboard", metrics: FamichatWeb.Telemetry
-      forward "/mailbox", Plug.Swoosh.MailboxPreview
-    end
+  # API catch-all must be last so it does not shadow any /api/v1 routes defined
+  # above. Phoenix matches routes in declaration order.
+  scope "/api", FamichatWeb do
+    pipe_through :api
+    match :*, "/*path", FallbackController, :not_found
   end
 end

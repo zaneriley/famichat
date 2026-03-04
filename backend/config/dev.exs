@@ -61,3 +61,8 @@ config :phoenix_live_view, :debug_heex_annotations, true
 config :famichat, :admin_basic_auth,
   username: System.get_env("ADMIN_SPIKE_USER", "admin"),
   password: System.get_env("ADMIN_SPIKE_PASS", "famichat-dev")
+
+config :famichat, :webauthn,
+  rp_id: System.get_env("WEBAUTHN_RP_ID") || "localhost",
+  rp_name: System.get_env("WEBAUTHN_RP_NAME") || "Famichat",
+  origin: System.get_env("WEBAUTHN_ORIGIN") || "http://localhost:9000"

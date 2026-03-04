@@ -6,17 +6,106 @@
         do: gettext("Your session ended. Sign in again to pick up where you left off."),
         else: gettext("Your private space for the people who matter most.") %>
     </.typography>
-    <a href={"/" <> (@user_locale || "en") <> "/login"} class="ac-primary-button px-md py-2xs rounded-full">
+    <a href={locale_path(assigns, "/login")} class="ac-primary-button px-md py-2xs rounded-full">
       <.typography tag="span" size="md" color="callout"><%= gettext("Open Famichat") %></.typography>
     </a>
   </div>
 <% else %>
   <%= if is_nil(@conversation_id) do %>
-    <div class="flex h-screen flex-col items-center justify-center gap-md p-2xl">
-      <.typography tag="h1" size="2xl" color="main"><%= gettext("No conversation yet") %></.typography>
-      <.typography tag="p" size="md" color="deemphasized">
-        <%= gettext("Once you've invited a family member, your conversation will appear here.") %>
+    <%!-- No conversation yet — show empty state based on role --%>
+    <div class="flex h-screen flex-col items-center justify-center gap-lg p-2xl">
+      <%!-- Family name heading --%>
+      <.typography tag="h1" size="2xl" color="main">
+        <%= if @family, do: @family.name, else: gettext("My Family") %>
       </.typography>
+
+      <%!-- Status message --%>
+      <%= if @is_admin do %>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Your family space is ready.") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Invite someone to start the conversation.") %>
+        </.typography>
+      <% else %>
+        <%!-- Invited member: show who they are connected with --%>
+        <%= if length(@family_members) > 0 do %>
+          <.typography tag="p" size="md" color="deemphasized">
+            <%= gettext("You're in. Say hello to %{name}.", name: hd(@family_members).username) %>
+          </.typography>
+        <% else %>
+          <.typography tag="p" size="md" color="deemphasized">
+            <%= gettext("You're in. Your family space is ready.") %>
+          </.typography>
+        <% end %>
+      <% end %>
+
+      <%!-- Member list --%>
+      <div class="flex flex-col gap-2xs">
+        <.typography tag="p" size="2xs" color="deemphasized">
+          <%= gettext("Members") %>
+        </.typography>
+        <div class="flex gap-sm">
+          <%!-- Current user always first --%>
+          <.typography tag="span" size="sm" color="main">
+            <%= gettext("%{name} (you)", name: @current_user.username) %>
+          </.typography>
+          <%= for member <- @family_members do %>
+            <.typography tag="span" size="sm" color="main">
+              <%= member.username %>
+            </.typography>
+          <% end %>
+        </div>
+      </div>
+
+      <%!-- Admin: invite button and invite URL display --%>
+      <%= if @is_admin do %>
+        <button
+          phx-click="generate_invite"
+          class="ac-primary-button px-md py-2xs rounded-full"
+        >
+          <.typography tag="span" size="md" color="callout">
+            <%= gettext("Invite a family member") %>
+          </.typography>
+        </button>
+
+        <%= if @invite_url do %>
+          <div class="flex flex-col gap-sm">
+            <.typography tag="p" size="sm" color="deemphasized">
+              <%= gettext("Send this link to the person you want to invite. It expires in 10 minutes and can only be used once.") %>
+            </.typography>
+            <div class="flex gap-sm items-center">
+              <input
+                type="text"
+                readonly
+                class="ac-text-input grow font-mono"
+                value={@invite_url}
+                id="invite-url-display"
+                aria-label={gettext("Invite link")}
+              />
+              <button
+                phx-hook="CopyToClipboard"
+                id="copy-invite-url"
+                data-copy-value={@invite_url}
+                class="ac-primary-button shrink-0 px-md py-2xs rounded-full"
+              >
+                <.typography tag="span" size="sm" color="callout">
+                  <%= gettext("Copy") %>
+                </.typography>
+              </button>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+
+      <%= if @error_message do %>
+        <div
+          id="home-empty-error"
+          class="rounded-md border border-[var(--signal-error)] bg-white px-3 py-2"
+        >
+          <.typography tag="p" size="2xs" color="callout"><%= @error_message %></.typography>
+        </div>
+      <% end %>
     </div>
   <% else %>
 <div
@@ -28,23 +117,50 @@
   data-user-id={@user_id}
 >
   <header class="ac-header flex items-center justify-between gap-sm p-md">
-    <div class="flex flex-col gap-1">
-      <.typography tag="h1" size="1xl" color="main">Famichat</.typography>
-    </div>
-    <button
-      phx-click="connect-channel"
-      class={[
-        "ac-primary-button rounded-full px-3 py-2xs",
-        if(@channel_joined,
-          do: "bg-[var(--signal-error)]",
-          else: "bg-[var(--signal-success)]"
-        )
-      ]}
-    >
-      <.typography tag="span" size="2xs" color="callout">
-        <%= if @channel_joined, do: gettext("Connected"), else: gettext("Connect") %>
+    <div class="flex flex-col gap-2xs">
+      <.typography tag="h1" size="1xl" color="main">
+        <%= if @family, do: @family.name, else: gettext("My Family") %>
       </.typography>
-    </button>
+      <%!-- Compact member list under heading --%>
+      <div class="flex gap-sm">
+        <.typography tag="span" size="2xs" color="deemphasized">
+          <%= gettext("%{name} (you)", name: @current_user.username) %>
+        </.typography>
+        <%= for member <- @family_members do %>
+          <.typography tag="span" size="2xs" color="deemphasized">
+            · <%= member.username %>
+          </.typography>
+        <% end %>
+      </div>
+    </div>
+    <%!-- Connect/disconnect button is a dev tool only --%>
+    <%= if @dev_mode do %>
+      <button
+        phx-click="connect-channel"
+        class={[
+          "ac-primary-button rounded-full px-3 py-2xs",
+          if(@channel_joined,
+            do: "bg-[var(--signal-error)]",
+            else: "bg-[var(--signal-success)]"
+          )
+        ]}
+      >
+        <.typography tag="span" size="2xs" color="callout">
+          <%= if @channel_joined, do: gettext("Connected"), else: gettext("Connect") %>
+        </.typography>
+      </button>
+    <% end %>
+    <%!-- Admin invite button in header when conversation exists --%>
+    <%= if @is_admin do %>
+      <button
+        phx-click="generate_invite"
+        class="ac-primary-button rounded-full px-md py-2xs"
+      >
+        <.typography tag="span" size="2xs" color="callout">
+          <%= gettext("Invite") %>
+        </.typography>
+      </button>
+    <% end %>
   </header>
 
   <%= if @dev_mode do %>
@@ -157,6 +273,35 @@
     </section>
   <% end %>
 
+  <%!-- Invite URL display inside conversation view (if admin just generated one) --%>
+  <%= if @invite_url do %>
+    <div class="mx-md mb-sm flex flex-col gap-sm rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3">
+      <.typography tag="p" size="sm" color="deemphasized">
+        <%= gettext("Send this link to the person you want to invite. It expires in 10 minutes and can only be used once.") %>
+      </.typography>
+      <div class="flex gap-sm items-center">
+        <input
+          type="text"
+          readonly
+          class="ac-text-input grow font-mono"
+          value={@invite_url}
+          id="invite-url-display-chat"
+          aria-label={gettext("Invite link")}
+        />
+        <button
+          phx-hook="CopyToClipboard"
+          id="copy-invite-url-chat"
+          data-copy-value={@invite_url}
+          class="ac-primary-button shrink-0 px-md py-2xs rounded-full"
+        >
+          <.typography tag="span" size="sm" color="callout">
+            <%= gettext("Copy") %>
+          </.typography>
+        </button>
+      </div>
+    </div>
+  <% end %>
+
   <div
     id="messages-scroll-container"
     class="flex grow flex-col gap-md overflow-y-auto p-md pb-xl"
@@ -204,7 +349,11 @@
         type="text"
         id="message-input"
         class="ac-text-input grow"
-        placeholder={gettext("Type a message…")}
+        placeholder={
+          if is_nil(@last_seen_message_id),
+            do: gettext("Say hello…"),
+            else: gettext("Type a message…")
+        }
         value={@current_message}
         phx-keyup="update-message"
         phx-debounce="100"

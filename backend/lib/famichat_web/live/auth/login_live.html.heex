@@ -7,7 +7,7 @@
         <%= gettext("Sign in to Famichat") %>
       </.typography>
       <.typography tag="p" size="md" color="deemphasized">
-        <%= gettext("Use your passkey to continue — your device will ask to confirm it's you.") %>
+        <%= gettext("Your device will ask to confirm it's you — the same way it unlocks your phone.") %>
       </.typography>
     </div>
 
@@ -35,11 +35,13 @@
         </div>
       <% end %>
 
-      <div class="flex justify-center">
-        <a href={locale_path(assigns, "/login/otp")} class="opacity-60 hover:opacity-100">
-          <.typography tag="span" size="2xs" color="deemphasized"><%= gettext("Can't use a passkey? Sign in another way") %></.typography>
-        </a>
-      </div>
+      <.typography tag="p" size="2xs" color="deemphasized">
+        <%= gettext("New to Famichat? You need an invite link from a family member to get started.") %>
+      </.typography>
+
+      <%!-- TODO: OTP fallback login — backend (issue_otp/verify_otp, rate limiting) is built.
+           Blocked on: (1) email delivery infra, (2) /login/otp LiveView.
+           Re-enable when email provider is configured. --%>
     </div>
   </div>
 </div>

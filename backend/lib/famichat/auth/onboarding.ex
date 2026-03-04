@@ -12,6 +12,7 @@ defmodule Famichat.Auth.Onboarding do
       Famichat.Chat,
       Famichat.Auth.Households,
       Famichat.Auth.Identity,
+      Famichat.Auth.Passkeys,
       Famichat.Auth.RateLimit,
       Famichat.Auth.Runtime,
       Famichat.Auth.Tokens
@@ -22,6 +23,7 @@ defmodule Famichat.Auth.Onboarding do
   alias Famichat.Accounts.User
   alias Famichat.Auth.Households
   alias Famichat.Auth.Identity
+  alias Famichat.Auth.Passkeys
   alias Famichat.Auth.Runtime.Instrumentation
   alias Famichat.Auth.RateLimit
   alias Famichat.Auth.Tokens
@@ -203,7 +205,10 @@ defmodule Famichat.Auth.Onboarding do
            ),
          {:ok, invite} <- Tokens.fetch(:invite, raw_token),
          {:ok, _} <- Tokens.consume(invite) do
-      payload = sanitize_invite_payload(invite.payload)
+      payload =
+        invite.payload
+        |> sanitize_invite_payload()
+        |> maybe_put_inviter_username(Map.get(invite.payload, "inviter_id"))
 
       registration_token =
         sign_invite_registration_token(%{
@@ -257,7 +262,10 @@ defmodule Famichat.Auth.Onboarding do
         if DateTime.compare(expires_at, DateTime.utc_now()) == :lt do
           {:error, :expired}
         else
-          payload = sanitize_invite_payload(token.payload)
+          payload =
+            token.payload
+            |> sanitize_invite_payload()
+            |> maybe_put_inviter_username(Map.get(token.payload, "inviter_id"))
 
           reg_token_result =
             sign_invite_registration_token(%{
@@ -325,17 +333,19 @@ defmodule Famichat.Auth.Onboarding do
           {:ok, %{user: User.t(), passkey_register_token: String.t()}}
           | {:error, :invalid_registration_token}
           | {:error, :expired_registration_token}
+          | {:error, :used_registration_token}
           | {:error, :invalid_registration}
-          | {:error, :rate_limited, retry_in :: pos_integer()}
-          | {:error, :user_not_found}
+          | {:error, {:rate_limited, pos_integer()}}
           | {:error, :email_required}
           | {:error, :email_mismatch}
           | {:error, :family_not_found}
+          | {:error, :username_taken}
           | {:error, Ecto.Changeset.t()}
   def complete_registration(registration_token, attrs)
       when is_binary(registration_token) and is_map(attrs) do
-    with {:verify, {:ok, claims}} <-
-           {:verify, verify_invite_registration_token(registration_token)},
+    with {:fetch, {:ok, reg_token_record}} <-
+           {:fetch, Tokens.fetch(:invite_registration, registration_token)},
+         claims <- reg_token_record.payload,
          rate_key <- claims["invite_token_id"] || registration_token,
          :ok <-
            RateLimit.check(@invite_complete_bucket, rate_key,
@@ -343,9 +353,14 @@ defmodule Famichat.Auth.Onboarding do
              interval: Tokens.default_ttl(:invite_registration)
            ) do
       case Repo.transaction(fn ->
-             with {:ok, family} <-
+             # Consume the registration token inside the transaction so that
+             # a concurrent request with the same token either wins the consume
+             # or sees {:error, :used} from the fetch above (after commit).
+             with {:ok, _} <- Tokens.consume(reg_token_record),
+                  {:ok, family} <-
                     fetch_family(claims["household_id"] || claims["family_id"]),
-                  {:ok, user} <- create_user_from_invite(claims, attrs),
+                  {:ok, user} <-
+                    find_or_create_pending_user(claims, attrs, reg_token_record.id),
                   {:ok, _membership} <-
                     Households.upsert_membership(
                       user.id,
@@ -379,14 +394,14 @@ defmodule Famichat.Auth.Onboarding do
           {:error, reason}
       end
     else
-      {:verify, {:error, :expired}} ->
+      {:fetch, {:error, :invalid}} ->
+        {:error, :invalid_registration_token}
+
+      {:fetch, {:error, :expired}} ->
         {:error, :expired_registration_token}
 
-      {:verify, {:error, :invalid}} ->
-        {:error, :invalid_registration_token}
-
-      {:verify, {:error, :missing}} ->
-        {:error, :invalid_registration_token}
+      {:fetch, {:error, :used}} ->
+        {:error, :used_registration_token}
 
       {:error, {:rate_limited, retry_in}} ->
         {:error, {:rate_limited, retry_in}}
@@ -398,7 +413,52 @@ defmodule Famichat.Auth.Onboarding do
 
   def complete_registration(_, _), do: {:error, :invalid_registration}
 
+  @doc """
+  Re-issues a `passkey_registration` token for an existing user who does not
+  yet have an active passkey.
+
+  This is the retry path when the original `passkey_registration` token was
+  consumed by a failed challenge fetch and the user needs a fresh token to
+  attempt registration again.
+
+  Returns `{:ok, raw_token}` on success.
+
+  Returns `{:error, :user_not_found}` if no user with the given `user_id` exists.
+
+  Returns `{:error, :invalid_user_state}` if the user's status is not `:active`
+  or `:pending` (e.g. the account is locked or deleted).
+
+  Returns `{:error, :already_registered}` if the user already has at least one
+  active (non-revoked) passkey — there is no reason to re-issue a registration
+  token in that case.
+  """
+  @spec reissue_passkey_token(Ecto.UUID.t()) ::
+          {:ok, String.t()} | {:error, :user_not_found | :already_registered | :invalid_user_state}
+  def reissue_passkey_token(user_id) do
+    with {:ok, user} <- Identity.fetch_user(user_id),
+         :ok <- assert_reissuable_user_state(user),
+         :ok <- assert_no_active_passkey(user_id),
+         {:ok, %IssuedToken{raw: register_token}} <-
+           Tokens.issue(:passkey_registration, %{"user_id" => user_id},
+             user_id: user_id
+           ) do
+      {:ok, register_token}
+    end
+  end
+
   ## Helpers ----------------------------------------------------------------
+
+  defp assert_reissuable_user_state(%User{status: status})
+       when status in [:active, :pending],
+       do: :ok
+
+  defp assert_reissuable_user_state(%User{}), do: {:error, :invalid_user_state}
+
+  defp assert_no_active_passkey(user_id) do
+    if Passkeys.has_active_passkey?(user_id),
+      do: {:error, :already_registered},
+      else: :ok
+  end
 
   defp invite_payload(payload, email, inviter_id) do
     household_id = household_id_from_payload(payload)
@@ -424,6 +484,18 @@ defmodule Famichat.Auth.Onboarding do
     |> Map.put_new("household_id", Map.get(payload, "family_id"))
     |> Map.take(["household_id", "role", "email_fingerprint"])
     |> Map.put("email_present", Map.has_key?(payload, "email_ciphertext"))
+  end
+
+  defp maybe_put_inviter_username(payload, nil), do: payload
+
+  defp maybe_put_inviter_username(payload, inviter_id) when is_binary(inviter_id) do
+    case Identity.fetch_user(inviter_id) do
+      {:ok, %{username: username}} when is_binary(username) ->
+        Map.put(payload, "inviter_username", username)
+
+      _ ->
+        payload
+    end
   end
 
   defp finalize_pairing(pairing, invite, invite_raw) do
@@ -472,7 +544,27 @@ defmodule Famichat.Auth.Onboarding do
     _ -> {:error, :invalid_pair}
   end
 
-  defp create_user_from_invite(claims, attrs) do
+  # Find an existing pending user tied to this registration token id, or create
+  # a new one. This makes complete_registration idempotent on the user-creation
+  # step: if a previous attempt inserted a pending user but the passkey step
+  # never completed, the same registration token (re-issued by peek_invite) can
+  # be used to reach the same pending user rather than colliding on username
+  # uniqueness.
+  #
+  # NOTE: a pending user is only reachable via the passkey registration path.
+  # It cannot log in, cannot be discovered by username lookup in auth flows,
+  # and will be cleaned up by the pending-user expiry job.
+  defp find_or_create_pending_user(claims, attrs, registration_token_id) do
+    case Repo.get_by(User, registration_token_id: registration_token_id) do
+      %User{} = existing_pending ->
+        {:ok, existing_pending}
+
+      nil ->
+        create_pending_user_from_invite(claims, attrs, registration_token_id)
+    end
+  end
+
+  defp create_pending_user_from_invite(claims, attrs, registration_token_id) do
     email =
       Map.get(attrs, "email") ||
         Map.get(attrs, :email) ||
@@ -482,14 +574,34 @@ defmodule Famichat.Auth.Onboarding do
       user_attrs =
         attrs
         |> Identity.permit_user_attrs()
-        |> Map.put(:status, :active)
-        |> Map.put(:confirmed_at, DateTime.utc_now())
+        |> Map.put(:status, :pending)
         |> Map.put(:email, email)
+        |> Map.put(:registration_token_id, registration_token_id)
 
+      # Note: confirmed_at is NOT set here. It is set in maybe_activate_pending_user/1
+      # inside passkeys.ex after passkey registration succeeds.
       %User{}
       |> User.changeset(user_attrs)
       |> Repo.insert()
+      |> case do
+        {:ok, user} ->
+          {:ok, user}
+
+        {:error, %Ecto.Changeset{} = cs} ->
+          if username_taken?(cs) do
+            {:error, :username_taken}
+          else
+            {:error, cs}
+          end
+      end
     end
+  end
+
+  defp username_taken?(%Ecto.Changeset{} = cs) do
+    cs
+    |> Ecto.Changeset.traverse_errors(fn {_msg, opts} -> opts end)
+    |> Map.get(:username, [])
+    |> Enum.any?(&(Keyword.get(&1, :constraint) == :unique))
   end
 
   defp maybe_email_from_claims(%{"email_ciphertext" => ciphertext}) do
@@ -538,10 +650,6 @@ defmodule Famichat.Auth.Onboarding do
       Tokens.issue(:invite_registration, payload)
 
     token
-  end
-
-  defp verify_invite_registration_token(token) do
-    Tokens.verify(:invite_registration, token)
   end
 
   defp fetch_family(household_id) do

@@ -70,11 +70,11 @@ defmodule Famichat.Auth.Tokens.Policy do
               },
               invite_registration: %Definition{
                 kind: :invite_registration,
-                storage: :signed,
+                storage: :ledgered,
                 ttl: 10 * 60,
                 max_ttl: 30 * 60,
                 audience: :invitee,
-                signing_salt: "invite_registration_v1",
+                legacy_context: "invite_registration",
                 subject_strategy: :user_id
               },
               passkey_registration: %Definition{

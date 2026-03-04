@@ -53,7 +53,7 @@ defmodule FamichatWeb.Navigation do
       >
         <.typography tag="span" size="1xl" font="cardinal">Famichat</.typography>
       </.link>
-      <div class="flex items-center gap-md">
+      <div class="flex flex-wrap items-center gap-md justify-end">
         <.theme_switcher />
         <nav aria-label={gettext("Language switcher")}>
           <ul class="flex gap-md">

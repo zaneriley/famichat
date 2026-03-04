@@ -40,6 +40,21 @@ defmodule Famichat.Auth.Passkeys do
   @challenge_salt "webauthn_challenge_v1"
 
   @doc """
+  Returns `true` if the user has at least one active (non-revoked) passkey.
+
+  A passkey is considered active when `disabled_at` is `nil`. This is used
+  to gate re-issuance of `passkey_registration` tokens so that users who
+  have already enrolled cannot accidentally overwrite their credential.
+  """
+  @spec has_active_passkey?(Ecto.UUID.t()) :: boolean()
+  def has_active_passkey?(user_id) do
+    Repo.exists?(
+      from p in Passkey,
+        where: p.user_id == ^user_id and is_nil(p.disabled_at)
+    )
+  end
+
+  @doc """
   Disables all active passkeys for the given user. Emits a telemetry event
   when any passkeys are disabled.
   """
@@ -281,7 +296,8 @@ defmodule Famichat.Auth.Passkeys do
 
       case Repo.insert(Passkey.changeset(%Passkey{}, attrs)) do
         {:ok, passkey} ->
-          with :ok <- finalize_registration_challenge(challenge_ctx) do
+          with {:ok, _user} <- maybe_activate_pending_user(user),
+               :ok <- finalize_registration_challenge(challenge_ctx) do
             emit_passkey_event(:register, %{user_id: user.id})
             _ = Identity.sync_enrollment_requirement(user)
             {:ok, passkey}
@@ -291,6 +307,26 @@ defmodule Famichat.Auth.Passkeys do
           error
       end
     end
+  end
+
+  # If the user is in :pending status (created during complete_registration but
+  # passkey registration was not yet completed), activate them now that a
+  # credential has been successfully verified. This runs inside the same logical
+  # execution context as the passkey insert so that a half-completed registration
+  # leaves no active credentialless user.
+  defp maybe_activate_pending_user(%User{status: :pending} = user) do
+    user
+    |> User.changeset(%{
+      status: :active,
+      confirmed_at: DateTime.utc_now(),
+      registration_token_id: nil
+    })
+    |> Repo.update()
+  end
+
+  defp maybe_activate_pending_user(%User{} = user) do
+    # Already active (bootstrap_admin path or future re-enrolment). No-op.
+    {:ok, user}
   end
 
   @doc """
@@ -797,9 +833,8 @@ defmodule Famichat.Auth.Passkeys do
 
   defp adapt_fetch_error(:expired), do: {:error, :expired}
   defp adapt_fetch_error(:already_used), do: {:error, :already_used}
-  defp adapt_fetch_error(:invalid), do: {:error, :invalid_challenge}
-  defp adapt_fetch_error(:invalid_challenge), do: {:error, :invalid_challenge}
-  defp adapt_fetch_error(:type_mismatch), do: {:error, :invalid_challenge}
+  defp adapt_fetch_error(reason) when reason in [:invalid, :invalid_challenge, :type_mismatch],
+    do: {:error, :invalid_challenge}
 
   defp emit_challenge_event(kind, metadata) do
     event =
@@ -940,9 +975,17 @@ defmodule Famichat.Auth.Passkeys do
         {:error, :missing_field}
 
       value when is_binary(value) ->
-        case Base.decode64(value, padding: false) do
-          {:ok, decoded} -> {:ok, decoded}
-          :error -> Base.decode64(value)
+        # Browsers send base64url (uses - and _). Try url-safe first, then
+        # fall back to standard base64 for any server-generated values.
+        case Base.url_decode64(value, padding: false) do
+          {:ok, decoded} ->
+            {:ok, decoded}
+
+          :error ->
+            case Base.decode64(value, padding: false) do
+              {:ok, decoded} -> {:ok, decoded}
+              :error -> {:error, :invalid_field}
+            end
         end
 
       _ ->
