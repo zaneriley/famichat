@@ -10,6 +10,10 @@
  * 6. On error:  pushEvent("passkey-error",  { message: "..." })
  */
 
+// ── Debug configuration ────────────────────────────────────────────────────────
+
+const DEBUG = document.documentElement.dataset.debug === "true";
+
 // ── Base64url helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -53,7 +57,7 @@ function getCsrfToken() {
 
 const PasskeyLoginHook = {
   mounted() {
-    console.log("[PasskeyLogin] Hook mounted", { el: this.el.id });
+    DEBUG && console.log("[PasskeyLogin] Hook mounted", { el: this.el.id });
 
     this.el.addEventListener("click", () => this._startFlow());
   },
@@ -217,7 +221,7 @@ const PasskeyLoginHook = {
       // Step 6: notify the LiveView — it will navigate to HomeLive
       this.pushEvent("passkey-result", { token });
     } catch (err) {
-      console.error("[PasskeyLogin] Error during flow:", err);
+      DEBUG && console.error("[PasskeyLogin] Error during flow:", err);
       this.pushEvent("passkey-error", {
         message: this._friendlyError(err),
       });

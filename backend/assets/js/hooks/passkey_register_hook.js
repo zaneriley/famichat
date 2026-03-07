@@ -37,13 +37,17 @@
 
 import { bufferToBase64url, base64urlToBuffer, getCsrfToken, friendlyWebAuthnError } from "./webauthn_helpers.js";
 
+// ── Debug configuration ────────────────────────────────────────────────────────
+
+const DEBUG = document.documentElement.dataset.debug === "true";
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
 const PasskeyRegisterHook = {
   mounted() {
-    console.log("[PasskeyRegister] Hook mounted", { el: this.el.id });
+    DEBUG && console.log("[PasskeyRegister] Hook mounted", { el: this.el.id });
 
     this._csrfToken = getCsrfToken();
     this._clickHandler = () => this.startRegistration();
@@ -70,7 +74,7 @@ const PasskeyRegisterHook = {
     const username = this.el.dataset.username;
 
     if (!registrationToken) {
-      console.error("[PasskeyRegister] Missing registration_token on element");
+      DEBUG && console.error("[PasskeyRegister] Missing registration_token on element");
       this.pushEvent("register-error", {
         code: "missing_registration_token",
         message: this._friendlyServerError("missing_registration_token"),
@@ -79,7 +83,7 @@ const PasskeyRegisterHook = {
     }
 
     if (!username) {
-      console.error("[PasskeyRegister] Missing username on element");
+      DEBUG && console.error("[PasskeyRegister] Missing username on element");
       this.pushEvent("register-error", {
         code: "network",
         message: friendlyWebAuthnError(null),
@@ -112,7 +116,7 @@ const PasskeyRegisterHook = {
         // Fast path: reuse cached challenge_handle and decoded public key options.
         // Skips Steps 1 and 2 entirely — the invite token is not re-consumed.
         // -----------------------------------------------------------------------
-        console.log("[PasskeyRegister] Reusing cached challenge_handle, skipping Steps 1+2");
+        DEBUG && console.log("[PasskeyRegister] Reusing cached challenge_handle, skipping Steps 1+2");
         challengeHandle = this._challengeHandle;
         publicKeyOptions = this._cachedPublicKey;
       } else {
@@ -124,7 +128,7 @@ const PasskeyRegisterHook = {
         let passkeyRegisterToken;
 
         if (this._passkeyRegisterToken) {
-          console.log("[PasskeyRegister] Reusing cached passkey_register_token, skipping Step 1");
+          DEBUG && console.log("[PasskeyRegister] Reusing cached passkey_register_token, skipping Step 1");
           passkeyRegisterToken = this._passkeyRegisterToken;
         } else {
           const completeRes = await fetch("/api/v1/auth/invites/complete", {
@@ -143,7 +147,7 @@ const PasskeyRegisterHook = {
           if (!completeRes.ok) {
             const body = await completeRes.json().catch(() => ({}));
             const code = body?.error?.code || "invite_completion_failed";
-            console.error("[PasskeyRegister] complete_invite failed", code);
+            DEBUG && console.error("[PasskeyRegister] complete_invite failed", code);
             this.pushEvent("register-error", {
               code: code,
               message: this._friendlyServerError(code),
@@ -155,7 +159,7 @@ const PasskeyRegisterHook = {
           passkeyRegisterToken = completeData.passkey_register_token;
 
           if (!passkeyRegisterToken) {
-            console.error("[PasskeyRegister] No passkey_register_token in response");
+            DEBUG && console.error("[PasskeyRegister] No passkey_register_token in response");
             this.pushEvent("register-error", {
               code: "passkey_registration_failed",
               message: this._friendlyServerError("passkey_registration_failed"),
@@ -187,7 +191,7 @@ const PasskeyRegisterHook = {
         if (!challengeRes.ok) {
           const body = await challengeRes.json().catch(() => ({}));
           const code = body?.error?.code || "challenge_failed";
-          console.error("[PasskeyRegister] challenge request failed", code);
+          DEBUG && console.error("[PasskeyRegister] challenge request failed", code);
           this.pushEvent("register-error", {
             code: code,
             message: this._friendlyServerError(code),
@@ -204,7 +208,7 @@ const PasskeyRegisterHook = {
         this._challengeHandle = challengeHandle;
         this._challengeExpiresAt = challengeData.expires_at || null;
         this._cachedPublicKey = publicKeyOptions;
-        console.log("[PasskeyRegister] Cached challenge_handle for retry", {
+        DEBUG && console.log("[PasskeyRegister] Cached challenge_handle for retry", {
           expiresAt: this._challengeExpiresAt,
         });
       }
@@ -218,7 +222,7 @@ const PasskeyRegisterHook = {
           publicKey: publicKeyOptions,
         });
       } catch (err) {
-        console.error("[PasskeyRegister] navigator.credentials.create failed", err);
+        DEBUG && console.error("[PasskeyRegister] navigator.credentials.create failed", err);
         const name = err?.name || "";
 
         if (name === "NotSupportedError") {
@@ -252,7 +256,7 @@ const PasskeyRegisterHook = {
       if (!registerRes.ok) {
         const body = await registerRes.json().catch(() => ({}));
         const code = body?.error?.code || "passkey_registration_failed";
-        console.error("[PasskeyRegister] passkey register failed", code);
+        DEBUG && console.error("[PasskeyRegister] passkey register failed", code);
         this.pushEvent("register-error", {
           code: code,
           message: this._friendlyServerError(code),
@@ -263,11 +267,11 @@ const PasskeyRegisterHook = {
       // -----------------------------------------------------------------------
       // Step 5: Success — tell the LiveView to redirect and clear retry state.
       // -----------------------------------------------------------------------
-      console.log("[PasskeyRegister] Registration complete");
+      DEBUG && console.log("[PasskeyRegister] Registration complete");
       this._clearRetryState();
       this.pushEvent("register-success", {});
     } catch (err) {
-      console.error("[PasskeyRegister] Unexpected error during registration", err);
+      DEBUG && console.error("[PasskeyRegister] Unexpected error during registration", err);
       this.pushEvent("register-error", {
         code: "network",
         message: friendlyWebAuthnError(err),

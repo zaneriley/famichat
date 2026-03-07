@@ -28,13 +28,17 @@
 
 import { bufferToBase64url, base64urlToBuffer, getCsrfToken, friendlyWebAuthnError } from "./webauthn_helpers.js";
 
+// ── Debug configuration ────────────────────────────────────────────────────────
+
+const DEBUG = document.documentElement.dataset.debug === "true";
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
 const PasskeyAdminSetupHook = {
   mounted() {
-    console.log("[PasskeyAdminSetup] Hook mounted", { el: this.el.id });
+    DEBUG && console.log("[PasskeyAdminSetup] Hook mounted", { el: this.el.id });
 
     this._csrfToken = getCsrfToken();
     this._clickHandler = () => this.startRegistration();
@@ -59,7 +63,7 @@ const PasskeyAdminSetupHook = {
     const passkeyRegisterToken = this.el.dataset.passkeyRegisterToken;
 
     if (!passkeyRegisterToken) {
-      console.error("[PasskeyAdminSetup] Missing data-passkey-register-token on element");
+      DEBUG && console.error("[PasskeyAdminSetup] Missing data-passkey-register-token on element");
       this.pushEvent("register-error", {
         code: "missing_registration_token",
         message: this._friendlyServerError("missing_registration_token"),
@@ -90,7 +94,7 @@ const PasskeyAdminSetupHook = {
         // Fast path: reuse cached challenge_handle and decoded public key options.
         // Skips Step 2 — no additional server round-trip needed.
         // -----------------------------------------------------------------------
-        console.log("[PasskeyAdminSetup] Reusing cached challenge_handle, skipping Step 2");
+        DEBUG && console.log("[PasskeyAdminSetup] Reusing cached challenge_handle, skipping Step 2");
         challengeHandle = this._challengeHandle;
         publicKeyOptions = this._cachedPublicKey;
       } else {
@@ -114,7 +118,7 @@ const PasskeyAdminSetupHook = {
         if (!challengeRes.ok) {
           const body = await challengeRes.json().catch(() => ({}));
           const code = body?.error?.code || "challenge_failed";
-          console.error("[PasskeyAdminSetup] challenge request failed", code);
+          DEBUG && console.error("[PasskeyAdminSetup] challenge request failed", code);
           this.pushEvent("register-error", {
             code: code,
             message: this._friendlyServerError(code),
@@ -131,7 +135,7 @@ const PasskeyAdminSetupHook = {
         this._challengeHandle = challengeHandle;
         this._challengeExpiresAt = challengeData.expires_at || null;
         this._cachedPublicKey = publicKeyOptions;
-        console.log("[PasskeyAdminSetup] Cached challenge_handle for retry", {
+        DEBUG && console.log("[PasskeyAdminSetup] Cached challenge_handle for retry", {
           expiresAt: this._challengeExpiresAt,
         });
       }
@@ -145,7 +149,7 @@ const PasskeyAdminSetupHook = {
           publicKey: publicKeyOptions,
         });
       } catch (err) {
-        console.error("[PasskeyAdminSetup] navigator.credentials.create failed", err);
+        DEBUG && console.error("[PasskeyAdminSetup] navigator.credentials.create failed", err);
         const name = err?.name || "";
 
         if (name === "NotSupportedError") {
@@ -179,7 +183,7 @@ const PasskeyAdminSetupHook = {
       if (!registerRes.ok) {
         const body = await registerRes.json().catch(() => ({}));
         const code = body?.error?.code || "passkey_registration_failed";
-        console.error("[PasskeyAdminSetup] passkey register failed", code);
+        DEBUG && console.error("[PasskeyAdminSetup] passkey register failed", code);
         this.pushEvent("register-error", {
           code: code,
           message: this._friendlyServerError(code),
@@ -191,11 +195,11 @@ const PasskeyAdminSetupHook = {
       // Step 5: Success — tell the LiveView to advance to issue_invite step
       //         and clear retry state.
       // -----------------------------------------------------------------------
-      console.log("[PasskeyAdminSetup] Registration complete");
+      DEBUG && console.log("[PasskeyAdminSetup] Registration complete");
       this._clearRetryState();
       this.pushEvent("register-success", {});
     } catch (err) {
-      console.error("[PasskeyAdminSetup] Unexpected error during registration", err);
+      DEBUG && console.error("[PasskeyAdminSetup] Unexpected error during registration", err);
       this.pushEvent("register-error", {
         code: "network",
         message: friendlyWebAuthnError(err),
