@@ -33,6 +33,59 @@
   --border-tactile: var(--border-thick) solid var(--color-brown-200);
 }
 
+/* Dark mode overrides for AC semantic tokens */
+html[data-theme="dark"],
+html:not([data-theme]) {
+  --canvas-base: #2a2520;
+  --surface-primary: #3a332c;
+  --signal-primary: var(--color-mint-500);
+  --text-base: #e8dfd4;
+  --text-muted: #a89880;
+  --color-cream-50: #3a332c;
+  --color-cream-100: #4a4138;
+  --color-brown-100: rgba(0, 0, 0, 0.2);
+  --color-brown-200: #6e5c42;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    --canvas-base: #2a2520;
+    --surface-primary: #3a332c;
+    --text-base: #e8dfd4;
+    --text-muted: #a89880;
+    --color-cream-50: #3a332c;
+    --color-cream-100: #4a4138;
+    --color-brown-100: rgba(0, 0, 0, 0.2);
+    --color-brown-200: #6e5c42;
+  }
+}
+
+/* Light mode: restore AC original light palette */
+html[data-theme="light"] {
+  --canvas-base: #fdf6e3;
+  --surface-primary: #ffffff;
+  --signal-primary: var(--color-mint-500);
+  --text-base: #5c5c3d;
+  --text-muted: #ae8c59;
+  --color-cream-50: #fdf6e3;
+  --color-cream-100: #f9e8b3;
+  --color-brown-100: rgba(130, 93, 41, 0.12);
+  --color-brown-200: #cea569;
+}
+
+@media (prefers-color-scheme: light) {
+  html:not([data-theme]) {
+    --canvas-base: #fdf6e3;
+    --surface-primary: #ffffff;
+    --text-base: #5c5c3d;
+    --text-muted: #ae8c59;
+    --color-cream-50: #fdf6e3;
+    --color-cream-100: #f9e8b3;
+    --color-brown-100: rgba(130, 93, 41, 0.12);
+    --color-brown-200: #cea569;
+  }
+}
+
 /* Layer 3: Component Tokens (The Kitchen Table UI) */
 
 .ac-canvas {
@@ -65,6 +118,18 @@
   padding: 0.75rem;
   box-shadow: 0 4px 0 rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
   transition: transform 0.15s var(--easing-bouncy), box-shadow 0.15s ease;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.ac-primary-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.ac-primary-button:focus-visible {
+  outline: 3px solid var(--signal-primary);
+  outline-offset: 2px;
 }
 
 .ac-primary-button:active:not(:disabled) {
@@ -76,6 +141,45 @@
   background-color: #e0dbc8;
   color: #aba994;
   box-shadow: none;
+  cursor: not-allowed;
+}
+
+.ac-secondary-button {
+  background-color: var(--color-cream-100);
+  color: var(--text-base);
+  border: var(--border-tactile);
+  border-radius: var(--radius-pill);
+  padding: 0.75rem;
+  box-shadow: 0 3px 0 var(--color-brown-100), 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s var(--easing-bouncy), box-shadow 0.15s ease,
+    background-color 0.15s ease;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.ac-secondary-button:hover:not(:disabled) {
+  background-color: var(--color-cream-50);
+  filter: brightness(1.04);
+}
+
+.ac-secondary-button:focus-visible {
+  outline: 3px solid var(--signal-primary);
+  outline-offset: 2px;
+}
+
+.ac-secondary-button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--color-brown-100), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.ac-secondary-button:disabled {
+  background-color: #e0dbc8;
+  color: #aba994;
+  border-color: #d5d0c0;
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 .ac-text-input {
@@ -152,6 +256,6 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(69, 189, 127, 0.4); }
-  50% { box-shadow: 0 0 0 6px rgba(69, 189, 127, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal-primary) 40%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--signal-primary) 0%, transparent); }
 }

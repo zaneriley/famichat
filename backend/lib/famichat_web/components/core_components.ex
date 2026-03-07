@@ -257,17 +257,7 @@ defmodule FamichatWeb.CoreComponents do
           :if={@kind == :error}
           mini
           class="inline-block h-1xs w-1xs"
-        />> <%= @title %>
-        <Heroicons.information_circle
-          :if={@kind == :info}
-          mini
-          class="inline-block h-1xs w-1xs"
-        />
-        <Heroicons.exclamation_circle
-          :if={@kind == :error}
-          mini
-          class="inline-block h-1xs w-1xs"
-        />> <%= @title %>
+        /> <%= @title %>
       </p>
 
       <p><%= msg %></p>
