@@ -184,6 +184,15 @@ const PasskeyLoginHook = {
         signature: bufferToBase64url(credential.response.signature),
       };
 
+      // Include userHandle for discoverable credential flow — the authenticator
+      // returns the user.id set during registration so the server can identify
+      // who is logging in without a prior username lookup.
+      if (credential.response.userHandle) {
+        assertionPayload.user_handle = bufferToBase64url(
+          credential.response.userHandle,
+        );
+      }
+
       // Step 5: verify the assertion on the server
       const assertResponse = await this._postAssert(assertionPayload);
       if (!assertResponse.ok) {

@@ -94,17 +94,90 @@ defmodule Famichat.Auth.Passkeys do
 
   @doc """
   Issues an assertion challenge based on a flexible identifier (user id,
-  username, or email).
+  username, or email). When the identifier map is empty (no username/email),
+  issues a discoverable credential challenge for resident keys.
   """
   @spec issue_assertion_challenge(map() | String.t()) ::
           {:ok, map()} | {:error, term()}
   def issue_assertion_challenge(identifier)
       when is_map(identifier) and not is_struct(identifier) do
-    do_issue_assertion_for_identifier(identifier)
+    if discoverable_request?(identifier) do
+      issue_discoverable_assertion_challenge()
+    else
+      do_issue_assertion_for_identifier(identifier)
+    end
   end
 
   def issue_assertion_challenge(identifier) when is_binary(identifier) do
     do_issue_assertion_for_identifier(identifier)
+  end
+
+  # An empty map or a map with no username/email/identifier keys is a
+  # discoverable credential request (the authenticator identifies the user).
+  defp discoverable_request?(params) when is_map(params) do
+    not (Map.has_key?(params, "username") or
+           Map.has_key?(params, "email") or
+           Map.has_key?(params, "identifier"))
+  end
+
+  @doc """
+  Issues a discoverable assertion challenge (no user binding).
+
+  The authenticator picks the credential from its resident key store, so the
+  server does not need to know who is logging in ahead of time. The returned
+  `allowCredentials` list is empty per the WebAuthn spec for discoverable flow.
+  """
+  @spec issue_discoverable_assertion_challenge() :: {:ok, map()} | {:error, term()}
+  def issue_discoverable_assertion_challenge do
+    ttl = ttl_for(@assertion_type)
+
+    Instrumentation.span(
+      [:famichat, :auth, :passkeys, :issue],
+      %{user_id: nil, type: @assertion_type},
+      do: persist_discoverable_challenge(ttl)
+    )
+  end
+
+  defp persist_discoverable_challenge(ttl) do
+    challenge_bytes = :crypto.strong_rand_bytes(@challenge_size)
+    expires_at = DateTime.add(DateTime.utc_now(), ttl, :second)
+
+    attrs = %{
+      type: @assertion_type,
+      challenge: challenge_bytes,
+      expires_at: expires_at
+    }
+
+    case Repo.insert(Challenge.discoverable_changeset(%Challenge{}, attrs)) do
+      {:ok, record} ->
+        handle = sign_handle(record, ttl)
+        challenge_b64 = Base.url_encode64(challenge_bytes, padding: false)
+
+        options = %{
+          "challenge" => challenge_b64,
+          "rpId" => rp_id(),
+          "timeout" => 60_000,
+          "allowCredentials" => [],
+          "userVerification" => "required"
+        }
+
+        emit_challenge_event(:issued, %{
+          type: @assertion_type,
+          user_id: nil,
+          challenge_id: record.id
+        })
+
+        {:ok,
+         %{
+           "challenge" => challenge_b64,
+           "challenge_handle" => handle,
+           "expires_at" => expires_at,
+           "public_key_options" => options
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp do_issue_assertion_for_identifier(identifier) do
@@ -357,7 +430,7 @@ defmodule Famichat.Auth.Passkeys do
            decode_base64(payload, ["credential_id", :credential_id]),
          {:ok, challenge_ctx} <- resolve_assertion_challenge(payload),
          {:ok, passkey} <- find_active_passkey(credential_id),
-         :ok <- verify_assertion_user(passkey, challenge_ctx.user_id),
+         :ok <- maybe_verify_assertion_user(passkey, challenge_ctx.user_id),
          {:ok, cose_key} <- load_cose_key(passkey),
          {:ok, authenticator_data_bin} <-
            decode_base64(
@@ -901,6 +974,10 @@ defmodule Famichat.Auth.Passkeys do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # Discoverable flow: challenge has no user_id — credential identifies the user.
+  defp maybe_verify_assertion_user(_passkey, nil), do: :ok
+  defp maybe_verify_assertion_user(passkey, user_id), do: verify_assertion_user(passkey, user_id)
 
   defp verify_assertion_user(%Passkey{user_id: user_id}, user_id), do: :ok
   defp verify_assertion_user(_passkey, _), do: {:error, :invalid_credentials}

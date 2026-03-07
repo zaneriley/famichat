@@ -4,6 +4,7 @@ defmodule FamichatWeb.Router do
   alias FamichatWeb.Plugs.LocaleRedirection
   alias FamichatWeb.Plugs.CommonMetadata
   alias FamichatWeb.Plugs.CSPHeader
+  alias FamichatWeb.Plugs.SessionRefresh
   import Phoenix.LiveView.Router
   import Phoenix.LiveDashboard.Router
   import Plug.BasicAuth
@@ -17,6 +18,7 @@ defmodule FamichatWeb.Router do
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
+    plug SessionRefresh
     plug :fetch_live_flash
     plug :put_root_layout, {FamichatWeb.Layouts, :root}
     plug :protect_from_forgery

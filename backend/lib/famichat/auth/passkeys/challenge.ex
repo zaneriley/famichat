@@ -50,4 +50,17 @@ defmodule Famichat.Auth.Passkeys.Challenge do
     |> cast(attrs, [:user_id, :type, :challenge, :expires_at, :consumed_at])
     |> validate_required([:user_id, :type, :challenge, :expires_at])
   end
+
+  @doc """
+  Changeset for discoverable assertion challenges (no user_id required).
+
+  WebAuthn discoverable credentials (resident keys) allow the authenticator
+  to identify the user, so the challenge is not bound to a specific user.
+  """
+  @spec discoverable_changeset(t(), map()) :: Ecto.Changeset.t()
+  def discoverable_changeset(challenge, attrs) do
+    challenge
+    |> cast(attrs, [:type, :challenge, :expires_at])
+    |> validate_required([:type, :challenge, :expires_at])
+  end
 end

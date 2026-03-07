@@ -357,6 +357,8 @@ defmodule FamichatWeb.AuthController do
       conn
       |> put_status(:created)
       |> put_session(:access_token, session.access_token)
+      |> put_session(:refresh_token, session.refresh_token)
+      |> put_session(:device_id, session.device_id)
       |> json(%{
         passkey_id: passkey.id,
         user_id: passkey.user_id,
@@ -436,6 +438,8 @@ defmodule FamichatWeb.AuthController do
       conn
       |> put_status(:created)
       |> put_session(:access_token, session.access_token)
+      |> put_session(:refresh_token, session.refresh_token)
+      |> put_session(:device_id, session.device_id)
       |> json(session)
     else
       {:error, :invalid_credentials} ->
@@ -638,6 +642,8 @@ defmodule FamichatWeb.AuthController do
             conn
             |> put_status(:created)
             |> put_session(:access_token, session.access_token)
+            |> put_session(:refresh_token, session.refresh_token)
+            |> put_session(:device_id, session.device_id)
             |> json(%{
               user_id: user.id,
               username: user.username,
