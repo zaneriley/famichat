@@ -12,7 +12,13 @@ defmodule Famichat.Chat.Self do
   alias Famichat.Repo
 
   @spec get_or_create(Ecto.UUID.t()) ::
-          {:ok, Conversation.t()} | {:error, atom()}
+          {:ok, Conversation.t()}
+          | {:error,
+             :user_not_found
+             | :not_in_family
+             | :ambiguous_household
+             | :invalid_self_conversation
+             | :lock_failed}
   def get_or_create(user_id) when is_binary(user_id) do
     with {:ok, _user} <- fetch_user(user_id),
          {:ok, family_id} <- family_id_for_user(user_id) do
@@ -41,16 +47,19 @@ defmodule Famichat.Chat.Self do
   end
 
   defp family_id_for_user(user_id) do
-    query =
-      from m in HouseholdMembership,
+    family_ids =
+      from(m in HouseholdMembership,
         where: m.user_id == ^user_id,
-        order_by: [asc: m.inserted_at],
-        limit: 1,
+        order_by: [asc: m.inserted_at, asc: m.family_id],
+        limit: 2,
         select: m.family_id
+      )
+      |> Repo.all()
 
-    case Repo.one(query) do
-      nil -> {:error, :not_in_family}
-      family_id -> {:ok, family_id}
+    case family_ids do
+      [] -> {:error, :not_in_family}
+      [family_id] -> {:ok, family_id}
+      [_family_id_one, _family_id_two] -> {:error, :ambiguous_household}
     end
   end
 

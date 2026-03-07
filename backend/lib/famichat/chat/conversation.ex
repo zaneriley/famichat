@@ -26,6 +26,7 @@ defmodule Famichat.Chat.Conversation do
 
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
+          community_id: Ecto.UUID.t() | nil,
           family_id: Ecto.UUID.t(),
           conversation_type: :direct | :group | :self | :family,
           direct_key: String.t() | nil,
@@ -40,6 +41,8 @@ defmodule Famichat.Chat.Conversation do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "conversations" do
+    field :community_id, :binary_id, read_after_writes: true
+    belongs_to :community, Famichat.Accounts.Community, define_field: false
     field :family_id, :binary_id
 
     field :conversation_type, Ecto.Enum,

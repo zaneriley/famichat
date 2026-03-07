@@ -107,6 +107,7 @@ defmodule Famichat.Chat.ConversationService do
 
     - `:user_not_found` - Missing user records
     - `:different_families` - Cross-family conversation attempt
+    - `:ambiguous_household` - Multiple shared households exist, so family scope must be chosen explicitly
     - `:changeset_invalid` - Validation failures
 
   ## Examples
@@ -121,7 +122,13 @@ defmodule Famichat.Chat.ConversationService do
       {:error, :different_families} = create_direct_conversation(uuid1, uuid3)
   """
   @spec create_direct_conversation(String.t(), String.t()) ::
-          {:ok, Conversation.t()} | {:error, atom()}
+          {:ok, Conversation.t()}
+          | {:error,
+             :user_not_found
+             | :different_families
+             | :ambiguous_household
+             | :participant_creation_failed
+             | term()}
   def create_direct_conversation(user1_id, user2_id)
       when is_binary(user1_id) and is_binary(user2_id) do
     metadata = %{user1_id: user1_id, user2_id: user2_id}
@@ -308,19 +315,22 @@ defmodule Famichat.Chat.ConversationService do
   end
 
   defp shared_family_id(user1_id, user2_id) do
-    result =
+    shared_family_ids =
       from(m1 in HouseholdMembership,
         join: m2 in HouseholdMembership,
         on: m1.family_id == m2.family_id,
         where: m1.user_id == ^user1_id and m2.user_id == ^user2_id,
-        limit: 1,
+        distinct: true,
+        order_by: [asc: m1.family_id],
+        limit: 2,
         select: m1.family_id
       )
-      |> Repo.one()
+      |> Repo.all()
 
-    case result do
-      nil -> {:error, :different_families}
-      family_id -> {:ok, family_id}
+    case shared_family_ids do
+      [] -> {:error, :different_families}
+      [family_id] -> {:ok, family_id}
+      [_family_id_one, _family_id_two] -> {:error, :ambiguous_household}
     end
   end
 

@@ -9,12 +9,14 @@ defmodule Famichat.Chat do
     deps: [
       Famichat,
       Famichat.Accounts,
+      Famichat.Communities,
       Famichat.Auth.Households,
       Famichat.Auth.Identity
     ]
 
   import Ecto.Query, warn: false
   alias Famichat.Repo
+  alias Famichat.Communities
   alias Famichat.Chat.Family
   alias Famichat.Accounts.User
   alias Famichat.Auth.Households
@@ -62,6 +64,11 @@ defmodule Famichat.Chat do
 
   """
   def create_family(attrs \\ %{}) do
+    attrs =
+      attrs
+      |> Map.new()
+      |> maybe_put_family_community_id()
+
     %Family{}
     |> Family.changeset(attrs)
     |> Repo.insert()
@@ -123,11 +130,13 @@ defmodule Famichat.Chat do
   def create_user(attrs) when is_map(attrs) do
     family_id = Map.get(attrs, :family_id) || Map.get(attrs, "family_id")
     role = Map.get(attrs, :role) || Map.get(attrs, "role")
+    community_id = resolve_user_community_id(attrs, family_id)
 
     user_attrs =
       attrs
       |> Map.drop([:family_id, :role, "family_id", "role"])
       |> Identity.permit_user_attrs()
+      |> Map.put(:community_id, community_id)
 
     normalized_role = normalize_role(role)
 
@@ -154,6 +163,37 @@ defmodule Famichat.Chat do
   end
 
   def create_user(_), do: {:error, :invalid_input}
+
+  defp resolve_user_community_id(attrs, family_id) do
+    explicit =
+      Map.get(attrs, :community_id) ||
+        Map.get(attrs, "community_id")
+
+    cond do
+      is_binary(family_id) ->
+        case Repo.get(Family, family_id) do
+          %Family{community_id: community_id} when is_binary(community_id) ->
+            community_id
+
+          _ ->
+            explicit || Communities.current_community!().id
+        end
+
+      is_binary(explicit) ->
+        explicit
+
+      true ->
+        Communities.current_community!().id
+    end
+  end
+
+  defp maybe_put_family_community_id(attrs) do
+    if Map.has_key?(attrs, :community_id) or Map.has_key?(attrs, "community_id") do
+      attrs
+    else
+      Map.put(attrs, :community_id, Communities.current_community!().id)
+    end
+  end
 
   defp ensure_membership(_user_id, nil, _role), do: {:ok, :skipped}
 
@@ -223,7 +263,8 @@ defmodule Famichat.Chat do
 
   Delegates to `Famichat.Chat.ConversationService.create_direct_conversation/2`.
   """
-  defdelegate create_direct_conversation(user1_id, user2_id), to: ConversationService
+  defdelegate create_direct_conversation(user1_id, user2_id),
+    to: ConversationService
 
   alias Famichat.Chat.Conversation
   alias Famichat.Chat.ConversationSecurityKeyPackagePolicy

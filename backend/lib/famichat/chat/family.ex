@@ -7,6 +7,7 @@ defmodule Famichat.Chat.Family do
 
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
+          community_id: Ecto.UUID.t() | nil,
           name: String.t(),
           settings: map(),
           inserted_at: DateTime.t(),
@@ -16,6 +17,8 @@ defmodule Famichat.Chat.Family do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "families" do
+    field :community_id, :binary_id, read_after_writes: true
+    belongs_to :community, Famichat.Accounts.Community, define_field: false
     field :name, :string
     field :settings, :map, default: %{}
 

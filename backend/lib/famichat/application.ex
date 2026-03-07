@@ -26,6 +26,7 @@ defmodule Famichat.Application do
       {Finch, name: Famichat.Finch},
       {Task.Supervisor, name: Famichat.TaskSupervisor},
       Famichat.Chat.MessageRateLimiter,
+      FamichatWeb.TokenVerifyCache,
       FamichatWeb.Endpoint,
       Famichat.Cache
     ]

@@ -15,6 +15,7 @@ defmodule Famichat.Accounts.User do
 
   @type t :: %__MODULE__{
           id: Ecto.UUID.t() | nil,
+          community_id: Ecto.UUID.t() | nil,
           username: String.t() | nil,
           username_fingerprint: binary() | nil,
           email: binary() | nil,
@@ -30,6 +31,8 @@ defmodule Famichat.Accounts.User do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "users" do
+    field :community_id, :binary_id, read_after_writes: true
+    belongs_to :community, Famichat.Accounts.Community, define_field: false
     field :username, :string
     field :username_fingerprint, :binary
     field :email, EncryptedBinary
