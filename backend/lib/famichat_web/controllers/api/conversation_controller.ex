@@ -28,13 +28,17 @@ defmodule FamichatWeb.API.ConversationController do
             |> json(%{error: %{code: "participant_not_found"}})
 
           {:ok, _participant} ->
-            case Chat.create_direct_conversation(current_user_id, participant_id) do
+            case Chat.create_direct_conversation(
+                   current_user_id,
+                   participant_id
+                 ) do
               {:ok, conversation} ->
                 conn
                 |> put_status(:created)
                 |> json(%{
                   conversation_id: conversation.id,
-                  conversation_type: Atom.to_string(conversation.conversation_type)
+                  conversation_type:
+                    Atom.to_string(conversation.conversation_type)
                 })
 
               {:error, reason} ->

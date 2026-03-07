@@ -12,7 +12,10 @@
     <meta name="csrf-token" content={get_csrf_token()} />
     <meta
       name="description"
-      content={assigns[:page_description] || gettext("Private, self-hosted messaging for families.")}
+      content={
+        assigns[:page_description] ||
+          gettext("Private, self-hosted messaging for families.")
+      }
     />
     <noscript>
       <style>

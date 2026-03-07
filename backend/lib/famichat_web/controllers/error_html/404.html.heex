@@ -9,7 +9,10 @@
     <meta name="csrf-token" content={get_csrf_token()} />
     <meta
       name="description"
-      content={assigns[:page_description] || "The page you're looking for doesn't exist."}
+      content={
+        assigns[:page_description] ||
+          "The page you're looking for doesn't exist."
+      }
     />
     <link
       rel="apple-touch-icon"
@@ -65,9 +68,7 @@
         class=""
         style="filter: url('#waves');transform: translateY(-0.25rem) translateX(calc(0rem));"
       >
-        /********************************************** <br />
-        Famichat
-
+        /********************************************** <br /> Famichat
         <h1>
           <%= gettext("ERROR 404") %> <br /> <%= gettext("DATA NOT FOUND") %>
         </h1>
@@ -84,7 +85,12 @@
         ) %> <br /> <%= gettext("YOUR CONTINUED EXPLORATION.") %><br /> <br />
         ≺system initiating self-reflection protocol≻<br />
         <p class="">
-          <a href={"/#{@conn.assigns[:user_locale] || "en"}/"} class="pb-6 block"><%= gettext("RETURN TO HOME") %></a>
+          <a
+            href={"/#{@conn.assigns[:user_locale] || "en"}/"}
+            class="pb-6 block"
+          >
+            <%= gettext("RETURN TO HOME") %>
+          </a>
         </p>
 
         <svg

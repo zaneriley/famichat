@@ -12,6 +12,7 @@ defmodule Famichat.Auth.Runtime.Audit do
           %{
             optional(:actor_id) => Ecto.UUID.t(),
             optional(:subject_id) => Ecto.UUID.t(),
+            optional(:community_id) => Ecto.UUID.t(),
             optional(:household_id) => Ecto.UUID.t(),
             required(:scope) => atom() | String.t(),
             optional(:metadata) => map()

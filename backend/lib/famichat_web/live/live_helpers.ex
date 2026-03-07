@@ -121,9 +121,14 @@ defmodule FamichatWeb.LiveHelpers do
   def locale_path(socket_or_assigns, path) do
     locale =
       case socket_or_assigns do
-        %Phoenix.LiveView.Socket{} -> socket_or_assigns.assigns[:user_locale] || "en"
-        %{user_locale: locale} -> locale || "en"
-        _ -> "en"
+        %Phoenix.LiveView.Socket{} ->
+          socket_or_assigns.assigns[:user_locale] || "en"
+
+        %{user_locale: locale} ->
+          locale || "en"
+
+        _ ->
+          "en"
       end
 
     "/#{locale}#{path}"

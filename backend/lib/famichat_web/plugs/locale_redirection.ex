@@ -7,9 +7,10 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
   """
   import Plug.Conn
   import Phoenix.Controller, only: [redirect: 2]
-  require Logger
 
   alias Famichat.Accounts.FirstRun
+  alias FamichatWeb.SessionKeys
+  require Logger
 
   @supported_locales Application.compile_env!(:famichat, :supported_locales)
   @default_locale Application.compile_env!(:famichat, :default_locale)
@@ -60,15 +61,19 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
         # First-run gate: if no users exist, redirect to setup page.
         remaining = conn.assigns[:path_without_locale] || "/"
 
-        if not FirstRun.bootstrapped?() and remaining not in ["/setup", "/setup/"] do
-          log(:info, "First-run detected — redirecting to /#{locale_from_url}/setup")
+        if not FirstRun.bootstrapped?() and
+             remaining not in ["/setup", "/setup/"] do
+          log(
+            :info,
+            "First-run detected — redirecting to /#{locale_from_url}/setup"
+          )
 
           conn
-          |> put_session(:redirect_count, 0)
+          |> put_session(SessionKeys.redirect_count(), 0)
           |> redirect(to: "/#{locale_from_url}/setup")
           |> halt()
         else
-          put_session(conn, :redirect_count, 0)
+          put_session(conn, SessionKeys.redirect_count(), 0)
         end
 
       # Check if it's a single segment path that's not a locale
@@ -105,7 +110,7 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
               router: FamichatWeb.Router
 
           path ->
-            put_session(conn, :redirect_count, 0)
+            put_session(conn, SessionKeys.redirect_count(), 0)
             |> redirect_to_locale(path, user_locale)
         end
     end
@@ -128,7 +133,7 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
   @spec do_redirect(Plug.Conn.t(), path(), integer()) :: Plug.Conn.t()
   defp do_redirect(conn, path, redirect_count) do
     conn
-    |> put_session(:redirect_count, redirect_count)
+    |> put_session(SessionKeys.redirect_count(), redirect_count)
     |> put_status(:moved_permanently)
     |> redirect(to: path)
     |> halt()
@@ -186,7 +191,7 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
   @spec get_user_locale(Plug.Conn.t()) :: locale()
   defp get_user_locale(conn) do
     conn.assigns[:user_locale] ||
-      get_session(conn, "user_locale") ||
+      get_session(conn, SessionKeys.user_locale()) ||
       @default_locale
   end
 
@@ -219,7 +224,7 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
 
   @spec get_redirect_count(Plug.Conn.t()) :: integer()
   defp get_redirect_count(conn) do
-    get_session(conn, :redirect_count) || 0
+    get_session(conn, SessionKeys.redirect_count()) || 0
   end
 
   @spec log(atom(), String.t()) :: :ok

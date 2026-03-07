@@ -12,6 +12,8 @@ defmodule Famichat.Auth.Runtime.AuditLog do
     field :event, :string
     field :actor_id, :binary_id
     field :subject_id, :binary_id
+    field :community_id, :binary_id, read_after_writes: true
+    belongs_to :community, Famichat.Accounts.Community, define_field: false
     field :household_id, :binary_id
     field :scope, :string
     field :metadata, :map, default: %{}
@@ -27,6 +29,8 @@ defmodule Famichat.Auth.Runtime.AuditLog do
     :scope,
     :metadata
   ]
+  # community_id is intentionally omitted here for the singleton slice and is
+  # supplied by DB default / service-layer ownership rather than external input.
   @required_fields [:event, :scope]
 
   @doc false

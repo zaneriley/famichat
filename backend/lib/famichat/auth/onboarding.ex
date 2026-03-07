@@ -68,15 +68,41 @@ defmodule Famichat.Auth.Onboarding do
 
   def issue_invite(_, _, _), do: {:error, :invalid_role}
 
+  @spec issue_invite_validated(Ecto.UUID.t(), map()) ::
+          {:ok, %{invite: String.t(), qr: String.t(), admin_code: String.t()}}
+          | {:error, term()}
+  def issue_invite_validated(inviter_id, params)
+      when is_binary(inviter_id) and is_map(params) do
+    household_id = household_id_from_payload(params)
+    role = Map.get(params, "role") || Map.get(params, :role) || "member"
+    email = Map.get(params, "email") || Map.get(params, :email)
+
+    with {:ok, normalized_household_id} <- validate_household_id(household_id) do
+      issue_invite(inviter_id, email, %{
+        household_id: normalized_household_id,
+        role: role
+      })
+    end
+  end
+
+  def issue_invite_validated(_, _), do: {:error, :invalid_parameters}
+
   @spec bootstrap_admin(String.t(), map()) ::
-          {:ok, %{user: User.t(), family: Famichat.Chat.Family.t(), passkey_register_token: String.t()}}
+          {:ok,
+           %{
+             user: User.t(),
+             family: Famichat.Chat.Family.t(),
+             passkey_register_token: String.t()
+           }}
           | {:error, :admin_exists}
           | {:error, :invalid_input}
           | {:error, :username_required}
           | {:error, Ecto.Changeset.t()}
   def bootstrap_admin(username, opts \\ %{}) do
     with {:ok, normalized_username} <- validate_bootstrap_username(username) do
-      family_name = Map.get(opts, :family_name) || Map.get(opts, "family_name") || "My Family"
+      family_name =
+        Map.get(opts, :family_name) || Map.get(opts, "family_name") ||
+          "My Family"
 
       result =
         Ecto.Multi.new()
@@ -89,7 +115,12 @@ defmodule Famichat.Auth.Onboarding do
             {:ok, :no_admin}
           end
         end)
-        |> Ecto.Multi.insert(:family, Famichat.Chat.Family.changeset(%Famichat.Chat.Family{}, %{name: family_name}))
+        |> Ecto.Multi.insert(
+          :family,
+          Famichat.Chat.Family.changeset(%Famichat.Chat.Family{}, %{
+            name: family_name
+          })
+        )
         |> Ecto.Multi.run(:user, fn _repo, _changes ->
           user_attrs =
             opts
@@ -102,7 +133,8 @@ defmodule Famichat.Auth.Onboarding do
           |> User.changeset(user_attrs)
           |> Repo.insert()
         end)
-        |> Ecto.Multi.run(:membership, fn _repo, %{user: user, family: family} ->
+        |> Ecto.Multi.run(:membership, fn _repo,
+                                          %{user: user, family: family} ->
           Households.add_member(family.id, user.id, :admin)
         end)
         |> Repo.transaction()
@@ -120,7 +152,8 @@ defmodule Famichat.Auth.Onboarding do
               user_id: user.id
             )
 
-          {:ok, %{user: user, family: family, passkey_register_token: register_token}}
+          {:ok,
+           %{user: user, family: family, passkey_register_token: register_token}}
 
         {:error, :check_admin, :admin_exists, _} ->
           {:error, :admin_exists}
@@ -151,6 +184,15 @@ defmodule Famichat.Auth.Onboarding do
 
   defp validate_bootstrap_username(nil), do: {:error, :username_required}
   defp validate_bootstrap_username(_), do: {:error, :invalid_input}
+
+  defp validate_household_id(nil), do: {:error, :missing_household_id}
+
+  defp validate_household_id(household_id) do
+    case Ecto.UUID.cast(household_id) do
+      {:ok, normalized_household_id} -> {:ok, normalized_household_id}
+      :error -> {:error, :invalid_household_id}
+    end
+  end
 
   defp do_issue_invite(inviter_id, email, payload, household_id) do
     Repo.transaction(fn ->
@@ -246,7 +288,8 @@ defmodule Famichat.Auth.Onboarding do
   issued (e.g. missing required payload fields).
   """
   @spec peek_invite(String.t()) ::
-          {:ok, map(), String.t()} | {:error, :invalid | :expired | :reinvite_needed}
+          {:ok, map(), String.t()}
+          | {:error, :invalid | :expired | :reinvite_needed}
   def peek_invite(raw_token) when is_binary(raw_token) do
     hash = TokenStorage.hash(raw_token)
     context = Famichat.Auth.Tokens.Policy.legacy_context(:invite)
@@ -270,10 +313,12 @@ defmodule Famichat.Auth.Onboarding do
           reg_token_result =
             sign_invite_registration_token(%{
               "invite_token_id" => token.id,
-              "family_id" => token.payload["household_id"] || token.payload["family_id"],
+              "family_id" =>
+                token.payload["household_id"] || token.payload["family_id"],
               "role" => token.payload["role"],
               "email_ciphertext" => Map.get(token.payload, "email_ciphertext"),
-              "email_fingerprint" => Map.get(token.payload, "email_fingerprint"),
+              "email_fingerprint" =>
+                Map.get(token.payload, "email_fingerprint"),
               "inviter_id" => Map.get(token.payload, "inviter_id")
             })
 
@@ -360,7 +405,11 @@ defmodule Famichat.Auth.Onboarding do
                   {:ok, family} <-
                     fetch_family(claims["household_id"] || claims["family_id"]),
                   {:ok, user} <-
-                    find_or_create_pending_user(claims, attrs, reg_token_record.id),
+                    find_or_create_pending_user(
+                      claims,
+                      attrs,
+                      reg_token_record.id
+                    ),
                   {:ok, _membership} <-
                     Households.upsert_membership(
                       user.id,
@@ -433,7 +482,9 @@ defmodule Famichat.Auth.Onboarding do
   token in that case.
   """
   @spec reissue_passkey_token(Ecto.UUID.t()) ::
-          {:ok, String.t()} | {:error, :user_not_found | :already_registered | :invalid_user_state}
+          {:ok, String.t()}
+          | {:error,
+             :user_not_found | :already_registered | :invalid_user_state}
   def reissue_passkey_token(user_id) do
     with {:ok, user} <- Identity.fetch_user(user_id),
          :ok <- assert_reissuable_user_state(user),
@@ -488,7 +539,8 @@ defmodule Famichat.Auth.Onboarding do
 
   defp maybe_put_inviter_username(payload, nil), do: payload
 
-  defp maybe_put_inviter_username(payload, inviter_id) when is_binary(inviter_id) do
+  defp maybe_put_inviter_username(payload, inviter_id)
+       when is_binary(inviter_id) do
     case Identity.fetch_user(inviter_id) do
       {:ok, %{username: username}} when is_binary(username) ->
         Map.put(payload, "inviter_username", username)

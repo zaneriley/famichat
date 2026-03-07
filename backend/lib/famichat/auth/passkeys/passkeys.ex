@@ -127,7 +127,8 @@ defmodule Famichat.Auth.Passkeys do
   server does not need to know who is logging in ahead of time. The returned
   `allowCredentials` list is empty per the WebAuthn spec for discoverable flow.
   """
-  @spec issue_discoverable_assertion_challenge() :: {:ok, map()} | {:error, term()}
+  @spec issue_discoverable_assertion_challenge() ::
+          {:ok, map()} | {:error, term()}
   def issue_discoverable_assertion_challenge do
     ttl = ttl_for(@assertion_type)
 
@@ -215,7 +216,9 @@ defmodule Famichat.Auth.Passkeys do
   # no `username` or `email`. A binary identifier (raw string) is always allowed.
   defp reject_user_id_only(identifier) when is_map(identifier) do
     has_user_id = Map.has_key?(identifier, "user_id")
-    has_public_key = Map.has_key?(identifier, "username") or Map.has_key?(identifier, "email")
+
+    has_public_key =
+      Map.has_key?(identifier, "username") or Map.has_key?(identifier, "email")
 
     if has_user_id and not has_public_key do
       {:error, :invalid_identifier}
@@ -479,7 +482,14 @@ defmodule Famichat.Auth.Passkeys do
       bytes: challenge_bytes,
       origin: origin,
       rp_id: rp,
-      trusted_attestation_types: [:none, :self, :basic, :uncertain, :attca, :anonca],
+      trusted_attestation_types: [
+        :none,
+        :self,
+        :basic,
+        :uncertain,
+        :attca,
+        :anonca
+      ],
       verify_trust_root: false
     )
   end
@@ -609,15 +619,24 @@ defmodule Famichat.Auth.Passkeys do
 
   defp update_sign_count(passkey, new_count) do
     passkey
-    |> Passkey.changeset(%{sign_count: new_count, last_used_at: DateTime.utc_now()})
+    |> Passkey.changeset(%{
+      sign_count: new_count,
+      last_used_at: DateTime.utc_now()
+    })
     |> Repo.update()
   end
 
   # Wraps Wax.register/3 to catch exceptions raised by malformed CBOR/binary input.
   # Wax may raise CaseClauseError or similar when the CBOR library encounters
   # unexpected tags in garbage data.
-  defp safe_wax_register(attestation_object_cbor, client_data_json_raw, challenge) do
-    result = Wax.register(attestation_object_cbor, client_data_json_raw, challenge)
+  defp safe_wax_register(
+         attestation_object_cbor,
+         client_data_json_raw,
+         challenge
+       ) do
+    result =
+      Wax.register(attestation_object_cbor, client_data_json_raw, challenge)
+
     map_wax_error(result)
   rescue
     e ->
@@ -662,19 +681,27 @@ defmodule Famichat.Auth.Passkeys do
     {:error, :invalid_signature}
   end
 
-  defp map_wax_error({:error, %Wax.InvalidClientDataError{reason: :origin_mismatch}}) do
+  defp map_wax_error(
+         {:error, %Wax.InvalidClientDataError{reason: :origin_mismatch}}
+       ) do
     {:error, :invalid_origin}
   end
 
-  defp map_wax_error({:error, %Wax.InvalidClientDataError{reason: :challenge_mismatch}}) do
+  defp map_wax_error(
+         {:error, %Wax.InvalidClientDataError{reason: :challenge_mismatch}}
+       ) do
     {:error, :invalid_challenge}
   end
 
-  defp map_wax_error({:error, %Wax.InvalidClientDataError{reason: :rp_id_mismatch}}) do
+  defp map_wax_error(
+         {:error, %Wax.InvalidClientDataError{reason: :rp_id_mismatch}}
+       ) do
     {:error, :invalid_rp_id}
   end
 
-  defp map_wax_error({:error, %Wax.InvalidClientDataError{reason: :credential_id_mismatch}}) do
+  defp map_wax_error(
+         {:error, %Wax.InvalidClientDataError{reason: :credential_id_mismatch}}
+       ) do
     {:error, :not_found}
   end
 
@@ -906,8 +933,10 @@ defmodule Famichat.Auth.Passkeys do
 
   defp adapt_fetch_error(:expired), do: {:error, :expired}
   defp adapt_fetch_error(:already_used), do: {:error, :already_used}
-  defp adapt_fetch_error(reason) when reason in [:invalid, :invalid_challenge, :type_mismatch],
-    do: {:error, :invalid_challenge}
+
+  defp adapt_fetch_error(reason)
+       when reason in [:invalid, :invalid_challenge, :type_mismatch],
+       do: {:error, :invalid_challenge}
 
   defp emit_challenge_event(kind, metadata) do
     event =
@@ -977,7 +1006,9 @@ defmodule Famichat.Auth.Passkeys do
 
   # Discoverable flow: challenge has no user_id — credential identifies the user.
   defp maybe_verify_assertion_user(_passkey, nil), do: :ok
-  defp maybe_verify_assertion_user(passkey, user_id), do: verify_assertion_user(passkey, user_id)
+
+  defp maybe_verify_assertion_user(passkey, user_id),
+    do: verify_assertion_user(passkey, user_id)
 
   defp verify_assertion_user(%Passkey{user_id: user_id}, user_id), do: :ok
   defp verify_assertion_user(_passkey, _), do: {:error, :invalid_credentials}

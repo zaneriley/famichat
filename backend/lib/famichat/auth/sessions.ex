@@ -53,7 +53,11 @@ defmodule Famichat.Auth.Sessions do
        when is_map(device_info) do
     with :ok <- assert_user_sessionable(user) do
       want_remember? =
-        Keyword.get(opts, :remember_device?, Keyword.get(opts, :remember, false))
+        Keyword.get(
+          opts,
+          :remember_device?,
+          Keyword.get(opts, :remember, false)
+        )
 
       can_remember? = policy_allows_remembering?(user)
       should_remember? = want_remember? and can_remember?
@@ -221,7 +225,8 @@ defmodule Famichat.Auth.Sessions do
   state checks after verification.
   """
   @spec verify_channel_token(String.t()) ::
-          {:ok, %{user_id: Ecto.UUID.t(), device_id: String.t()}} | {:error, term()}
+          {:ok, %{user_id: Ecto.UUID.t(), device_id: String.t()}}
+          | {:error, term()}
   def verify_channel_token(token) when is_binary(token) do
     with {:ok, payload} <- Tokens.verify(@channel_bootstrap_kind, token),
          {:ok, device} <- DeviceStore.fetch(payload["device_id"]),

@@ -22,6 +22,7 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   import Phoenix.Controller, only: [render: 2, put_view: 2]
 
   alias Famichat.Auth.Onboarding
+  alias FamichatWeb.SessionKeys
 
   @behaviour Plug
 
@@ -42,7 +43,7 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   defp validate_and_gate(conn, raw_token) do
     # If this browser session already accepted this token (reconnect path from
     # AUDIT-010 fix), pass through so the LiveView can recover from session.
-    stored_invite = get_session(conn, "invite_token")
+    stored_invite = get_session(conn, SessionKeys.invite_token())
 
     if stored_invite == raw_token do
       conn

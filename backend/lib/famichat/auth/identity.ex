@@ -320,7 +320,8 @@ defmodule Famichat.Auth.Identity do
     context = "otp:" <> Base.encode16(hashed_email, case: :lower)
 
     with {:ok, token} <- Tokens.fetch(:otp, code, context: context),
-         :ok <- (if token.payload["code"] == code, do: :ok, else: {:error, :invalid}),
+         :ok <-
+           if(token.payload["code"] == code, do: :ok, else: {:error, :invalid}),
          {:ok, user} <- fetch_user(token.payload["user_id"]),
          {:ok, _} <- Tokens.consume(token) do
       emit_identity_event(:otp_verified, %{user_id: user.id})

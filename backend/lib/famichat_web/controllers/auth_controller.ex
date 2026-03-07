@@ -3,7 +3,17 @@ defmodule FamichatWeb.AuthController do
   require Logger
 
   alias Famichat.Auth.RateLimit
-  alias Famichat.Auth.{Identity, Onboarding, Passkeys, Recovery, Sessions, Tokens}
+
+  alias Famichat.Auth.{
+    Identity,
+    Onboarding,
+    Passkeys,
+    Recovery,
+    Sessions,
+    Tokens
+  }
+
+  alias FamichatWeb.ConnHelpers
   alias FamichatWeb.Plugs.EnsureTrusted
 
   plug EnsureTrusted
@@ -16,57 +26,22 @@ defmodule FamichatWeb.AuthController do
 
   def issue_invite(conn, params) do
     inviter_id = conn.assigns[:current_user_id]
-    role = Map.get(params, "role", "member")
-    email = Map.get(params, "email")
 
-    household_id =
-      Map.get(params, "household_id") ||
-        Map.get(params, "family_id")
+    case Onboarding.issue_invite_validated(inviter_id, params) do
+      {:ok, tokens} ->
+        body = %{
+          invite_token: tokens.invite,
+          qr_token: tokens.qr,
+          admin_code: tokens.admin_code
+        }
 
-    cond do
-      is_nil(household_id) ->
         conn
-        |> put_status(:bad_request)
-        |> json(%{error: %{code: "missing_household_id"}})
+        |> maybe_put_test_token(tokens)
+        |> put_status(:accepted)
+        |> json(body)
 
-      Ecto.UUID.cast(household_id) == :error ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{error: %{code: "invalid_household_id"}})
-
-      true ->
-        case Onboarding.issue_invite(inviter_id, email, %{
-               household_id: household_id,
-               role: role
-             }) do
-          {:ok, tokens} ->
-            body = %{
-              invite_token: tokens.invite,
-              qr_token: tokens.qr,
-              admin_code: tokens.admin_code
-            }
-
-            conn
-            |> maybe_put_test_token(tokens)
-            |> put_status(:created)
-            |> json(body)
-
-          {:error, {:rate_limited, retry_in}} ->
-            conn
-            |> put_status(:too_many_requests)
-            |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
-
-          {:error, :forbidden} ->
-            conn |> put_status(:forbidden) |> json(%{error: %{code: "forbidden"}})
-
-          {:error, :missing_household_id} ->
-            conn
-            |> put_status(:bad_request)
-            |> json(%{error: %{code: "missing_household_id"}})
-
-          {:error, reason} ->
-            unexpected_error(conn, "issue_invite", reason, "invite_issue_failed")
-        end
+      error ->
+        handle_issue_invite_error(conn, error)
     end
   end
 
@@ -171,110 +146,41 @@ defmodule FamichatWeb.AuthController do
     # Token is the auth credential — validate it by fetching the ledgered record
     # first, before checking other params like username. Fetching (not verifying)
     # enforces single-use: a consumed token returns {:error, :used} here.
-    with {:token, {:ok, registration_token}} <-
-           {:token, registration_token_from(conn, params)},
-         {:fetch, {:ok, _reg_record}} <-
-           {:fetch, Tokens.fetch(:invite_registration, registration_token)} do
+    with {:ok, registration_token} <- registration_token_from(conn, params),
+         {:ok, _reg_record} <-
+           Tokens.fetch(:invite_registration, registration_token) do
       rate_limit_token!(conn, :invite_register, registration_token)
 
-      username = Map.get(params, "username")
-
-      if is_nil(username) do
+      with {:ok, username} <- invite_username_from(params),
+           {:ok, %{user: user, passkey_register_token: register_token}} <-
+             Onboarding.complete_registration(registration_token, %{
+               username: username,
+               email: Map.get(params, "email")
+             }) do
         conn
-        |> put_status(:bad_request)
-        |> json(%{error: %{code: "invalid_parameters"}})
+        |> put_status(:created)
+        |> json(%{
+          user_id: user.id,
+          username: user.username,
+          passkey_register_token: register_token
+        })
       else
-        attrs = %{username: username, email: Map.get(params, "email")}
+        {:error, :invalid_parameters} ->
+          conn
+          |> put_status(:bad_request)
+          |> json(%{error: %{code: "invalid_parameters"}})
 
-        case Onboarding.complete_registration(registration_token, attrs) do
-          {:ok, %{user: user, passkey_register_token: register_token}} ->
-            conn
-            |> put_status(:created)
-            |> json(%{
-              user_id: user.id,
-              username: user.username,
-              passkey_register_token: register_token
-            })
-
-          {:error, :invalid_registration_token} ->
-            conn
-            |> put_status(:unauthorized)
-            |> json(%{error: %{code: "invalid_registration_token"}})
-
-          {:error, :expired_registration_token} ->
-            conn
-            |> put_status(:unauthorized)
-            |> json(%{error: %{code: "expired_registration_token"}})
-
-          {:error, :used_registration_token} ->
-            conn
-            |> put_status(:gone)
-            |> json(%{error: %{code: "used_registration_token"}})
-
-          {:error, :user_not_found} ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{error: %{code: "invalid_invite"}})
-
-          {:error, :family_not_found} ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{error: %{code: "invalid_invite"}})
-
-          {:error, :email_required} ->
-            conn
-            |> put_status(:bad_request)
-            |> json(%{error: %{code: "email_required"}})
-
-          {:error, :email_mismatch} ->
-            conn
-            |> put_status(:unprocessable_entity)
-            |> json(%{error: %{code: "email_mismatch"}})
-
-          {:error, :username_taken} ->
-            conn
-            |> put_status(:conflict)
-            |> json(%{error: %{code: "username_taken"}})
-
-          {:error, %Ecto.Changeset{}} ->
-            conn
-            |> put_status(:unprocessable_entity)
-            |> json(%{error: %{code: "registration_failed"}})
-
-          {:error, {:rate_limited, retry_in}} ->
-            conn
-            |> put_status(:too_many_requests)
-            |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
-
-          {:error, reason} ->
-            unexpected_error(
-              conn,
-              "complete_invite",
-              reason,
-              "invite_completion_failed"
-            )
-        end
+        error ->
+          handle_complete_invite_error(conn, error)
       end
     else
-      {:token, {:error, :missing_registration_token}} ->
+      {:error, :missing_registration_token} ->
         conn
         |> put_status(:unauthorized)
         |> json(%{error: %{code: "missing_registration_token"}})
 
-      {:fetch, {:error, :expired}} ->
-        conn
-        |> put_status(:unauthorized)
-        |> json(%{error: %{code: "expired_registration_token"}})
-
-      {:fetch, {:error, :used}} ->
-        conn
-        |> put_status(:gone)
-        |> json(%{error: %{code: "used_registration_token"}})
-
-      {:fetch, {:error, _}} ->
-        conn
-        |> put_status(:unauthorized)
-        |> json(%{error: %{code: "invalid_registration_token"}})
+      {:error, reason} ->
+        handle_complete_invite_fetch_error(conn, reason)
     end
   end
 
@@ -300,6 +206,13 @@ defmodule FamichatWeb.AuthController do
     end
   end
 
+  defp invite_username_from(params) do
+    case Map.get(params, "username") || Map.get(params, :username) do
+      nil -> {:error, :invalid_parameters}
+      username -> {:ok, username}
+    end
+  end
+
   def passkey_register_challenge(conn, %{"register_token" => register_token}) do
     case Passkeys.exchange_registration_token(register_token) do
       {:ok, user} ->
@@ -314,7 +227,9 @@ defmodule FamichatWeb.AuthController do
         # Token was never valid (garbage/malformed/nonexistent) — auth failure,
         # not a gone resource. 410 Gone is reserved for tokens that existed and
         # were consumed/expired, not tokens that never existed.
-        conn |> put_status(:unauthorized) |> json(%{error: %{code: "invalid_token"}})
+        conn
+        |> put_status(:unauthorized)
+        |> json(%{error: %{code: "invalid_token"}})
 
       {:error, :expired} ->
         conn |> put_status(:gone) |> json(%{error: %{code: "token_expired"}})
@@ -353,12 +268,11 @@ defmodule FamichatWeb.AuthController do
 
     with {:ok, passkey} <- Passkeys.register_passkey(params),
          {:ok, user} <- Identity.fetch_user(passkey.user_id),
-         {:ok, session} <- Sessions.start_session(user, device_info, remember_device?: false) do
+         {:ok, session} <-
+           Sessions.start_session(user, device_info, remember_device?: false) do
       conn
       |> put_status(:created)
-      |> put_session(:access_token, session.access_token)
-      |> put_session(:refresh_token, session.refresh_token)
-      |> put_session(:device_id, session.device_id)
+      |> ConnHelpers.put_session_from_issued(session)
       |> json(%{
         passkey_id: passkey.id,
         user_id: passkey.user_id,
@@ -437,9 +351,7 @@ defmodule FamichatWeb.AuthController do
            ) do
       conn
       |> put_status(:created)
-      |> put_session(:access_token, session.access_token)
-      |> put_session(:refresh_token, session.refresh_token)
-      |> put_session(:device_id, session.device_id)
+      |> ConnHelpers.put_session_from_issued(session)
       |> json(session)
     else
       {:error, :invalid_credentials} ->
@@ -641,9 +553,7 @@ defmodule FamichatWeb.AuthController do
           {:ok, session} ->
             conn
             |> put_status(:created)
-            |> put_session(:access_token, session.access_token)
-            |> put_session(:refresh_token, session.refresh_token)
-            |> put_session(:device_id, session.device_id)
+            |> ConnHelpers.put_session_from_issued(session)
             |> json(%{
               user_id: user.id,
               username: user.username,
@@ -736,7 +646,8 @@ defmodule FamichatWeb.AuthController do
     }
 
     case Onboarding.bootstrap_admin(username, opts) do
-      {:ok, %{user: user, family: family, passkey_register_token: register_token}} ->
+      {:ok,
+       %{user: user, family: family, passkey_register_token: register_token}} ->
         conn
         |> put_status(:created)
         |> json(%{
@@ -752,7 +663,9 @@ defmodule FamichatWeb.AuthController do
       {:error, :admin_exists} ->
         conn
         |> put_status(:conflict)
-        |> json(%{error: %{code: "admin_exists", message: "Bootstrap already completed"}})
+        |> json(%{
+          error: %{code: "admin_exists", message: "Bootstrap already completed"}
+        })
 
       {:error, :username_required} ->
         conn
@@ -859,6 +772,128 @@ defmodule FamichatWeb.AuthController do
     do: Jason.encode!(token)
 
   defp encode_token(token), do: Jason.encode!(token)
+
+  defp handle_issue_invite_error(conn, {:error, {:rate_limited, retry_in}}) do
+    conn
+    |> put_status(:too_many_requests)
+    |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
+  end
+
+  defp handle_issue_invite_error(conn, {:error, :forbidden}) do
+    conn
+    |> put_status(:forbidden)
+    |> json(%{error: %{code: "forbidden"}})
+  end
+
+  defp handle_issue_invite_error(conn, {:error, :missing_household_id}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "missing_household_id"}})
+  end
+
+  defp handle_issue_invite_error(conn, {:error, :invalid_household_id}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_household_id"}})
+  end
+
+  defp handle_issue_invite_error(conn, {:error, :invalid_role}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_role"}})
+  end
+
+  defp handle_issue_invite_error(conn, {:error, :invalid_parameters}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "invalid_parameters"}})
+  end
+
+  defp handle_issue_invite_error(conn, {:error, reason}) do
+    unexpected_error(conn, "issue_invite", reason, "invite_issue_failed")
+  end
+
+  defp handle_complete_invite_error(conn, {:error, %Ecto.Changeset{}}) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: %{code: "registration_failed"}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, :invalid_registration_token}) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: %{code: "invalid_registration_token"}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, :expired_registration_token}) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: %{code: "expired_registration_token"}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, :used_registration_token}) do
+    conn
+    |> put_status(:gone)
+    |> json(%{error: %{code: "used_registration_token"}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, reason})
+       when reason in [:user_not_found, :family_not_found] do
+    conn
+    |> put_status(:not_found)
+    |> json(%{error: %{code: "invalid_invite"}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, :email_required}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: %{code: "email_required"}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, :email_mismatch}) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: %{code: "email_mismatch"}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, :username_taken}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{error: %{code: "username_taken"}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, {:rate_limited, retry_in}}) do
+    conn
+    |> put_status(:too_many_requests)
+    |> json(%{error: %{code: "rate_limited", retry_in: retry_in}})
+  end
+
+  defp handle_complete_invite_error(conn, {:error, reason}) do
+    unexpected_error(
+      conn,
+      "complete_invite",
+      reason,
+      "invite_completion_failed"
+    )
+  end
+
+  defp handle_complete_invite_fetch_error(conn, :expired) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: %{code: "expired_registration_token"}})
+  end
+
+  defp handle_complete_invite_fetch_error(conn, :used) do
+    conn
+    |> put_status(:gone)
+    |> json(%{error: %{code: "used_registration_token"}})
+  end
+
+  defp handle_complete_invite_fetch_error(conn, _reason) do
+    conn
+    |> put_status(:unauthorized)
+    |> json(%{error: %{code: "invalid_registration_token"}})
+  end
 
   defp test_env? do
     Application.get_env(:famichat, :environment) == :test

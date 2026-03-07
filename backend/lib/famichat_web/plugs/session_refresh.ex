@@ -9,53 +9,94 @@ defmodule FamichatWeb.Plugs.SessionRefresh do
   session cookie. Downstream LiveViews then see a valid access_token on
   mount without needing to redirect to login.
 
-  Place this plug in the `:browser` pipeline, after `:fetch_session`.
+  Place this plug in the authenticated browser pipeline, after `:fetch_session`.
   """
 
   import Plug.Conn
-  require Logger
 
   alias Famichat.Auth.Sessions
+  alias FamichatWeb.ConnHelpers
+  alias FamichatWeb.SessionKeys
+  alias FamichatWeb.TokenVerifyCache
+  require Logger
 
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    access_token = get_session(conn, "access_token")
+    start_time = System.monotonic_time()
+    {updated_conn, metadata} = maybe_verify_or_refresh(conn)
+
+    duration_ms =
+      System.convert_time_unit(
+        System.monotonic_time() - start_time,
+        :native,
+        :millisecond
+      )
+
+    :telemetry.execute(
+      [:famichat, :plug, :session_refresh, :call],
+      %{count: 1, duration_ms: duration_ms},
+      metadata
+    )
+
+    updated_conn
+  end
+
+  defp maybe_verify_or_refresh(conn) do
+    access_token = get_session(conn, SessionKeys.access_token())
 
     if is_binary(access_token) do
-      case Sessions.verify_access_token(access_token) do
-        {:ok, _} ->
-          conn
+      case TokenVerifyCache.verify_cached(access_token) do
+        :hit ->
+          {conn, %{cache_status: :hit, refreshed?: false, result: :verified}}
 
-        {:error, _} ->
-          maybe_refresh(conn)
+        :miss ->
+          verify_or_refresh_uncached(conn, access_token)
       end
     else
-      # No access token in session — try refresh if we have credentials.
-      maybe_refresh(conn)
+      maybe_refresh(conn, :none)
     end
   end
 
-  defp maybe_refresh(conn) do
-    refresh_token = get_session(conn, "refresh_token")
-    device_id = get_session(conn, "device_id")
+  defp verify_or_refresh_uncached(conn, access_token) do
+    case Sessions.verify_access_token(access_token) do
+      {:ok, _session} ->
+        :ok = TokenVerifyCache.cache(access_token)
+        {conn, %{cache_status: :miss, refreshed?: false, result: :verified}}
+
+      {:error, _reason} ->
+        maybe_refresh(conn, :invalid)
+    end
+  end
+
+  defp maybe_refresh(conn, cache_status) do
+    refresh_token = get_session(conn, SessionKeys.refresh_token())
+    device_id = get_session(conn, SessionKeys.device_id())
 
     if is_binary(refresh_token) and is_binary(device_id) do
       case Sessions.refresh_session(device_id, refresh_token) do
         {:ok, new_tokens} ->
-          Logger.info("[SessionRefresh] Auto-refreshed session for device #{device_id}")
+          Logger.info(
+            "[SessionRefresh] Auto-refreshed session for device #{device_id}"
+          )
 
-          conn
-          |> put_session(:access_token, new_tokens.access_token)
-          |> put_session(:refresh_token, new_tokens.refresh_token)
-          |> put_session(:device_id, new_tokens.device_id)
+          :ok = TokenVerifyCache.cache(new_tokens.access_token)
+
+          {ConnHelpers.put_session_from_issued(conn, new_tokens),
+           %{cache_status: cache_status, refreshed?: true, result: :refreshed}}
 
         {:error, reason} ->
           Logger.debug("[SessionRefresh] Refresh failed: #{inspect(reason)}")
-          conn
+
+          {conn,
+           %{
+             cache_status: cache_status,
+             refreshed?: false,
+             result: :refresh_failed
+           }}
       end
     else
-      conn
+      {conn, %{cache_status: cache_status, refreshed?: false, result: :skipped}}
     end
   end
 end

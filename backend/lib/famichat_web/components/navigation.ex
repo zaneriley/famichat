@@ -62,7 +62,13 @@ defmodule FamichatWeb.Navigation do
                 href={@en_path}
                 aria-current={if @user_locale == "en", do: "page", else: "false"}
               >
-                <.typography tag="span" size="1xs" color={if @user_locale == "en", do: "main", else: "deemphasized"}>EN</.typography>
+                <.typography
+                  tag="span"
+                  size="1xs"
+                  color={if @user_locale == "en", do: "main", else: "deemphasized"}
+                >
+                  EN
+                </.typography>
               </.link>
             </li>
             <li>
@@ -70,7 +76,13 @@ defmodule FamichatWeb.Navigation do
                 href={@ja_path}
                 aria-current={if @user_locale == "ja", do: "page", else: "false"}
               >
-                <.typography tag="span" size="1xs" color={if @user_locale == "ja", do: "main", else: "deemphasized"}>JA</.typography>
+                <.typography
+                  tag="span"
+                  size="1xs"
+                  color={if @user_locale == "ja", do: "main", else: "deemphasized"}
+                >
+                  JA
+                </.typography>
               </.link>
             </li>
           </ul>

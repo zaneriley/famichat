@@ -511,10 +511,49 @@ defmodule FamichatWeb.Telemetry do
       # SECTION 6: OTHER INSTRUMENTATION
       # =========================================================================
 
+      summary("famichat.plug.session_refresh.call.duration",
+        event_name: [:famichat, :plug, :session_refresh, :call],
+        measurement: :duration_ms,
+        unit: :millisecond,
+        description:
+          "SessionRefresh plug latency on authenticated browser routes"
+      ),
+      counter("famichat.plug.session_refresh.total",
+        event_name: [:famichat, :plug, :session_refresh, :call],
+        measurement: :count,
+        tags: [:result, :cache_status],
+        tag_values:
+          &%{
+            result: (Map.get(&1, :result) || :unknown) |> to_string(),
+            cache_status:
+              (Map.get(&1, :cache_status) || :unknown) |> to_string()
+          },
+        description:
+          "SessionRefresh executions grouped by outcome and cache status"
+      ),
+
       # Locale Detection (not in control panel spec)
       summary("famichat.plug.set_locale.call.duration",
         unit: {:native, :millisecond},
         description: "SetLocale plug processing time"
+      ),
+      summary("famichat.plug.session_refresh.call.duration_ms",
+        event_name: [:famichat, :plug, :session_refresh, :call],
+        measurement: :duration_ms,
+        unit: :millisecond,
+        description: "SessionRefresh plug latency"
+      ),
+      counter("famichat.plug.session_refresh.call.total",
+        event_name: [:famichat, :plug, :session_refresh, :call],
+        measurement: :count,
+        tags: [:result, :cache_status],
+        tag_values:
+          &%{
+            result: (Map.get(&1, :result) || :unknown) |> to_string(),
+            cache_status:
+              (Map.get(&1, :cache_status) || :unknown) |> to_string()
+          },
+        description: "SessionRefresh results by cache status"
       ),
       summary("famichat.plug.set_locale.extract_locale.duration",
         unit: {:native, :millisecond},

@@ -6,9 +6,7 @@ defmodule Famichat.Repo.Migrations.AllowNullableUserIdOnWebauthnChallenges do
       modify :user_id,
              references(:users, type: :binary_id, on_delete: :delete_all),
              null: true,
-             from:
-               {references(:users, type: :binary_id, on_delete: :delete_all),
-                null: false}
+             from: {references(:users, type: :binary_id, on_delete: :delete_all), null: false}
     end
   end
 end

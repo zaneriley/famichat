@@ -13,13 +13,15 @@ defmodule FamichatWeb.Plugs.SetLocale do
   Static assets are not affected by this plug, as their paths are matched against predefined static paths and served without setting a locale.
   """
   import Plug.Conn
-  require Logger
 
   import FamichatWeb.Plugs.LocaleRedirection,
     only: [
       normalize_path: 1,
       extract_locale_from_path: 1
     ]
+
+  alias FamichatWeb.SessionKeys
+  require Logger
 
   @telemetry_prefix [:famichat, :plug, :set_locale]
   @supported_locales FamichatWeb.Plugs.LocaleRedirection.supported_locales()
@@ -87,7 +89,7 @@ defmodule FamichatWeb.Plugs.SetLocale do
       extract_locale_from_path(conn.request_path)
 
     accept_language = get_preferred_language(conn)
-    session_locale = get_session(conn, "user_locale")
+    session_locale = get_session(conn, SessionKeys.user_locale())
 
     user_locale =
       cond do
@@ -154,7 +156,7 @@ defmodule FamichatWeb.Plugs.SetLocale do
           )
 
           conn
-          |> put_session("user_locale", user_locale)
+          |> put_session(SessionKeys.user_locale(), user_locale)
           |> assign(:user_locale, user_locale)
           |> assign(:supported_locales, @supported_locales)
           |> put_resp_header("content-language", user_locale)

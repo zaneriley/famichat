@@ -18,13 +18,16 @@ defmodule FamichatWeb.Router do
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
-    plug SessionRefresh
     plug :fetch_live_flash
     plug :put_root_layout, {FamichatWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug CSPHeader
     plug CommonMetadata
+  end
+
+  pipeline :browser_authenticated do
+    plug SessionRefresh
   end
 
   pipeline :admin do
@@ -142,7 +145,6 @@ defmodule FamichatWeb.Router do
       # Keep non-LiveView routes outside the live_session
       live_dashboard "/dashboard", metrics: FamichatWeb.Telemetry
     end
-
   end
 
   scope "/", FamichatWeb do
@@ -177,10 +179,19 @@ defmodule FamichatWeb.Router do
 
   # All other locale-scoped routes.
   scope "/:locale", FamichatWeb do
+    pipe_through [:browser, :browser_authenticated, :locale]
+
+    # HomeLive is the only browser route that needs silent session refresh.
+    live_session :home_session, on_mount: FamichatWeb.LiveHelpers do
+      live "/", HomeLive, :index
+    end
+  end
+
+  scope "/:locale", FamichatWeb do
     pipe_through [:browser, :locale]
 
+    # Public browser routes intentionally skip SessionRefresh.
     live_session :default, on_mount: FamichatWeb.LiveHelpers do
-      live "/", HomeLive, :index
       live "/login", AuthLive.LoginLive, :index
     end
 
