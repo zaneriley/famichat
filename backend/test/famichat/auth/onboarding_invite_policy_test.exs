@@ -53,4 +53,29 @@ defmodule Famichat.Auth.Onboarding.InvitePolicyTest do
     assert seconds_remaining <= ttl
     assert seconds_remaining >= ttl - 5
   end
+
+  test "issue_invite_validated/2 rejects missing and invalid household ids" do
+    family = ChatFixtures.family_fixture()
+    admin = ChatFixtures.user_fixture(%{family_id: family.id, role: :admin})
+
+    assert {:error, :missing_household_id} =
+             Onboarding.issue_invite_validated(admin.id, %{role: "member"})
+
+    assert {:error, :invalid_household_id} =
+             Onboarding.issue_invite_validated(admin.id, %{
+               household_id: "not-a-uuid",
+               role: "member"
+             })
+  end
+
+  test "issue_invite_validated/2 preserves invalid role errors" do
+    family = ChatFixtures.family_fixture()
+    admin = ChatFixtures.user_fixture(%{family_id: family.id, role: :admin})
+
+    assert {:error, :invalid_role} =
+             Onboarding.issue_invite_validated(admin.id, %{
+               household_id: family.id,
+               role: "owner"
+             })
+  end
 end

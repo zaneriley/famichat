@@ -1078,7 +1078,9 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
       assert staged.pending_commit["staged_epoch"] == 1
 
       assert {:ok, merged} =
-               ConversationSecurityLifecycle.merge_pending_commit(fresh_conversation.id)
+               ConversationSecurityLifecycle.merge_pending_commit(
+                 fresh_conversation.id
+               )
 
       assert merged.epoch == 1
       assert merged.pending_commit == nil
@@ -1100,7 +1102,9 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
       )
 
       assert {:error, :commit_rejected, details} =
-               ConversationSecurityLifecycle.merge_pending_commit(fresh_conversation.id)
+               ConversationSecurityLifecycle.merge_pending_commit(
+                 fresh_conversation.id
+               )
 
       assert details[:reason] == :epoch_too_low
       assert details[:current_epoch] == 0
@@ -1120,7 +1124,9 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
       assert staged.pending_commit["operation"] == "mls_add"
 
       assert {:ok, merged} =
-               ConversationSecurityLifecycle.merge_pending_commit(conversation.id)
+               ConversationSecurityLifecycle.merge_pending_commit(
+                 conversation.id
+               )
 
       assert merged.epoch == 4
       assert merged.pending_commit == nil

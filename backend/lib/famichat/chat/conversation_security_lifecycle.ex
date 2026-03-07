@@ -60,7 +60,11 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
     with {:ok, state} <- load_state(conversation_id, :merge_pending_commit),
          {:ok, pending_commit} <- pending_commit_from_state(state),
          :ok <- validate_pending_operation(pending_commit),
-         :ok <- validate_operation_matches_active_revocations(conversation_id, pending_commit),
+         :ok <-
+           validate_operation_matches_active_revocations(
+             conversation_id,
+             pending_commit
+           ),
          {:ok, merge_epoch} <-
            pending_commit_epoch(pending_commit, state.epoch),
          request <-
@@ -304,7 +308,10 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
     end
   end
 
-  defp validate_operation_matches_active_revocations(conversation_id, pending_commit) do
+  defp validate_operation_matches_active_revocations(
+         conversation_id,
+         pending_commit
+       ) do
     with {:ok, active_revocations} <-
            ConversationSecurityRevocationStore.list_active_for_conversation(
              conversation_id

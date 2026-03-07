@@ -773,7 +773,9 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
                message_params(sender.id, conversation.id, "no-epoch-advance")
              )
 
-    assert {:ok, reloaded} = ConversationSecurityStateStore.load(conversation.id)
+    assert {:ok, reloaded} =
+             ConversationSecurityStateStore.load(conversation.id)
+
     # Epoch must remain at 1 — the adapter-returned epoch 2 must not be persisted.
     assert reloaded.epoch == 1
     # lock_version must not have incremented — no DB write occurred.
@@ -980,7 +982,8 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     seed_real_nif_state!(conversation.id)
 
     # Confirm the seeded state loads cleanly before tampering.
-    assert {:ok, _clean_state} = ConversationSecurityStateStore.load(conversation.id)
+    assert {:ok, _clean_state} =
+             ConversationSecurityStateStore.load(conversation.id)
 
     # Directly overwrite snapshot_mac in the DB with a plausible-looking but
     # incorrect 64-character hex string. state_ciphertext is left intact so
@@ -1003,7 +1006,8 @@ defmodule Famichat.Chat.MessageServiceMLSContractTest do
     # {:error, {:mls_encryption_failed, :snapshot_integrity_failed, _}}.
     before_count = Repo.aggregate(Message, :count, :id)
 
-    assert {:error, {:mls_encryption_failed, :snapshot_integrity_failed, details}} =
+    assert {:error,
+            {:mls_encryption_failed, :snapshot_integrity_failed, details}} =
              MessageService.send_message(
                message_params(sender.id, conversation.id, "must-be-rejected")
              )

@@ -137,16 +137,24 @@ defmodule Famichat.Auth.PasskeysTest do
                Passkeys.issue_assertion_challenge(%{"user_id" => user.id})
     end
 
-    test "nonexistent user_id returns the same error as a real user_id", %{user: user} do
+    test "nonexistent user_id returns the same error as a real user_id", %{
+      user: user
+    } do
       real = Passkeys.issue_assertion_challenge(%{"user_id" => user.id})
-      fake = Passkeys.issue_assertion_challenge(%{"user_id" => "00000000-0000-0000-0000-000000000000"})
+
+      fake =
+        Passkeys.issue_assertion_challenge(%{
+          "user_id" => "00000000-0000-0000-0000-000000000000"
+        })
 
       assert real == fake,
              "Different results for existing (#{inspect(real)}) vs nonexistent " <>
                "(#{inspect(fake)}) UUID — enables enumeration"
     end
 
-    test "user_id alongside username is silently dropped and username wins", %{user: user} do
+    test "user_id alongside username is silently dropped and username wins", %{
+      user: user
+    } do
       # If someone sends both user_id AND username, user_id must be ignored.
       # The result must be identical to sending username alone.
       result_with_both =

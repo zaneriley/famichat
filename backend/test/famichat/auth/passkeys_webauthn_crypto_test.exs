@@ -89,8 +89,9 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     cred_id_len = byte_size(credential_id)
     cose_key_cbor = encode_cose_key(cose_key)
 
-    <<rp_id_hash::binary-size(32), flags::8, sign_count::unsigned-big-integer-32,
-      aaguid::binary-size(16), cred_id_len::unsigned-big-integer-16,
+    <<rp_id_hash::binary-size(32), flags::8,
+      sign_count::unsigned-big-integer-32, aaguid::binary-size(16),
+      cred_id_len::unsigned-big-integer-16,
       credential_id::binary-size(cred_id_len), cose_key_cbor::binary>>
   end
 
@@ -101,7 +102,8 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     # UP=1, UV=1, no AT flag → 0b00000101 = 0x05
     flags = 0x05
 
-    <<rp_id_hash::binary-size(32), flags::8, sign_count::unsigned-big-integer-32>>
+    <<rp_id_hash::binary-size(32), flags::8,
+      sign_count::unsigned-big-integer-32>>
   end
 
   # Builds client data JSON for registration (type "webauthn.create").
@@ -153,7 +155,9 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     cose_key = cose_key_from_point(pub_point)
     credential_id = :crypto.strong_rand_bytes(32)
 
-    auth_data = build_auth_data_registration(credential_id, cose_key, _sign_count = 1)
+    auth_data =
+      build_auth_data_registration(credential_id, cose_key, _sign_count = 1)
+
     client_data_json = build_client_data_json_create(challenge_bytes)
     attestation_object = build_attestation_object(auth_data)
 
@@ -301,7 +305,13 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     {handle, challenge_bytes} = issue_assertion_challenge(user)
 
     payload =
-      build_assertion_payload(handle, challenge_bytes, credential_id, private_key, 2)
+      build_assertion_payload(
+        handle,
+        challenge_bytes,
+        credential_id,
+        private_key,
+        2
+      )
 
     assert {:ok, %{user: returned_user, passkey: returned_passkey}} =
              Passkeys.assert_passkey(payload)
@@ -318,7 +328,15 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     {_passkey, private_key, credential_id} = register_passkey_for_user(user)
 
     {handle, challenge_bytes} = issue_assertion_challenge(user)
-    payload = build_assertion_payload(handle, challenge_bytes, credential_id, private_key, 2)
+
+    payload =
+      build_assertion_payload(
+        handle,
+        challenge_bytes,
+        credential_id,
+        private_key,
+        2
+      )
 
     # Corrupt the last byte of the signature
     original_sig_b64 = payload["signature"]
@@ -341,7 +359,8 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     assert {:error, reason} = result
 
     assert reason in [:invalid_signature, :invalid_challenge, :not_found] or
-             match?({:rate_limited, _retry}, reason) or match?({:error, _}, result)
+             match?({:rate_limited, _retry}, reason) or
+             match?({:error, _}, result)
   end
 
   # ---------------------------------------------------------------------------
@@ -360,7 +379,13 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
 
     # Use sign_count = 5 which is less than stored 10 → should be rejected
     payload =
-      build_assertion_payload(handle, challenge_bytes, credential_id, private_key, 5)
+      build_assertion_payload(
+        handle,
+        challenge_bytes,
+        credential_id,
+        private_key,
+        5
+      )
 
     assert {:error, :replayed} = Passkeys.assert_passkey(payload)
   end
@@ -388,14 +413,16 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
 
     # Sign with the wrong-origin client data (signature is over correct data
     # but origin in client_data_json is wrong)
-    signature = sign_assertion(private_key, auth_data_bin, wrong_origin_client_data)
+    signature =
+      sign_assertion(private_key, auth_data_bin, wrong_origin_client_data)
 
     tampered_payload = %{
       "challenge_handle" => handle,
       "challenge" => challenge_b64,
       "credential_id" => Base.encode64(credential_id, padding: false),
       "authenticator_data" => Base.encode64(auth_data_bin, padding: false),
-      "client_data_json" => Base.encode64(wrong_origin_client_data, padding: false),
+      "client_data_json" =>
+        Base.encode64(wrong_origin_client_data, padding: false),
       "signature" => Base.encode64(signature, padding: false)
     }
 
@@ -419,7 +446,8 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     payload = %{
       "challenge_handle" => handle,
       "challenge" => Base.url_encode64(challenge_bytes, padding: false),
-      "credential_id" => Base.encode64(:crypto.strong_rand_bytes(32), padding: false),
+      "credential_id" =>
+        Base.encode64(:crypto.strong_rand_bytes(32), padding: false),
       "attestation_object" => Base.encode64(garbage_bytes, padding: false),
       "client_data_json" =>
         Base.encode64(
@@ -495,7 +523,8 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
       "client_data_json" => Base.encode64(client_data_json_reg, padding: false)
     }
 
-    assert {:ok, %Passkey{sign_count: 0}} = Passkeys.register_passkey(reg_payload)
+    assert {:ok, %Passkey{sign_count: 0}} =
+             Passkeys.register_passkey(reg_payload)
 
     {handle2, challenge_bytes2} = issue_assertion_challenge(user)
 
@@ -513,7 +542,8 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
       "signature" => Base.encode64(signature, padding: false)
     }
 
-    assert {:ok, %{user: _, passkey: _}} = Passkeys.assert_passkey(assert_payload)
+    assert {:ok, %{user: _, passkey: _}} =
+             Passkeys.assert_passkey(assert_payload)
   end
 
   # ---------------------------------------------------------------------------
@@ -532,7 +562,8 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     # challenge handle. Using the same handle must fail at the challenge fetch stage.
     # We cannot reuse the same credential_id either (unique constraint), so use
     # a fresh key pair but same (consumed) challenge handle.
-    {handle2_payload, _, _, _} = build_registration_payload(handle, challenge_bytes)
+    {handle2_payload, _, _, _} =
+      build_registration_payload(handle, challenge_bytes)
 
     assert {:error, reason} = Passkeys.register_passkey(handle2_payload)
     assert reason in [:already_used, :invalid_challenge, :expired]
@@ -569,7 +600,8 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
       "signature" => Base.encode64(signature, padding: false)
     }
 
-    assert {:error, :user_verification_required} = Passkeys.assert_passkey(payload)
+    assert {:error, :user_verification_required} =
+             Passkeys.assert_passkey(payload)
   end
 
   # ---------------------------------------------------------------------------
@@ -623,7 +655,8 @@ defmodule Famichat.Auth.Passkeys.WebAuthnCryptoTest do
     payload = %{
       "challenge_handle" => handle,
       "challenge" => Base.url_encode64(challenge_bytes, padding: false),
-      "credential_id" => Base.encode64(:crypto.strong_rand_bytes(32), padding: false),
+      "credential_id" =>
+        Base.encode64(:crypto.strong_rand_bytes(32), padding: false),
       "attestation_object" => Base.encode64(garbage, padding: false),
       "client_data_json" =>
         Base.encode64(

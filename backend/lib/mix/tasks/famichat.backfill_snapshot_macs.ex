@@ -69,7 +69,9 @@ defmodule Mix.Tasks.Famichat.BackfillSnapshotMacs do
     dry_run? = Keyword.get(opts, :dry_run, false)
 
     if dry_run? do
-      Mix.shell().info("[backfill_snapshot_macs] DRY-RUN mode — no writes will be made")
+      Mix.shell().info(
+        "[backfill_snapshot_macs] DRY-RUN mode — no writes will be made"
+      )
     end
 
     rows = fetch_rows_needing_mac()
@@ -196,7 +198,10 @@ defmodule Mix.Tasks.Famichat.BackfillSnapshotMacs do
      %{
        reason: :state_not_a_map,
        conversation_id: conversation_id,
-       state_type: payload |> Map.get(:state) |> then(&if(is_nil(&1), do: :nil, else: :unknown))
+       state_type:
+         payload
+         |> Map.get(:state)
+         |> then(&if(is_nil(&1), do: nil, else: :unknown))
      }}
   end
 

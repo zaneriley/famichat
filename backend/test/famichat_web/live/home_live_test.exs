@@ -5,6 +5,7 @@ defmodule FamichatWeb.HomeLiveTest do
 
   alias Famichat.Auth.Sessions
   alias Famichat.ChatFixtures
+  alias FamichatWeb.SessionKeys
 
   setup do
     previous = Application.get_env(:famichat, :mls_enforcement, false)
@@ -40,7 +41,7 @@ defmodule FamichatWeb.HomeLiveTest do
     conn =
       conn
       |> Plug.Test.init_test_session(%{})
-      |> Plug.Conn.put_session(:access_token, session.access_token)
+      |> Plug.Conn.put_session(SessionKeys.access_token(), session.access_token)
 
     {conn, user, session}
   end
@@ -55,7 +56,9 @@ defmodule FamichatWeb.HomeLiveTest do
       assert render(view) =~ "Sign in"
     end
 
-    test "renders session-expired message when an invalid token is provided", %{conn: conn} do
+    test "renders session-expired message when an invalid token is provided", %{
+      conn: conn
+    } do
       {:ok, view, _html} = live(conn, "/en?token=invalid-token")
 
       # Invalid URL token: auth_error is set, template shows the expired message.

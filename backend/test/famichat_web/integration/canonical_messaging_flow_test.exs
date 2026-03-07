@@ -116,13 +116,19 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
       connect(UserSocket, %{"token" => timing_session.access_token})
 
     topic = "message:direct:#{conversation.id}"
-    {:ok, _reply, _channel_socket} = subscribe_and_join(timing_socket, MessageChannel, topic)
+
+    {:ok, _reply, _channel_socket} =
+      subscribe_and_join(timing_socket, MessageChannel, topic)
+
     t2 = System.monotonic_time(:millisecond)
 
     # Phase 3 — send: HTTP POST to create message
     timing_conn =
       build_conn()
-      |> put_req_header("authorization", "Bearer #{timing_session.access_token}")
+      |> put_req_header(
+        "authorization",
+        "Bearer #{timing_session.access_token}"
+      )
 
     conn =
       post(timing_conn, "/api/v1/conversations/#{conversation.id}/messages", %{
@@ -158,7 +164,12 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
         total_ms: total_ms
       })
 
-    timing_path = Path.join([System.get_env("TIMING_OUTPUT_DIR", "/app/.tmp"), "canonical_flow_timing_detail.json"])
+    timing_path =
+      Path.join([
+        System.get_env("TIMING_OUTPUT_DIR", "/app/.tmp"),
+        "canonical_flow_timing_detail.json"
+      ])
+
     File.mkdir_p!(Path.dirname(timing_path))
     File.write!(timing_path, timing_json)
   end

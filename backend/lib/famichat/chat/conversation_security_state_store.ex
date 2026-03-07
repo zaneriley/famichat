@@ -180,10 +180,17 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
     rescue
       e in [RuntimeError, ArgumentError] ->
         {:error, :state_encode_failed,
-         %{reason: :state_encode_failed, operation: :upsert, message: Exception.message(e)}}
+         %{
+           reason: :state_encode_failed,
+           operation: :upsert,
+           message: Exception.message(e)
+         }}
 
       e ->
-        Logger.error("Unexpected exception in encode_state_payload: #{inspect(e)}")
+        Logger.error(
+          "Unexpected exception in encode_state_payload: #{inspect(e)}"
+        )
+
         reraise e, __STACKTRACE__
     end
   end
@@ -191,13 +198,17 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
   @snapshot_required_keys ~w(session_sender_storage session_recipient_storage
                               session_sender_signer session_recipient_signer session_cache)
 
-  defp decode_state_payload("vault_term_v1", ciphertext) when is_binary(ciphertext) do
+  defp decode_state_payload("vault_term_v1", ciphertext)
+       when is_binary(ciphertext) do
     try do
       with decrypted when is_binary(decrypted) <- Vault.decrypt!(ciphertext),
            decoded <- :erlang.binary_to_term(decrypted, [:safe]),
            true <-
              is_map(decoded) and
-               Enum.all?(@snapshot_required_keys, &is_binary(Map.get(decoded, &1))) do
+               Enum.all?(
+                 @snapshot_required_keys,
+                 &is_binary(Map.get(decoded, &1))
+               ) do
         {:ok, decoded}
       else
         _ ->
@@ -207,10 +218,17 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
     rescue
       e in [RuntimeError, ArgumentError, Cloak.MissingCipher] ->
         {:error, :state_decode_failed,
-         %{reason: :state_decode_failed, operation: :load, message: Exception.message(e)}}
+         %{
+           reason: :state_decode_failed,
+           operation: :load,
+           message: Exception.message(e)
+         }}
 
       e ->
-        Logger.error("Unexpected exception in decode_state_payload: #{inspect(e)}")
+        Logger.error(
+          "Unexpected exception in decode_state_payload: #{inspect(e)}"
+        )
+
         reraise e, __STACKTRACE__
     end
   end
@@ -253,7 +271,10 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
          }}
 
       e ->
-        Logger.error("Unexpected exception in decode_pending_commit_payload: #{inspect(e)}")
+        Logger.error(
+          "Unexpected exception in decode_pending_commit_payload: #{inspect(e)}"
+        )
+
         reraise e, __STACKTRACE__
     end
   end
@@ -264,17 +285,20 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
   end
 
   defp decode_pending_commit_payload(_unknown_format, _ciphertext) do
-    {:error, :state_decode_failed,
-     %{reason: :unknown_pending_commit_format}}
+    {:error, :state_decode_failed, %{reason: :unknown_pending_commit_format}}
   end
 
   defp decode_record(%ConversationSecurityState{} = record) do
     pending_format =
       record.pending_commit_format || record.state_format
 
-    with {:ok, state} <- decode_state_payload(record.state_format, record.state_ciphertext),
+    with {:ok, state} <-
+           decode_state_payload(record.state_format, record.state_ciphertext),
          {:ok, pending_commit} <-
-           decode_optional_state_payload(record.pending_commit_ciphertext, pending_format) do
+           decode_optional_state_payload(
+             record.pending_commit_ciphertext,
+             pending_format
+           ) do
       {:ok,
        %{
          conversation_id: record.conversation_id,

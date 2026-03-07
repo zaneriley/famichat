@@ -21,7 +21,12 @@ defmodule FamichatWeb.AdminMessageRoutesTest do
       canonical = conn |> with_admin_auth() |> get("/admin/message")
       assert html_response(canonical, 200) =~ "message-test"
 
-      alias_route = canonical |> recycle() |> with_admin_auth() |> get("/admin/message-test")
+      alias_route =
+        canonical
+        |> recycle()
+        |> with_admin_auth()
+        |> get("/admin/message-test")
+
       assert html_response(alias_route, 200) =~ "message-test"
     end
   end

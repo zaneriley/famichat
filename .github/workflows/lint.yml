@@ -49,6 +49,15 @@ jobs:
         working-directory: backend
         run: mix deps.get
 
+      - name: Enforce canonical Plug session keys
+        run: |
+          if rg -n \
+            'get_session\([^,\n]+,\s*("access_token"|"refresh_token"|"device_id"|"user_locale"|"redirect_count"|"invite_token"|:access_token|:refresh_token|:device_id|:user_locale|:redirect_count|:invite_token)\)|put_session\([^,\n]+,\s*("access_token"|"refresh_token"|"device_id"|"user_locale"|"redirect_count"|"invite_token"|:access_token|:refresh_token|:device_id|:user_locale|:redirect_count|:invite_token)\)' \
+            backend/lib backend/test; then
+            echo "Use FamichatWeb.SessionKeys for Plug session accessors."
+            exit 1
+          fi
+
       - name: Run full lint suite
         working-directory: backend
         run: ./run ci:lint

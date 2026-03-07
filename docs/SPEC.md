@@ -28,17 +28,17 @@ Conflicts are flagged inline with `[CONFLICT]`. Unresolved decisions are flagged
 
 ## Target Users & Scale
 
-- Scale: ~100–500 people per self-hosted instance (neighborhood, not city)
-- One instance per neighborhood; single neighborhood admin
-- All families on an instance trust the admin's server
+- Scale: ~100–500 people per self-hosted deployment (community, not city)
+- One operator-owned deployment serves one trusted community
+- A trusted community may contain one or more families / households
+- All families on a deployment trust the operator's server
+- Prefer separate deployments before true shared-instance multitenancy or federation
 - User roles (trust hierarchy):
-  - Neighborhood admin — can revoke any device for any user on the instance
+  - Community admin — can revoke any device for any user in the deployment's trusted community
   - Household admin (parent/guardian) — manages family members and devices; approves pending device additions for non-admin members
   - Adult member — standard access; self-approving on device addition via passkey
   - Non-admin member (teen, child) — device enters pending state after passkey login until household admin approves; OR immediate approval via QR scan from existing trusted device
   - Low-tech user (grandparent) — seamless if passkey synced; fallback to magic link + OTP; household admin receives passive notification
-
----
 
 ## Jobs to Be Done
 
@@ -68,6 +68,50 @@ Conflicts are flagged inline with `[CONFLICT]`. Unresolved decisions are flagged
 - Automated migration scripts
 - Automated database backups
 - Required production env vars: `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`
+
+### Topology and Shipping Stance
+
+- Famichat is a software project, not a hosting company
+- Primary model: operator-owned, single-tenant deployment
+- Single-tenant means one operator-owned trust domain per deployment, not necessarily one family per deployment
+- Supported venues for that same model:
+  - home-hosted hardware
+  - operator-owned cloud/VPS infrastructure
+- Cloud is acceptable as rented infrastructure; it is not a Famichat-controlled trust anchor
+- Multi-tenant hosted SaaS is out of scope
+- Famichat-managed hosting is not the product model
+- Optional central conveniences may exist later (for example release mirrors or one-click deploy templates), but they must never become mandatory trust anchors
+- No mandatory Famichat account, remote config service, remote feature flags, or default telemetry back to Famichat for core operation
+
+### Trust and Scope Model
+
+- Internal hierarchy: `deployment -> community -> family -> user -> device -> conversation`
+- `community` is the umbrella trust scope for one operator-owned deployment
+- A `community` may contain one or more families / households
+- `family` remains the primary intimate-group noun and core entity
+- `household` remains the governance/auth term for invites, roles, and recovery scope
+- `instance` / `deployment` are operational terms, not social terms
+- Avoid `tenant` in product and architecture language; it implies a SaaS model Famichat is explicitly not pursuing
+- If a cluster no longer wants the same operator trust anchor, prefer spinning it out to a separate deployment before introducing shared-instance multitenancy
+- Cross-deployment migration and federation are deferred runways, not current product commitments
+
+### Delivery and Operations Model
+
+- One clearly supported production topology at a time; do not claim broad platform support without real runbooks
+- The same core application artifact should be deployable on home-hosted and operator-owned cloud infrastructure
+- Releases must be versioned, signed, and accompanied by migration and rollback notes
+- Operators choose when to upgrade; no forced upgrades, silent feature rollouts, or remote kill switches
+- Core messaging/auth operation must not depend on Famichat-controlled infrastructure after install
+- Optional conveniences must degrade to zero without breaking an already-running instance
+- Backups are operator-owned responsibilities supported by the product: automated, restorable, and never treated as real unless restore has been demonstrated
+
+### Cloud Posture
+
+- Cloud is acceptable only when the operator owns the account, domain, and secrets
+- Cloud providers may still observe metadata, traffic patterns, and infrastructure state; this is an operational tradeoff, not a product blind spot
+- After Path C, cloud/VPS providers and server operators should still be unable to read message content
+- Home-hosted hardware offers stronger resistance to cloud-provider subpoenas; operator-owned cloud/VPS offers easier uptime, DNS/TLS, and offsite backup
+- Both venues are self-hosting; the difference is operational tradeoff, not product identity
 
 ---
 
@@ -481,7 +525,7 @@ These are either things we tried and rejected, known security anti-patterns in M
 - Passkey verbs: **issue_registration_challenge → issue_assertion_challenge → fetch_*_challenge → consume_challenge → register_passkey → assert_passkey**
 - Rate limit buckets: `verb.object` naming (e.g., `passkey.assertion`, `session.refresh`)
 - Error atoms: `:invalid | :expired | :used | :revoked | :trust_required | :trust_expired | :reuse_detected`
-- Avoid: `MLSStateStore`, `key_package`-based Chat module names, `ConversationEncryptionPolicy`, `session_snapshot` as primary term
+- Avoid protocol-coupled store names, new `key_package`-based Chat module names, crypto-centric policy names, and `session_snapshot` as a primary term
 - Telemetry root: `[:famichat, :auth, <context>, <action>]`
 
 ---
@@ -538,7 +582,7 @@ These are either things we tried and rejected, known security anti-patterns in M
 - [OPEN] Key lifecycle revocation: device/user removal semantics incomplete
 
 ### Product Scope
-- [OPEN] Neighborhood model: where do inter-family and local-community boundaries start and stop? Bounded family-to-family invites vs local open network vs something else?
+- [OPEN] Inter-family/community model inside one trusted deployment: what kinds of cross-family coordination belong here (bounded family-to-family invites, shared channels, shared spaces) without turning it into a public or semi-public local network?
 - [OPEN] Family tools scope: which household logistics (calendar, tasks, etc.) do we build vs integrate with existing tools (Google Calendar, Gmail, etc.)? Needs dogfooding
 - [OPEN] Ambient/cozy features: which (if any) actually matter to users? Don't build until dogfooding reveals demand
 - [OPEN] Design direction: what aesthetic does dogfooding tell us people actually want? No visual direction committed until then

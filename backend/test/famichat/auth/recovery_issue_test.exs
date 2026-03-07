@@ -1,6 +1,7 @@
 defmodule Famichat.Auth.Recovery.IssueTest do
   use Famichat.DataCase, async: true
 
+  alias Famichat.Accounts.CommunityScope
   alias Famichat.Auth.Recovery
   alias Famichat.Auth.Runtime.AuditLog
   alias Famichat.ChatFixtures
@@ -37,6 +38,7 @@ defmodule Famichat.Auth.Recovery.IssueTest do
       assert audit.event == "recovery.issue"
       assert audit.actor_id == admin.id
       assert audit.subject_id == member.id
+      assert audit.community_id == CommunityScope.default_id()
       assert audit.scope == "target_user"
       assert audit.household_id == nil
     end
@@ -63,6 +65,7 @@ defmodule Famichat.Auth.Recovery.IssueTest do
       RedactionHelpers.pii_free!(metadata)
 
       [audit] = Repo.all(AuditLog)
+      assert audit.community_id == CommunityScope.default_id()
       assert audit.scope == "household"
       assert audit.household_id == family.id
     end

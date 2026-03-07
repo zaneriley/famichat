@@ -121,7 +121,8 @@ defmodule Famichat.TestSupport.MLS.RecoveryGateAdapter do
   def export_ratchet_tree(params), do: FakeAdapter.export_ratchet_tree(params)
 
   @impl true
-  def list_member_credentials(params), do: FakeAdapter.list_member_credentials(params)
+  def list_member_credentials(params),
+    do: FakeAdapter.list_member_credentials(params)
 
   defp snapshot_present?(params) when is_map(params) do
     Enum.all?(@snapshot_keys, fn key ->

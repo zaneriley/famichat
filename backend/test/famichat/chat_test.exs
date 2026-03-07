@@ -5,7 +5,7 @@ defmodule Famichat.ChatTest do
   alias Famichat.Repo
 
   import Famichat.ChatFixtures
-  alias Famichat.Accounts.HouseholdMembership
+  alias Famichat.Accounts.{CommunityScope, HouseholdMembership}
 
   describe "users" do
     alias Famichat.Accounts.User
@@ -34,6 +34,7 @@ defmodule Famichat.ChatTest do
       }
 
       assert {:ok, %User{} = user} = Chat.create_user(valid_attrs)
+      assert user.community_id == family.community_id
       assert user.username == "some username"
       assert user.email == "some_email@example.com"
 
@@ -76,6 +77,14 @@ defmodule Famichat.ChatTest do
     test "change_user/1 returns a user changeset" do
       user = user_fixture()
       assert %Ecto.Changeset{} = Chat.change_user(user)
+    end
+  end
+
+  describe "families" do
+    test "create_family/1 assigns the hidden default community scope" do
+      assert {:ok, family} = Chat.create_family(%{name: unique_family_name()})
+
+      assert family.community_id == CommunityScope.default_id()
     end
   end
 

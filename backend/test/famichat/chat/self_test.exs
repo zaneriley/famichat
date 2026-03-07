@@ -102,6 +102,16 @@ defmodule Famichat.Chat.SelfTest do
       assert {:error, :not_in_family} = Self.get_or_create(user.id)
     end
 
+    test "returns ambiguous_household when user belongs to multiple households" do
+      family_one = ChatFixtures.family_fixture()
+      family_two = ChatFixtures.family_fixture()
+      user = ChatFixtures.user_fixture(%{family_id: family_one.id})
+
+      ChatFixtures.membership_fixture(user, family_two, :member)
+
+      assert {:error, :ambiguous_household} = Self.get_or_create(user.id)
+    end
+
     test "returns user_not_found for unknown user id" do
       assert {:error, :user_not_found} =
                Self.get_or_create(Ecto.UUID.generate())

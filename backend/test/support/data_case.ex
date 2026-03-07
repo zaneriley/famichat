@@ -40,6 +40,7 @@ defmodule Famichat.DataCase do
 
   def clear_cache do
     Famichat.Cache.clear()
+    FamichatWeb.TokenVerifyCache.clear()
   end
 
   @doc """

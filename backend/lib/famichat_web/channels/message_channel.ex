@@ -352,11 +352,13 @@ defmodule FamichatWeb.MessageChannel do
                           reason: inspect(reason)
                         )
 
-                        {:reply, {:error, %{reason: "broadcast_failed"}}, socket}
+                        {:reply, {:error, %{reason: "broadcast_failed"}},
+                         socket}
                     end
 
                   {:error, reason} ->
-                    {:reply, {:error, %{reason: reason_to_string(reason)}}, socket}
+                    {:reply, {:error, %{reason: reason_to_string(reason)}},
+                     socket}
                 end
 
               {:error, reason} ->

@@ -1079,7 +1079,8 @@ defmodule Famichat.Chat.MessageService do
                   # Use initial_decoded_snapshot as the baseline for change
                   # detection so the comparison is always between two values
                   # that went through the same normalize_mls_snapshot path.
-                  baseline_snapshot = initial_decoded_snapshot || initial_snapshot
+                  baseline_snapshot =
+                    initial_decoded_snapshot || initial_snapshot
 
                   maybe_persist_decrypt_snapshot(
                     updated_state,
@@ -1157,7 +1158,9 @@ defmodule Famichat.Chat.MessageService do
         end
 
       {:error, code, details} ->
-        {normalized_code, normalized_details} = normalize_mls_error(code, details)
+        {normalized_code, normalized_details} =
+          normalize_mls_error(code, details)
+
         {:error, normalized_code, normalized_details, message}
     end
   end
@@ -1260,7 +1263,9 @@ defmodule Famichat.Chat.MessageService do
 
   defp maybe_put_mls_snapshot(request, snapshot)
        when is_map(snapshot) and snapshot != %{} do
-    case Enum.find(@mls_snapshot_keys, fn k -> not is_binary(Map.get(snapshot, k)) end) do
+    case Enum.find(@mls_snapshot_keys, fn k ->
+           not is_binary(Map.get(snapshot, k))
+         end) do
       nil ->
         Map.merge(request, snapshot)
 
@@ -1334,7 +1339,11 @@ defmodule Famichat.Chat.MessageService do
     migrate_snapshot_with_retries(conversation, attrs, 0)
   end
 
-  defp migrate_snapshot_with_retries(%Conversation{} = conversation, attrs, attempt)
+  defp migrate_snapshot_with_retries(
+         %Conversation{} = conversation,
+         attrs,
+         attempt
+       )
        when attempt < 5 do
     case ConversationSecurityStateStore.upsert(conversation.id, attrs, nil) do
       {:ok, persisted} ->
@@ -1372,13 +1381,17 @@ defmodule Famichat.Chat.MessageService do
   end
 
   defp migrate_snapshot_with_retries(_conversation, _attrs, _attempt) do
-    {:error, :max_retries_exceeded, %{reason: :migrate_snapshot_retries_exhausted}}
+    {:error, :max_retries_exceeded,
+     %{reason: :migrate_snapshot_retries_exhausted}}
   end
 
   # Verifies the snapshot MAC stored alongside the persisted state.
   # nil MAC (rows written before the migration) are rejected with a warning
   # to prevent tampered or pre-migration snapshots from being silently accepted.
-  defp verify_snapshot_mac(conversation_id, %{snapshot_mac: nil, epoch: epoch} = persisted) do
+  defp verify_snapshot_mac(
+         conversation_id,
+         %{snapshot_mac: nil, epoch: epoch} = persisted
+       ) do
     Logger.warning(
       "Snapshot MAC is nil for conversation #{conversation_id} epoch=#{epoch}; " <>
         "rejecting — row predates MAC migration or key is unconfigured"
@@ -1388,14 +1401,22 @@ defmodule Famichat.Chat.MessageService do
     {:error, :snapshot_mac_missing}
   end
 
-  defp verify_snapshot_mac(conversation_id, %{snapshot_mac: stored_mac, state: state, epoch: epoch})
+  defp verify_snapshot_mac(conversation_id, %{
+         snapshot_mac: stored_mac,
+         state: state,
+         epoch: epoch
+       })
        when is_binary(stored_mac) and is_map(state) do
     mac_payload =
       state
       |> Map.put("group_id", conversation_id)
       |> Map.put("epoch", to_string(epoch))
 
-    case SnapshotMac.verify(mac_payload, stored_mac, SnapshotMac.configured_key!()) do
+    case SnapshotMac.verify(
+           mac_payload,
+           stored_mac,
+           SnapshotMac.configured_key!()
+         ) do
       :ok ->
         :ok
 

@@ -102,7 +102,7 @@ defmodule Famichat.ChatFixtures do
   """
   def user_fixture(attrs \\ %{}) do
     attrs = Map.new(attrs)
-    {_family, family_id} = resolve_family(attrs)
+    {family, family_id} = resolve_family(attrs)
 
     role =
       attrs
@@ -114,6 +114,7 @@ defmodule Famichat.ChatFixtures do
       attrs
       |> Map.drop([:family, :family_id, :role, "family", "family_id", "role"])
       |> Enum.into(%{
+        community_id: family.community_id,
         username: unique_user_username(),
         email: unique_user_email(),
         status: :active,
@@ -214,6 +215,7 @@ defmodule Famichat.ChatFixtures do
     family = Map.get(attrs, :family) || family_fixture()
 
     attrs
+    |> Map.put_new(:community_id, family.community_id)
     |> Map.put_new(:family_id, family.id)
     |> Map.put_new(:conversation_type, :direct)
     |> Map.put_new(:metadata, %{})

@@ -131,7 +131,11 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
     summary
   end
 
-  defp remove_from_conversation_with_timeout(conversation_id, device_id, revocation_ref) do
+  defp remove_from_conversation_with_timeout(
+         conversation_id,
+         device_id,
+         revocation_ref
+       ) do
     task =
       Task.async(fn ->
         do_remove_from_conversation(conversation_id, device_id, revocation_ref)
@@ -232,7 +236,12 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
     ConversationSecurityLifecycle.merge_pending_commit(conversation_id)
   end
 
-  defp mark_removal_failed(conversation_id, revocation_ref, error_code, error_reason) do
+  defp mark_removal_failed(
+         conversation_id,
+         revocation_ref,
+         error_code,
+         error_reason
+       ) do
     case ConversationSecurityRevocationStore.load_by_ref(
            conversation_id,
            revocation_ref
@@ -262,7 +271,9 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
     end
   end
 
-  defp update_summary(acc, :succeeded), do: Map.update!(acc, :succeeded, &(&1 + 1))
+  defp update_summary(acc, :succeeded),
+    do: Map.update!(acc, :succeeded, &(&1 + 1))
+
   defp update_summary(acc, :skipped), do: Map.update!(acc, :skipped, &(&1 + 1))
   defp update_summary(acc, :failed), do: Map.update!(acc, :failed, &(&1 + 1))
 

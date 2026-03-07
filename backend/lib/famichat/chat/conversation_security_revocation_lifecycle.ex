@@ -337,6 +337,7 @@ defmodule Famichat.Chat.ConversationSecurityRevocationLifecycle do
 
   defp list_conversation_ids_for_user(user_id) do
     sync_fanout_limit_value = sync_fanout_limit()
+
     ConversationQueries.for_user(user_id)
     |> select([c], c.id)
     |> order_by([c], asc: c.id)

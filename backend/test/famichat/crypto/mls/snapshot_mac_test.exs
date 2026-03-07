@@ -94,12 +94,16 @@ defmodule Famichat.Crypto.MLS.SnapshotMacTest do
 
     test "returns error when group_id is missing" do
       payload = Map.delete(valid_payload(), "group_id")
-      assert {:error, :missing_required_fields} = SnapshotMac.sign(payload, @test_key)
+
+      assert {:error, :missing_required_fields} =
+               SnapshotMac.sign(payload, @test_key)
     end
 
     test "returns error when epoch is missing" do
       payload = Map.delete(valid_payload(), "epoch")
-      assert {:error, :missing_required_fields} = SnapshotMac.sign(payload, @test_key)
+
+      assert {:error, :missing_required_fields} =
+               SnapshotMac.sign(payload, @test_key)
     end
   end
 
@@ -117,7 +121,9 @@ defmodule Famichat.Crypto.MLS.SnapshotMacTest do
       assert {:ok, mac} = SnapshotMac.sign(payload_original, @test_key)
 
       payload_swapped = Map.put(payload_original, "group_id", "group-intruder")
-      assert {:error, :mac_mismatch} = SnapshotMac.verify(payload_swapped, mac, @test_key)
+
+      assert {:error, :mac_mismatch} =
+               SnapshotMac.verify(payload_swapped, mac, @test_key)
     end
 
     test "returns {:error, :mac_mismatch} when epoch has been decremented (stale replay)" do
@@ -125,7 +131,9 @@ defmodule Famichat.Crypto.MLS.SnapshotMacTest do
       assert {:ok, mac} = SnapshotMac.sign(payload_current, @test_key)
 
       payload_stale = Map.put(payload_current, "epoch", "2")
-      assert {:error, :mac_mismatch} = SnapshotMac.verify(payload_stale, mac, @test_key)
+
+      assert {:error, :mac_mismatch} =
+               SnapshotMac.verify(payload_stale, mac, @test_key)
     end
 
     test "returns {:error, :mac_mismatch} when any session field is modified" do
@@ -133,27 +141,35 @@ defmodule Famichat.Crypto.MLS.SnapshotMacTest do
       assert {:ok, mac} = SnapshotMac.sign(payload, @test_key)
 
       tampered = Map.put(payload, "session_sender_storage", "00000001")
-      assert {:error, :mac_mismatch} = SnapshotMac.verify(tampered, mac, @test_key)
+
+      assert {:error, :mac_mismatch} =
+               SnapshotMac.verify(tampered, mac, @test_key)
     end
 
     test "returns {:error, :mac_mismatch} for a truncated MAC" do
       payload = valid_payload()
       assert {:ok, mac} = SnapshotMac.sign(payload, @test_key)
       truncated = String.slice(mac, 0, 32)
-      assert {:error, :mac_mismatch} = SnapshotMac.verify(payload, truncated, @test_key)
+
+      assert {:error, :mac_mismatch} =
+               SnapshotMac.verify(payload, truncated, @test_key)
     end
 
     test "returns {:error, :mac_mismatch} for an all-zeros MAC" do
       payload = valid_payload()
       zero_mac = String.duplicate("0", 64)
-      assert {:error, :mac_mismatch} = SnapshotMac.verify(payload, zero_mac, @test_key)
+
+      assert {:error, :mac_mismatch} =
+               SnapshotMac.verify(payload, zero_mac, @test_key)
     end
 
     test "returns {:error, :mac_mismatch} when wrong key is used to verify" do
       payload = valid_payload()
       assert {:ok, mac} = SnapshotMac.sign(payload, @test_key)
       wrong_key = "wrong-key-snapshot-hmac-key!!!!!"
-      assert {:error, :mac_mismatch} = SnapshotMac.verify(payload, mac, wrong_key)
+
+      assert {:error, :mac_mismatch} =
+               SnapshotMac.verify(payload, mac, wrong_key)
     end
 
     test "cross-group snapshot swap is rejected" do
@@ -169,7 +185,9 @@ defmodule Famichat.Crypto.MLS.SnapshotMacTest do
         |> Map.put("session_sender_storage", "aabbcc")
 
       assert {:ok, mac_a} = SnapshotMac.sign(payload_a, @test_key)
-      assert {:error, :mac_mismatch} = SnapshotMac.verify(payload_b, mac_a, @test_key)
+
+      assert {:error, :mac_mismatch} =
+               SnapshotMac.verify(payload_b, mac_a, @test_key)
     end
 
     test "stale-epoch snapshot is rejected even when state bytes are identical" do
@@ -179,7 +197,9 @@ defmodule Famichat.Crypto.MLS.SnapshotMacTest do
       payload_stale = Map.put(valid_payload(), "epoch", "3")
 
       assert {:ok, mac_current} = SnapshotMac.sign(payload_current, @test_key)
-      assert {:error, :mac_mismatch} = SnapshotMac.verify(payload_stale, mac_current, @test_key)
+
+      assert {:error, :mac_mismatch} =
+               SnapshotMac.verify(payload_stale, mac_current, @test_key)
     end
   end
 

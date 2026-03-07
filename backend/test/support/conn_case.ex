@@ -41,6 +41,7 @@ defmodule FamichatWeb.ConnCase do
         shared: not tags[:async]
       )
 
+    Famichat.DataCase.clear_cache()
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end

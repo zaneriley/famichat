@@ -75,7 +75,8 @@ defmodule Famichat.Crypto.MLS.Adapter.Nif do
   def export_ratchet_tree(params), do: call_1(:export_ratchet_tree, params)
 
   @impl true
-  def list_member_credentials(params), do: call_1(:list_member_credentials, params)
+  def list_member_credentials(params),
+    do: call_1(:list_member_credentials, params)
 
   defp call_0(operation) do
     try do

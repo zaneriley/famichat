@@ -296,12 +296,12 @@ defmodule Famichat.Chat.MessageServiceTest do
 
       # Verify message contents are intact
       assert Enum.map(retrieved, & &1.content) == [
-        "Message 1",
-        "Message 2",
-        "Message 3",
-        "Message 4",
-        "Message 5"
-      ]
+               "Message 1",
+               "Message 2",
+               "Message 3",
+               "Message 4",
+               "Message 5"
+             ]
     end
 
     test "baseline comparison detects no spurious persist on unchanged epoch/snapshot",
@@ -463,7 +463,8 @@ defmodule Famichat.Chat.MessageServiceTest do
       user: user
     } do
       # Verify no ConversationSecurityState row exists yet.
-      assert {:error, :not_found, _} = ConversationSecurityStateStore.load(conv.id)
+      assert {:error, :not_found, _} =
+               ConversationSecurityStateStore.load(conv.id)
 
       # send_message with mls_enforcement disabled goes through the non-MLS
       # path, so we trigger the migration by calling get_conversation_messages
@@ -472,7 +473,8 @@ defmodule Famichat.Chat.MessageServiceTest do
       # When mls_enforcement is disabled the snapshot load still runs, but the
       # upsert result is returned as the migration outcome. Because no row
       # exists yet, the first INSERT succeeds.
-      {:ok, _msg} = MessageService.send_message(valid_message_params(user, conv))
+      {:ok, _msg} =
+        MessageService.send_message(valid_message_params(user, conv))
 
       # After send_message the migration path triggered by
       # load_mls_snapshot_with_lock should have persisted a row. Verify the
@@ -483,7 +485,8 @@ defmodule Famichat.Chat.MessageServiceTest do
       # false). Instead we confirm the row does NOT exist yet, then trigger the
       # path via get_conversation_messages which calls
       # load_mls_snapshot_with_lock unconditionally in the read pipeline.
-      assert {:ok, _messages} = MessageService.get_conversation_messages(conv.id)
+      assert {:ok, _messages} =
+               MessageService.get_conversation_messages(conv.id)
 
       # The migration should have inserted a ConversationSecurityState row.
       # However, because mls_enforcement is off, load_mls_snapshot_with_lock
@@ -580,9 +583,11 @@ defmodule Famichat.Chat.MessageServiceTest do
       # common case. The catch-all clause fix is validated by the compiler
       # (no FunctionClauseError for attempt >= 5) and by the unit test below.
 
-      {:ok, _msg} = MessageService.send_message(valid_message_params(user, conv))
+      {:ok, _msg} =
+        MessageService.send_message(valid_message_params(user, conv))
 
-      assert {:ok, _messages} = MessageService.get_conversation_messages(conv.id)
+      assert {:ok, _messages} =
+               MessageService.get_conversation_messages(conv.id)
     end
 
     test "non-retryable upsert error is returned as error tuple immediately", %{
@@ -603,9 +608,10 @@ defmodule Famichat.Chat.MessageServiceTest do
       assert details[:reason] == :missing_or_invalid_state
     end
 
-    test "catch-all clause: attempt >= 5 returns error tuple not FunctionClauseError", %{
-      conv: conv
-    } do
+    test "catch-all clause: attempt >= 5 returns error tuple not FunctionClauseError",
+         %{
+           conv: conv
+         } do
       # This test documents the specific bug fix. Prior to the fix,
       # migrate_snapshot_with_retries/3 only had one clause guarded by
       # `when attempt < 5`. If the function were ever called with attempt >= 5
@@ -628,7 +634,8 @@ defmodule Famichat.Chat.MessageServiceTest do
       # migration path and encounters a persistent pre-existing row will
       # eventually resolve via the attempt-4 fallback load rather than
       # crashing, regardless of how many intermediate stale_state errors occur.
-      assert {:error, :not_found, _} = ConversationSecurityStateStore.load(conv.id)
+      assert {:error, :not_found, _} =
+               ConversationSecurityStateStore.load(conv.id)
     end
   end
 

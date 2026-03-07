@@ -424,6 +424,7 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
       assert byte_size(identity_hex) > 0, "identity_hex must be non-empty"
       # Identity must decode to valid UTF-8 bytes containing group_id
       {:ok, decoded} = Base.decode16(String.upcase(identity_hex))
+
       assert String.contains?(decoded, group_id),
              "identity must contain group_id #{group_id}, got: #{inspect(decoded)}"
     end
@@ -459,7 +460,8 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
   test "list_member_credentials fails closed for unknown group" do
     assert {:error, _code, _details} =
              MLS.list_member_credentials(%{
-               group_id: "nonexistent-group-#{System.unique_integer([:positive])}"
+               group_id:
+                 "nonexistent-group-#{System.unique_integer([:positive])}"
              })
   end
 
@@ -474,6 +476,7 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
 
     # Must still succeed and return expected keys
     assert Map.has_key?(payload, "epoch") or Map.has_key?(payload, :epoch)
+
     assert Map.has_key?(payload, "session_sender_storage") or
              Map.has_key?(payload, :session_sender_storage)
   end
@@ -491,8 +494,14 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
       %{group_id: group_id, group_payload: group_payload}
     end
 
-    test "epoch advances after mls_remove", %{group_id: group_id, group_payload: group_payload} do
-      epoch_before = String.to_integer(Map.get(group_payload, "epoch") || Map.get(group_payload, :epoch))
+    test "epoch advances after mls_remove", %{
+      group_id: group_id,
+      group_payload: group_payload
+    } do
+      epoch_before =
+        String.to_integer(
+          Map.get(group_payload, "epoch") || Map.get(group_payload, :epoch)
+        )
 
       assert {:ok, remove_payload} =
                MLS.mls_remove(
@@ -503,7 +512,9 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
                )
 
       remove_epoch =
-        String.to_integer(Map.get(remove_payload, "epoch") || Map.get(remove_payload, :epoch))
+        String.to_integer(
+          Map.get(remove_payload, "epoch") || Map.get(remove_payload, :epoch)
+        )
 
       assert remove_epoch == epoch_before + 1,
              "epoch must advance by exactly 1 after remove, got #{remove_epoch} expected #{epoch_before + 1}"
@@ -517,7 +528,9 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
                )
 
       msg_epoch =
-        String.to_integer(Map.get(msg_payload, "epoch") || Map.get(msg_payload, :epoch))
+        String.to_integer(
+          Map.get(msg_payload, "epoch") || Map.get(msg_payload, :epoch)
+        )
 
       assert msg_epoch == remove_epoch,
              "create_application_message epoch must equal mls_remove epoch"
@@ -569,7 +582,8 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
         )
 
       before_count =
-        (Map.get(before_payload, "credentials") || Map.get(before_payload, :credentials))
+        (Map.get(before_payload, "credentials") ||
+           Map.get(before_payload, :credentials))
         |> String.split(",", trim: true)
         |> length()
 
@@ -589,11 +603,13 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
         )
 
       after_count =
-        (Map.get(after_payload, "credentials") || Map.get(after_payload, :credentials))
+        (Map.get(after_payload, "credentials") ||
+           Map.get(after_payload, :credentials))
         |> String.split(",", trim: true)
         |> length()
 
-      assert after_count == 1, "group must have 1 member after remove, got #{after_count}"
+      assert after_count == 1,
+             "group must have 1 member after remove, got #{after_count}"
     end
 
     test "commit_ciphertext is non-empty in remove payload", %{
@@ -609,6 +625,7 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
                )
 
       commit_ciphertext = Map.get(remove_payload, "commit_ciphertext", "")
+
       assert byte_size(commit_ciphertext) > 0,
              "commit_ciphertext must be non-empty; lifecycle_ok stub never calls remove_members()"
     end
@@ -692,13 +709,16 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
                  })
                )
 
-      for key <- ~w[session_sender_storage session_recipient_storage session_sender_signer session_recipient_signer session_cache] do
+      for key <-
+            ~w[session_sender_storage session_recipient_storage session_sender_signer session_recipient_signer session_cache] do
         assert Map.has_key?(merge_payload, key), "missing snapshot key: #{key}"
 
         if key == "session_cache" do
-          assert byte_size(merge_payload[key] || "") >= 0, "snapshot key #{key} must be present"
+          assert byte_size(merge_payload[key] || "") >= 0,
+                 "snapshot key #{key} must be present"
         else
-          assert byte_size(merge_payload[key]) > 0, "snapshot key #{key} must be non-empty"
+          assert byte_size(merge_payload[key]) > 0,
+                 "snapshot key #{key} must be non-empty"
         end
       end
     end
@@ -731,7 +751,8 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
         |> Map.delete("commit_ciphertext")
         |> Map.delete(:commit_ciphertext)
 
-      assert {:error, _code, _details} = MLS.merge_staged_commit(params_without_ciphertext)
+      assert {:error, _code, _details} =
+               MLS.merge_staged_commit(params_without_ciphertext)
     end
 
     test "merge epoch matches export_group_info epoch", %{
@@ -749,7 +770,9 @@ defmodule Famichat.Crypto.MLS.NifAdapterTest do
 
       # export_group_info reads group.epoch().as_u64() from live OpenMLS object
       assert {:ok, info_payload} =
-               MLS.export_group_info(Map.merge(merge_payload, %{group_id: group_id}))
+               MLS.export_group_info(
+                 Map.merge(merge_payload, %{group_id: group_id})
+               )
 
       merge_epoch = String.to_integer(merge_payload["epoch"])
       info_epoch = String.to_integer(info_payload["epoch"])

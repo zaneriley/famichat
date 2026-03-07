@@ -289,6 +289,21 @@ defmodule Famichat.Chat.ConversationServiceTest do
       refute conversation_two.direct_key == conversation_one.direct_key
     end
 
+    test "fails closed when users share multiple households", %{
+      user1: user1,
+      user2: user2
+    } do
+      other_family = family_fixture()
+      membership_fixture(user1, other_family)
+      membership_fixture(user2, other_family)
+
+      assert {:error, :ambiguous_household} =
+               ConversationService.create_direct_conversation(
+                 user1.id,
+                 user2.id
+               )
+    end
+
     test "create_direct_conversation/2 emits telemetry events for success case",
          %{user1: user1, user2: user2, ref: ref} do
       {:ok, _conversation} =

@@ -3,11 +3,12 @@ defmodule FamichatWeb.AuthControllerTest do
 
   import Ecto.Query
 
-  alias Famichat.Repo
+  alias Famichat.Accounts.{User, UserDevice}
   alias Famichat.Auth.{Passkeys, Sessions}
+  alias Famichat.Chat
   alias Famichat.Chat.ConversationSecurityRevocation
   alias Famichat.ChatFixtures
-  alias Famichat.Accounts.{User, UserDevice}
+  alias Famichat.Repo
 
   @json "application/json"
   # Must match config :famichat, :webauthn defaults and the Wax challenge issued
@@ -197,13 +198,8 @@ defmodule FamichatWeb.AuthControllerTest do
 
     created_user = Repo.get!(User, user_id)
 
-    conversation =
-      ChatFixtures.conversation_fixture(%{
-        conversation_type: :direct,
-        family: family,
-        user1: created_user,
-        user2: admin
-      })
+    assert {:ok, conversation} =
+             Chat.create_direct_conversation(created_user.id, admin.id)
 
     assert created_user.email |> to_string() |> String.downcase() ==
              "newuser@example.test"
@@ -228,7 +224,9 @@ defmodule FamichatWeb.AuthControllerTest do
 
     # Fetch the raw challenge bytes via the Passkeys context so we can build
     # a real WebAuthn attestation payload that Wax will accept.
-    {:ok, challenge_record} = Passkeys.fetch_registration_challenge(challenge_handle)
+    {:ok, challenge_record} =
+      Passkeys.fetch_registration_challenge(challenge_handle)
+
     challenge_bytes = challenge_record.challenge
 
     {private_key, credential_id, reg_http_payload} =
@@ -258,7 +256,9 @@ defmodule FamichatWeb.AuthControllerTest do
     assert assert_public_key["challenge"] == assert_challenge
 
     # Fetch raw assertion challenge bytes and build a real signed assertion payload.
-    {:ok, assert_challenge_record} = Passkeys.fetch_assertion_challenge(assert_handle)
+    {:ok, assert_challenge_record} =
+      Passkeys.fetch_assertion_challenge(assert_handle)
+
     assert_challenge_bytes = assert_challenge_record.challenge
 
     device_id = Ecto.UUID.generate()
@@ -275,10 +275,13 @@ defmodule FamichatWeb.AuthControllerTest do
     # Assert passkey + start session
     session_payload =
       conn
-      |> post(~p"/api/v1/auth/passkeys/assert", Map.merge(assert_http_payload, %{
-        "device_id" => device_id,
-        "trust_device" => true
-      }))
+      |> post(
+        ~p"/api/v1/auth/passkeys/assert",
+        Map.merge(assert_http_payload, %{
+          "device_id" => device_id,
+          "trust_device" => true
+        })
+      )
       |> json_response(201)
 
     access_token = session_payload["access_token"]
@@ -430,6 +433,121 @@ defmodule FamichatWeb.AuthControllerTest do
              %{"error" => %{"code" => "invalid_parameters"}}
   end
 
+  describe "invite controller contracts" do
+    test "issue_invite returns 202 accepted and rejects missing or invalid household ids and roles",
+         %{
+           conn: conn,
+           family: family,
+           admin_session: admin_session
+         } do
+      conn =
+        conn
+        |> put_req_header("content-type", @json)
+        |> auth(admin_session.access_token)
+
+      success_response =
+        conn
+        |> post(~p"/api/v1/auth/invites", %{
+          household_id: family.id,
+          role: "member"
+        })
+
+      assert success_response.status == 202
+      assert json_response(success_response, 202)["invite_token"]
+
+      missing_household_response =
+        conn
+        |> post(~p"/api/v1/auth/invites", %{
+          role: "member"
+        })
+
+      assert json_response(missing_household_response, 400) == %{
+               "error" => %{"code" => "missing_household_id"}
+             }
+
+      household_error_response =
+        conn
+        |> post(~p"/api/v1/auth/invites", %{
+          household_id: "not-a-uuid",
+          role: "member"
+        })
+
+      assert json_response(household_error_response, 400) == %{
+               "error" => %{"code" => "invalid_household_id"}
+             }
+
+      error_response =
+        conn
+        |> post(~p"/api/v1/auth/invites", %{
+          household_id: family.id,
+          role: "owner"
+        })
+
+      assert json_response(error_response, 400) == %{
+               "error" => %{"code" => "invalid_role"}
+             }
+    end
+
+    test "complete_invite preserves invalid and used registration token mappings",
+         %{
+           conn: conn,
+           family: family,
+           admin_session: admin_session
+         } do
+      authed_conn =
+        conn
+        |> put_req_header("content-type", @json)
+        |> auth(admin_session.access_token)
+
+      issue_response =
+        authed_conn
+        |> post(~p"/api/v1/auth/invites", %{
+          household_id: family.id,
+          role: "member",
+          email: "controller-contract@example.test"
+        })
+
+      invite_token = json_response(issue_response, 202)["invite_token"]
+
+      registration_token =
+        authed_conn
+        |> post(~p"/api/v1/auth/invites/accept", %{token: invite_token})
+        |> json_response(200)
+        |> Map.fetch!("registration_token")
+
+      invalid_response =
+        conn
+        |> put_req_header("content-type", @json)
+        |> put_req_header("authorization", "Bearer bogus-registration-token")
+        |> post(~p"/api/v1/auth/invites/complete", %{username: "bogus_contract"})
+
+      assert json_response(invalid_response, 401) == %{
+               "error" => %{"code" => "invalid_registration_token"}
+             }
+
+      registration_conn =
+        conn
+        |> put_req_header("content-type", @json)
+        |> put_req_header("authorization", "Bearer #{registration_token}")
+
+      assert json_response(
+               post(registration_conn, ~p"/api/v1/auth/invites/complete", %{
+                 username: "used_contract_member"
+               }),
+               201
+             )["passkey_register_token"]
+
+      used_response =
+        post(registration_conn, ~p"/api/v1/auth/invites/complete", %{
+          username: "ignored_on_used_token"
+        })
+
+      assert json_response(used_response, 410) == %{
+               "error" => %{"code" => "used_registration_token"}
+             }
+    end
+  end
+
   describe "OTP verify — rate-limit response is indistinguishable from wrong code" do
     # Security property: an attacker must not be able to distinguish
     # "email exists but rate limited" from "wrong code".  Both must produce
@@ -499,7 +617,10 @@ defmodule FamichatWeb.AuthControllerTest do
              "rate-limited response body differs from wrong-code body — this enables email enumeration"
     end
 
-    test "rate-limited response does not return 429", %{conn: conn, admin: admin} do
+    test "rate-limited response does not return 429", %{
+      conn: conn,
+      admin: admin
+    } do
       conn = put_req_header(conn, "content-type", @json)
 
       otp_conn =
@@ -542,7 +663,9 @@ defmodule FamichatWeb.AuthControllerTest do
   # BUG-R4-004: invalid passkey register token returns 401, not 410
   # ---------------------------------------------------------------------------
   describe "passkey_register_challenge — token error semantics" do
-    test "garbage/malformed register_token returns 401 (not 410 Gone)", %{conn: conn} do
+    test "garbage/malformed register_token returns 401 (not 410 Gone)", %{
+      conn: conn
+    } do
       conn = put_req_header(conn, "content-type", @json)
 
       resp =
@@ -561,7 +684,9 @@ defmodule FamichatWeb.AuthControllerTest do
       assert body["error"]["code"] == "invalid_token"
     end
 
-    test "expired register_token returns 410 Gone with token_expired code", %{conn: conn} do
+    test "expired register_token returns 410 Gone with token_expired code", %{
+      conn: conn
+    } do
       # We cannot easily forge an expired token without touching internals,
       # so we just verify the garbage-token path is 401 and trusts that the
       # expired path (tested in passkeys_test.exs) maps correctly in the
@@ -606,7 +731,10 @@ defmodule FamichatWeb.AuthControllerTest do
       assert body["error"]["code"] == "invalid_parameters"
     end
 
-    test "user_id UUID for existing user also returns 400", %{conn: conn, admin: admin} do
+    test "user_id UUID for existing user also returns 400", %{
+      conn: conn,
+      admin: admin
+    } do
       conn = put_req_header(conn, "content-type", @json)
 
       resp =
@@ -624,10 +752,11 @@ defmodule FamichatWeb.AuthControllerTest do
       assert body["error"]["code"] == "invalid_parameters"
     end
 
-    test "existing and nonexistent user_id return the same response (no enumeration)", %{
-      conn: conn,
-      admin: admin
-    } do
+    test "existing and nonexistent user_id return the same response (no enumeration)",
+         %{
+           conn: conn,
+           admin: admin
+         } do
       conn = put_req_header(conn, "content-type", @json)
 
       existing_resp =
@@ -649,7 +778,10 @@ defmodule FamichatWeb.AuthControllerTest do
              "Different response bodies for existing vs nonexistent user UUID — this enables enumeration"
     end
 
-    test "username lookup still works after user_id removal", %{conn: conn, admin: admin} do
+    test "username lookup still works after user_id removal", %{
+      conn: conn,
+      admin: admin
+    } do
       conn = put_req_header(conn, "content-type", @json)
 
       resp =
@@ -691,8 +823,9 @@ defmodule FamichatWeb.AuthControllerTest do
     cred_id_len = byte_size(credential_id)
     cose_key_cbor = CBOR.encode(cose_key)
 
-    <<rp_id_hash::binary-size(32), flags::8, sign_count::unsigned-big-integer-32,
-      aaguid::binary-size(16), cred_id_len::unsigned-big-integer-16,
+    <<rp_id_hash::binary-size(32), flags::8,
+      sign_count::unsigned-big-integer-32, aaguid::binary-size(16),
+      cred_id_len::unsigned-big-integer-16,
       credential_id::binary-size(cred_id_len), cose_key_cbor::binary>>
   end
 
@@ -700,7 +833,9 @@ defmodule FamichatWeb.AuthControllerTest do
     rp_id_hash = :crypto.hash(:sha256, @webauthn_rp_id)
     # UP=1, UV=1, no AT → 0x05
     flags = 0x05
-    <<rp_id_hash::binary-size(32), flags::8, sign_count::unsigned-big-integer-32>>
+
+    <<rp_id_hash::binary-size(32), flags::8,
+      sign_count::unsigned-big-integer-32>>
   end
 
   defp build_client_data_json_create(challenge_bytes) do
