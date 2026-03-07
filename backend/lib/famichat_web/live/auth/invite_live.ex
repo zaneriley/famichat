@@ -91,7 +91,10 @@ defmodule FamichatWeb.AuthLive.InviteLive do
         {:ok, mount_invalid(socket, :rate_limited)}
 
       {:error, reason} ->
-        Logger.warning("[InviteLive] Unexpected error accepting invite: #{inspect(reason)}")
+        Logger.warning(
+          "[InviteLive] Unexpected error accepting invite: #{inspect(reason)}"
+        )
+
         {:ok, mount_invalid(socket, :unknown)}
     end
   end
@@ -127,10 +130,22 @@ defmodule FamichatWeb.AuthLive.InviteLive do
         {:noreply, assign(socket, :error, :username_required)}
 
       String.length(username) < 2 ->
-        {:noreply, socket |> assign(:error, :username_too_short) |> assign(:username, username)}
+        {:noreply,
+         socket
+         |> assign(:error, :username_too_short)
+         |> assign(:username, username)}
+
+      String.length(username) > 50 ->
+        {:noreply,
+         socket
+         |> assign(:error, :username_too_long)
+         |> assign(:username, username)}
 
       username_taken?(username) ->
-        {:noreply, socket |> assign(:error, :username_taken) |> assign(:username, username)}
+        {:noreply,
+         socket
+         |> assign(:error, :username_taken)
+         |> assign(:username, username)}
 
       true ->
         {:noreply,
@@ -159,7 +174,11 @@ defmodule FamichatWeb.AuthLive.InviteLive do
   # server-side. Stores the token so the hook can skip Step 1 on retry
   # without hitting the server again.
   @impl true
-  def handle_event("step1-complete", %{"passkey_register_token" => token}, socket) do
+  def handle_event(
+        "step1-complete",
+        %{"passkey_register_token" => token},
+        socket
+      ) do
     {:noreply, assign(socket, :passkey_register_token, token)}
   end
 
@@ -192,7 +211,10 @@ defmodule FamichatWeb.AuthLive.InviteLive do
 
   # Fallback for events that carry only a message and no known code.
   def handle_event("register-error", %{"message" => message}, socket) do
-    Logger.warning("[InviteLive] Passkey registration error (no code): #{message}")
+    Logger.warning(
+      "[InviteLive] Passkey registration error (no code): #{message}"
+    )
+
     {:noreply, assign(socket, :error, {:recoverable, message})}
   end
 
@@ -213,21 +235,39 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     end
   end
 
-  defp error_message(:expired), do: gettext("This invite link has expired. Ask for a new one.")
-  defp error_message(:used), do: gettext("This invite link has already been used.")
+  defp error_message(:expired),
+    do: gettext("This invite link has expired. Ask for a new one.")
+
+  defp error_message(:used),
+    do: gettext("This invite link has already been used.")
+
   defp error_message(:invalid), do: gettext("This invite link is not valid.")
-  defp error_message(:rate_limited), do: gettext("Too many attempts. Please try again later.")
-  defp error_message(:unknown), do: gettext("Something went wrong. Please try again.")
-  defp error_message(:username_required), do: gettext("Please enter a username.")
-  defp error_message(:username_too_short), do: gettext("Username must be at least 2 characters.")
+
+  defp error_message(:rate_limited),
+    do: gettext("Too many attempts. Please try again later.")
+
+  defp error_message(:unknown),
+    do: gettext("Something went wrong. Please try again.")
+
+  defp error_message(:username_required),
+    do: gettext("Please enter a username.")
+
+  defp error_message(:username_too_short),
+    do: gettext("Username must be at least 2 characters.")
+
+  defp error_message(:username_too_long),
+    do: gettext("Username must be 50 characters or fewer.")
 
   defp error_message(:username_taken),
     do: gettext("That name is already taken. Please choose a different one.")
 
   defp error_message({:recoverable, msg}) when is_binary(msg), do: msg
+
   defp error_message({:fatal, "missing_registration_token"}),
     do: gettext("Registration token missing. Please go back and try again.")
 
-  defp error_message({:fatal, _code}), do: gettext("Something went wrong. Please go back and try again.")
+  defp error_message({:fatal, _code}),
+    do: gettext("Something went wrong. Please go back and try again.")
+
   defp error_message(_), do: gettext("Something went wrong.")
 end

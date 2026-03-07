@@ -7,7 +7,9 @@
         <%= gettext("Sign in to Famichat") %>
       </.typography>
       <.typography tag="p" size="md" color="deemphasized">
-        <%= gettext("Your device will ask to confirm it's you — the same way it unlocks your phone.") %>
+        <%= gettext(
+          "Your device will ask to confirm it's you — the same way it unlocks your phone."
+        ) %>
       </.typography>
     </div>
 
@@ -20,10 +22,18 @@
         class="ac-primary-button flex items-center justify-center gap-2xs w-full"
       >
         <%= if @loading do %>
-          <span class="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full" aria-hidden="true"></span>
-          <.typography tag="span" size="md" color="main"><%= gettext("Signing you in…") %></.typography>
+          <span
+            class="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full"
+            aria-hidden="true"
+          >
+          </span>
+          <.typography tag="span" size="md" color="main">
+            <%= gettext("Signing you in…") %>
+          </.typography>
         <% else %>
-          <.typography tag="span" size="md" color="main"><%= gettext("Sign in with passkey") %></.typography>
+          <.typography tag="span" size="md" color="main">
+            <%= gettext("Sign in with passkey") %>
+          </.typography>
         <% end %>
       </button>
 
@@ -36,12 +46,10 @@
       <% end %>
 
       <.typography tag="p" size="2xs" color="deemphasized">
-        <%= gettext("New to Famichat? You need an invite link from a family member to get started.") %>
+        <%= gettext(
+          "New to Famichat? You need an invite link from a family member to get started."
+        ) %>
       </.typography>
-
-      <%!-- TODO: OTP fallback login — backend (issue_otp/verify_otp, rate limiting) is built.
-           Blocked on: (1) email delivery infra, (2) /login/otp LiveView.
-           Re-enable when email provider is configured. --%>
     </div>
   </div>
 </div>

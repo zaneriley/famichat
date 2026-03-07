@@ -22,7 +22,7 @@ defmodule FamichatWeb.AuthLive.LoginLive do
 
   @impl true
   def handle_event("passkey-error", %{"message" => msg}, socket) do
-    Logger.warning("[LoginLive] passkey-error: #{inspect(msg)}")
+    Logger.warning("[LoginLive] passkey-error occurred")
     {:noreply, assign(socket, error: msg, loading: false)}
   end
 

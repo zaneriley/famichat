@@ -45,21 +45,18 @@ defmodule FamichatWeb.AdminLive.SetupLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket) do
-      mount_connected(socket)
-    else
-      {:ok,
-       socket
-       |> assign(:step, :check)
-       |> assign(:username, "")
-       |> assign(:family_name, "")
-       |> assign(:error, nil)
-       |> assign(:passkey_register_token, nil)
-       |> assign(:admin_user_id, nil)
-       |> assign(:family_id, nil)
-       |> assign(:invite_url, nil)
-       |> assign(:copied, false)
-       |> assign_page_metadata(gettext("Set up your family space"))}
+    cond do
+      FirstRun.bootstrapped?() ->
+        {:ok,
+         socket
+         |> setup_socket(:already_bootstrapped)
+         |> redirect(to: locale_path(socket, "/"))}
+
+      connected?(socket) ->
+        mount_connected(socket)
+
+      true ->
+        {:ok, setup_socket(socket, :check)}
     end
   end
 
@@ -69,40 +66,43 @@ defmodule FamichatWeb.AdminLive.SetupLive do
     if count > 0 do
       {:ok,
        socket
-       |> assign(:step, :already_bootstrapped)
-       |> assign(:username, "")
-       |> assign(:family_name, "")
-       |> assign(:error, nil)
-       |> assign(:passkey_register_token, nil)
-       |> assign(:admin_user_id, nil)
-       |> assign(:family_id, nil)
-       |> assign(:invite_url, nil)
-       |> assign(:copied, false)
-       |> assign_page_metadata(gettext("Set up your family space"))
+       |> setup_socket(:already_bootstrapped)
        |> push_navigate(to: locale_path(socket, "/"))}
     else
-      {:ok,
-       socket
-       |> assign(:step, :bootstrap)
-       |> assign(:username, "")
-       |> assign(:family_name, "")
-       |> assign(:error, nil)
-       |> assign(:passkey_register_token, nil)
-       |> assign(:admin_user_id, nil)
-       |> assign(:family_id, nil)
-       |> assign(:invite_url, nil)
-       |> assign(:copied, false)
-       |> assign_page_metadata(gettext("Set up your family space"))}
+      {:ok, setup_socket(socket, :bootstrap)}
     end
   end
 
+  defp setup_socket(socket, step) do
+    socket
+    |> assign(:step, step)
+    |> assign(:username, "")
+    |> assign(:family_name, "")
+    |> assign(:error, nil)
+    |> assign(:passkey_register_token, nil)
+    |> assign(:admin_user_id, nil)
+    |> assign(:family_id, nil)
+    |> assign(:invite_url, nil)
+    |> assign(:copied, false)
+    |> assign(:copy_failed, false)
+    |> assign_page_metadata(gettext("Set up your family space"))
+  end
+
   @impl true
-  def handle_event("submit-bootstrap", %{"username" => username, "family_name" => family_name}, socket) do
+  def handle_event(
+        "submit-bootstrap",
+        %{"username" => username, "family_name" => family_name},
+        socket
+      ) do
     username = String.trim(username)
     family_name = String.trim(family_name)
-    family_name_or_default = if family_name == "", do: "My Family", else: family_name
 
-    case Onboarding.bootstrap_admin(username, %{"family_name" => family_name_or_default}) do
+    family_name_or_default =
+      if family_name == "", do: "My Family", else: family_name
+
+    case Onboarding.bootstrap_admin(username, %{
+           "family_name" => family_name_or_default
+         }) do
       {:ok, %{user: user, family: family, passkey_register_token: token}} ->
         # Flip the first-run cache so the locale plug stops redirecting here.
         FirstRun.reset_cache()
@@ -129,7 +129,10 @@ defmodule FamichatWeb.AdminLive.SetupLive do
         {:noreply, assign(socket, :error, :username_too_short)}
 
       {:error, reason} ->
-        Logger.warning("[SetupLive] bootstrap_admin unexpected error: #{inspect(reason)}")
+        Logger.warning(
+          "[SetupLive] bootstrap_admin unexpected error: #{inspect(reason)}"
+        )
+
         {:noreply, assign(socket, :error, :unexpected)}
     end
   end
@@ -183,14 +186,21 @@ defmodule FamichatWeb.AdminLive.SetupLive do
   end
 
   # Fatal errors — unsupported browser or other non-retriable condition.
-  def handle_event("register-error", %{"code" => _code, "message" => message}, socket) do
+  def handle_event(
+        "register-error",
+        %{"code" => _code, "message" => message},
+        socket
+      ) do
     Logger.warning("[SetupLive] Fatal passkey error: #{message}")
     {:noreply, assign(socket, :error, {:fatal, message})}
   end
 
   # Legacy / no-code fallback — treat as retryable.
   def handle_event("register-error", %{"message" => message}, socket) do
-    Logger.warning("[SetupLive] Passkey registration error (no code): #{message}")
+    Logger.warning(
+      "[SetupLive] Passkey registration error (no code): #{message}"
+    )
+
     {:noreply, assign(socket, :error, {:retryable, message})}
   end
 
@@ -207,9 +217,13 @@ defmodule FamichatWeb.AdminLive.SetupLive do
     if is_nil(admin_user_id) or is_nil(family_id) do
       {:noreply, assign(socket, :error, :not_logged_in)}
     else
-      case Onboarding.issue_invite(admin_user_id, nil, %{household_id: family_id, role: "member"}) do
+      case Onboarding.issue_invite(admin_user_id, nil, %{
+             household_id: family_id,
+             role: "member"
+           }) do
         {:ok, %{invite: invite_token}} ->
-          invite_url = "#{base_url()}#{locale_path(socket, "/invites/#{invite_token}")}"
+          invite_url =
+            "#{base_url()}#{locale_path(socket, "/invites/#{invite_token}")}"
 
           {:noreply,
            socket
@@ -234,9 +248,20 @@ defmodule FamichatWeb.AdminLive.SetupLive do
   end
 
   @impl true
+  def handle_event("reload_page", _params, socket) do
+    {:noreply, push_navigate(socket, to: locale_path(socket, "/setup"))}
+  end
+
+  @impl true
   def handle_event("copied", _params, socket) do
     Process.send_after(self(), :reset_copied, 2000)
-    {:noreply, assign(socket, :copied, true)}
+    {:noreply, socket |> assign(:copied, true) |> assign(:copy_failed, false)}
+  end
+
+  @impl true
+  def handle_event("copy-failed", _params, socket) do
+    Process.send_after(self(), :reset_copy_failed, 4000)
+    {:noreply, assign(socket, :copy_failed, true)}
   end
 
   @impl true
@@ -244,15 +269,29 @@ defmodule FamichatWeb.AdminLive.SetupLive do
     {:noreply, assign(socket, :copied, false)}
   end
 
+  @impl true
+  def handle_info(:reset_copy_failed, socket) do
+    {:noreply, assign(socket, :copy_failed, false)}
+  end
+
   defp base_url do
     FamichatWeb.Endpoint.url()
   end
 
   defp error_message(:username_required), do: gettext("Please enter your name.")
-  defp error_message(:username_too_short), do: gettext("Your name needs to be at least 3 characters.")
-  defp error_message(:unexpected), do: gettext("Something went wrong \u2014 please try again.")
-  defp error_message(:invite_failed), do: gettext("Could not generate an invite link. Please try again.")
-  defp error_message(:not_logged_in), do: gettext("Complete setup first, then you can generate an invite.")
+
+  defp error_message(:username_too_short),
+    do: gettext("Your name needs to be at least 3 characters.")
+
+  defp error_message(:unexpected),
+    do: gettext("Something went wrong \u2014 please try again.")
+
+  defp error_message(:invite_failed),
+    do: gettext("Could not generate an invite link. Please try again.")
+
+  defp error_message(:not_logged_in),
+    do: gettext("Complete setup first, then you can generate an invite.")
+
   defp error_message({:retryable, msg}) when is_binary(msg), do: msg
   defp error_message({:fatal, msg}) when is_binary(msg), do: msg
   defp error_message(_), do: gettext("Something went wrong.")

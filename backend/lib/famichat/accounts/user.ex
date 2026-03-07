@@ -70,6 +70,7 @@ defmodule Famichat.Accounts.User do
     ])
     |> sanitize_username()
     |> validate_required([:username])
+    |> validate_length(:username, max: 50)
     |> normalize_email()
     |> put_email_fingerprint()
     |> put_username_fingerprint()

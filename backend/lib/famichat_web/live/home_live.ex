@@ -4,7 +4,13 @@ defmodule FamichatWeb.HomeLive do
   require Logger
 
   alias Famichat.Auth.{Identity, Sessions}
-  alias Famichat.Chat.{Conversation, ConversationParticipant, ConversationSecurityStateStore}
+
+  alias Famichat.Chat.{
+    Conversation,
+    ConversationParticipant,
+    ConversationSecurityStateStore
+  }
+
   alias Famichat.Accounts.{HouseholdMembership, User}
   alias Famichat.Chat
   alias Famichat.Chat.Family
@@ -19,6 +25,7 @@ defmodule FamichatWeb.HomeLive do
          {:ok, user} <- Identity.fetch_user(user_id),
          {:ok, conversations} <- get_user_conversations(user_id) do
       {family, family_members, is_admin} = load_family_data(user_id)
+
       base_socket =
         socket
         |> assign_socket_state(user, device_id, token, params)
@@ -81,7 +88,8 @@ defmodule FamichatWeb.HomeLive do
       recovery_ref: default_recovery_ref(),
       recovery_last_status: nil,
       last_seen_message_id: nil,
-      mls_enforcement_enabled: Application.get_env(:famichat, :mls_enforcement, false),
+      mls_enforcement_enabled:
+        Application.get_env(:famichat, :mls_enforcement, false),
       dev_mode: Application.get_env(:famichat, :environment) == :dev
     )
   end
@@ -164,9 +172,16 @@ defmodule FamichatWeb.HomeLive do
         {:ok, channel_token} ->
           # Push the token to the hook. It is delivered over the
           # already-authenticated LiveView WebSocket — not in the DOM.
-          {:noreply, push_event(socket, "connect_channel", %{channel_token: channel_token})}
+          {:noreply,
+           push_event(socket, "connect_channel", %{channel_token: channel_token})}
 
-        {:error, reason} when reason in [:revoked, :device_not_found, :trust_required, :trust_expired] ->
+        {:error, reason}
+        when reason in [
+               :revoked,
+               :device_not_found,
+               :trust_required,
+               :trust_expired
+             ] ->
           reason_text = reason_to_string(reason)
 
           {:noreply,
@@ -176,14 +191,14 @@ defmodule FamichatWeb.HomeLive do
              topic: nil,
              security_reason: reason_text,
              security_action: security_action_for_reason(reason_text),
-             error_message: "Cannot connect: #{message_error_text(reason_text)}"
+             error_message: message_error_text(reason_text)
            )
            |> put_system_notice("Connection blocked: #{reason_text}.")}
 
         {:error, reason} ->
           {:noreply,
            assign(socket,
-             error_message: "Cannot issue channel token: #{inspect(reason)}"
+             error_message: "Something went wrong connecting. Try refreshing."
            )}
       end
     end
@@ -226,7 +241,9 @@ defmodule FamichatWeb.HomeLive do
 
       true ->
         {:noreply,
-         assign(socket, error_message: "Connect channel before sending.")}
+         assign(socket,
+           error_message: "Still connecting. Try again in a moment."
+         )}
     end
   end
 
@@ -352,9 +369,9 @@ defmodule FamichatWeb.HomeLive do
     error_text =
       if reason_text == "connection_error" and
            socket.assigns.security_reason == "revoked" do
-        "This device is revoked. Open a fresh link from /admin/spike."
+        "This device has been removed. Please sign in again."
       else
-        "Socket error: #{reason_text}"
+        "Something went wrong with the connection. Try refreshing."
       end
 
     {:noreply,
@@ -393,7 +410,7 @@ defmodule FamichatWeb.HomeLive do
        socket,
        channel_joined: false,
        topic: nil,
-       error_message: "Failed to join: #{reason_to_string(reason)}"
+       error_message: "Something went wrong connecting. Try refreshing."
      )}
   end
 
@@ -409,8 +426,8 @@ defmodule FamichatWeb.HomeLive do
     if not is_binary(message_id) or String.trim(message_id) == "" do
       {:noreply,
        socket
-       |> assign(error_message: "Dropped message missing message_id.")
-       |> put_system_notice("Dropped message: missing message_id in payload.")}
+       |> assign(error_message: nil)
+       |> put_system_notice("A message could not be displayed.")}
     else
       received_message = %{
         id: "msg-#{message_id}",
@@ -459,7 +476,7 @@ defmodule FamichatWeb.HomeLive do
        channel_joined: false,
        security_reason: reason,
        security_action: action,
-       error_message: "Security state: #{reason} (#{action})"
+       error_message: message_error_text(reason)
      )
      |> put_system_notice("Security state changed: #{reason} (#{action}).")}
   end
@@ -477,9 +494,16 @@ defmodule FamichatWeb.HomeLive do
 
       case Sessions.issue_channel_token(user_id, device_id, live_socket_id) do
         {:ok, channel_token} ->
-          {:noreply, push_event(socket, "connect_channel", %{channel_token: channel_token})}
+          {:noreply,
+           push_event(socket, "connect_channel", %{channel_token: channel_token})}
 
-        {:error, reason} when reason in [:revoked, :device_not_found, :trust_required, :trust_expired] ->
+        {:error, reason}
+        when reason in [
+               :revoked,
+               :device_not_found,
+               :trust_required,
+               :trust_expired
+             ] ->
           reason_text = reason_to_string(reason)
 
           {:noreply,
@@ -489,14 +513,14 @@ defmodule FamichatWeb.HomeLive do
              topic: nil,
              security_reason: reason_text,
              security_action: security_action_for_reason(reason_text),
-             error_message: "Cannot connect: #{message_error_text(reason_text)}"
+             error_message: message_error_text(reason_text)
            )
            |> put_system_notice("Connection blocked: #{reason_text}.")}
 
         {:error, reason} ->
           {:noreply,
            assign(socket,
-             error_message: "Cannot issue channel token: #{inspect(reason)}"
+             error_message: "Something went wrong connecting. Try refreshing."
            )}
       end
     end
@@ -542,7 +566,10 @@ defmodule FamichatWeb.HomeLive do
     end
   rescue
     e ->
-      Logger.error("Failed to load family data for user #{user_id}: #{Exception.message(e)}")
+      Logger.error(
+        "Failed to load family data for user #{user_id}: #{Exception.message(e)}"
+      )
+
       {nil, [], false}
   end
 
@@ -555,17 +582,28 @@ defmodule FamichatWeb.HomeLive do
 
     cond do
       is_nil(user) or is_nil(family) ->
-        {:noreply, assign(socket, error_message: "You must be in a family to generate an invite.")}
+        {:noreply,
+         assign(socket,
+           error_message: "You must be in a family to generate an invite."
+         )}
 
       true ->
-        case Onboarding.issue_invite(user.id, nil, %{household_id: family.id, role: "member"}) do
+        case Onboarding.issue_invite(user.id, nil, %{
+               household_id: family.id,
+               role: "member"
+             }) do
           {:ok, %{invite: invite_token}} ->
-            invite_url = "#{FamichatWeb.Endpoint.url()}/#{socket.assigns[:user_locale] || "en"}/invites/#{invite_token}"
-            {:noreply, assign(socket, invite_url: invite_url, error_message: nil)}
+            invite_url =
+              "#{FamichatWeb.Endpoint.url()}/#{socket.assigns[:user_locale] || "en"}/invites/#{invite_token}"
+
+            {:noreply,
+             assign(socket, invite_url: invite_url, error_message: nil)}
 
           {:error, reason} ->
             Logger.warning("[HomeLive] issue_invite error: #{inspect(reason)}")
-            {:noreply, assign(socket, error_message: "Could not generate invite link.")}
+
+            {:noreply,
+             assign(socket, error_message: "Could not generate invite link.")}
         end
     end
   end
@@ -716,18 +754,18 @@ defmodule FamichatWeb.HomeLive do
   end
 
   defp message_error_text("recovery_required"),
-    do: "Recovery required before this device can send. Use Recover below."
+    do: "Something went wrong with this session. Try refreshing."
 
   defp message_error_text("device_revoked"),
-    do: "This device is revoked. Open a fresh actor link."
+    do: "This device has been removed. Please sign in again."
 
   defp message_error_text("revoked"),
-    do: "This device is revoked. Open a fresh actor link."
+    do: "This device has been removed. Please sign in again."
 
   defp message_error_text("pending_proposals"),
-    do: "Conversation is waiting for pending commit to finish."
+    do: "Setting things up. This should only take a moment."
 
-  defp message_error_text(reason), do: "Message failed: #{reason}"
+  defp message_error_text(_reason), do: "Something went wrong. Try refreshing."
 
   defp security_action_for_reason("recovery_required"),
     do: "recover_conversation_security_state"
@@ -744,6 +782,28 @@ defmodule FamichatWeb.HomeLive do
   defp reason_to_string(reason) when is_binary(reason), do: reason
   defp reason_to_string(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp reason_to_string(reason), do: inspect(reason)
+
+  # Human-friendly labels for security state banners shown to end users.
+  defp security_reason_display("recovery_required"),
+    do: "Something needs attention. Try refreshing."
+
+  defp security_reason_display("device_revoked"),
+    do: "This device has been removed. Please sign in again."
+
+  defp security_reason_display("revoked"),
+    do: "This device has been removed. Please sign in again."
+
+  defp security_reason_display("epoch_too_low"),
+    do: "Your session is out of date. Try refreshing."
+
+  defp security_reason_display("epoch_too_high"),
+    do: "Your session is out of date. Try refreshing."
+
+  defp security_reason_display("pending_proposals"),
+    do: "Setting things up. This should only take a moment."
+
+  defp security_reason_display(_),
+    do: "Something needs attention. Try refreshing."
 
   defp maybe_put_after(opts, nil), do: opts
   defp maybe_put_after(opts, ""), do: opts
