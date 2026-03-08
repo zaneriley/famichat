@@ -11,7 +11,6 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   - Token invalid, expired, or used: pass through to InviteLive, which shows
     friendly error UI with its :invalid step
   - Token valid: pass through, LiveView mounts normally
-  - Session already has this token (reconnect after consume): pass through
 
   Rate limiting is intentionally NOT enforced here — the plug only reads the
   token's DB state. Rate limiting lives in Onboarding.accept_invite, which
@@ -19,12 +18,13 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   """
 
   import Plug.Conn
-  import Phoenix.Controller, only: [render: 2, put_view: 2]
+  import Phoenix.Controller, only: [put_layout: 2, put_root_layout: 2, put_view: 2, render: 2]
 
   alias Famichat.Auth.Onboarding
-  alias FamichatWeb.SessionKeys
 
   @behaviour Plug
+  @token_pattern ~r/^[A-Za-z0-9_-]+$/
+  @max_token_length 256
 
   @impl Plug
   def init(opts), do: opts
@@ -33,7 +33,7 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   def call(conn, _opts) do
     token = conn.path_params["token"]
 
-    if is_binary(token) and token != "" do
+    if structurally_valid_token?(token) do
       validate_and_gate(conn, token)
     else
       halt_with(conn, 404)
@@ -41,28 +41,20 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   end
 
   defp validate_and_gate(conn, raw_token) do
-    # If this browser session already accepted this token (reconnect path from
-    # AUDIT-010 fix), pass through so the LiveView can recover from session.
-    stored_invite = get_session(conn, SessionKeys.invite_token())
+    case Onboarding.validate_invite_token(raw_token) do
+      :ok ->
+        conn
 
-    if stored_invite == raw_token do
-      conn
-    else
-      case Onboarding.validate_invite_token(raw_token) do
-        :ok ->
-          conn
+      # Invalid, expired, and used tokens all pass through to InviteLive,
+      # which renders friendly error UI via its :invalid step.
+      {:error, :invalid} ->
+        conn
 
-        # Invalid, expired, and used tokens all pass through to InviteLive,
-        # which renders friendly error UI via its :invalid step.
-        {:error, :invalid} ->
-          conn
+      {:error, :expired} ->
+        conn
 
-        {:error, :expired} ->
-          conn
-
-        {:error, :used} ->
-          conn
-      end
+      {:error, :used} ->
+        conn
     end
   end
 
@@ -72,8 +64,18 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
     conn
     |> assign(:user_locale, locale)
     |> put_status(status)
+    |> put_root_layout(false)
+    |> put_layout(false)
     |> put_view(FamichatWeb.ErrorHTML)
     |> render("#{status}.html")
     |> halt()
   end
+
+  defp structurally_valid_token?(token)
+       when is_binary(token) and token != "" do
+    byte_size(token) <= @max_token_length and
+      Regex.match?(@token_pattern, token)
+  end
+
+  defp structurally_valid_token?(_), do: false
 end

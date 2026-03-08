@@ -46,14 +46,14 @@ defmodule FamichatWeb.AdminLive.SetupLive do
   @impl true
   def mount(_params, _session, socket) do
     cond do
-      FirstRun.bootstrapped?() ->
+      connected?(socket) ->
+        mount_connected(socket)
+
+      FirstRun.bootstrapped?() and not incomplete_bootstrap_available?() ->
         {:ok,
          socket
          |> setup_socket(:already_bootstrapped)
-         |> redirect(to: locale_path(socket, "/"))}
-
-      connected?(socket) ->
-        mount_connected(socket)
+         |> redirect(to: locale_path(socket, "/login"))}
 
       true ->
         {:ok, setup_socket(socket, :check)}
@@ -64,10 +64,41 @@ defmodule FamichatWeb.AdminLive.SetupLive do
     count = Repo.one(from(u in User, select: count(u.id)))
 
     if count > 0 do
-      {:ok,
-       socket
-       |> setup_socket(:already_bootstrapped)
-       |> push_navigate(to: locale_path(socket, "/"))}
+      # A user exists. Check if setup is incomplete (user created but no passkey)
+      # so the admin can retry the passkey ceremony instead of being locked out.
+      case Onboarding.fetch_incomplete_bootstrap() do
+        {:ok, user, family} ->
+          case Onboarding.reissue_passkey_token(user.id) do
+            {:ok, token} ->
+              {:ok,
+               socket
+               |> setup_socket(:register_passkey)
+               |> assign(:passkey_register_token, token)
+               |> assign(:admin_user_id, user.id)
+               |> assign(:family_id, family.id)
+               |> assign(:username, user.username)}
+
+            {:error, :already_registered} ->
+              # Passkey exists after all — bootstrap is complete.
+              {:ok,
+               socket
+               |> setup_socket(:already_bootstrapped)
+               |> push_navigate(to: locale_path(socket, "/login"))}
+
+            {:error, _reason} ->
+              {:ok,
+               socket
+               |> setup_socket(:already_bootstrapped)
+               |> push_navigate(to: locale_path(socket, "/login"))}
+          end
+
+        {:error, :not_found} ->
+          # Bootstrap is fully complete.
+          {:ok,
+           socket
+           |> setup_socket(:already_bootstrapped)
+           |> push_navigate(to: locale_path(socket, "/login"))}
+      end
     else
       {:ok, setup_socket(socket, :bootstrap)}
     end
@@ -104,9 +135,6 @@ defmodule FamichatWeb.AdminLive.SetupLive do
            "family_name" => family_name_or_default
          }) do
       {:ok, %{user: user, family: family, passkey_register_token: token}} ->
-        # Flip the first-run cache so the locale plug stops redirecting here.
-        FirstRun.reset_cache()
-
         {:noreply,
          socket
          |> assign(:step, :register_passkey)
@@ -276,6 +304,10 @@ defmodule FamichatWeb.AdminLive.SetupLive do
 
   defp base_url do
     FamichatWeb.Endpoint.url()
+  end
+
+  defp incomplete_bootstrap_available? do
+    match?({:ok, _, _}, Onboarding.fetch_incomplete_bootstrap())
   end
 
   defp error_message(:username_required), do: gettext("Please enter your name.")

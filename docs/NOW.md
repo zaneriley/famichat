@@ -1,6 +1,6 @@
 # Famichat NOW
 
-**Last updated:** 2026-03-02
+**Last updated:** 2026-03-08
 
 Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [ADR 012](decisions/012-spa-wasm-client-architecture.md).
 
@@ -8,88 +8,79 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-The front door is built but not walkable end-to-end from a browser. Routing and auth-gating work. Registration is broken at the JS layer and there is no browser-accessible way to bootstrap a new instance. Critical path: fix the P0 passkey bug, build a dev setup page, onboard the spouse.
+The browser front door is now mostly walkable for first-family dogfood: setup, invite acceptance, passkey registration, and passkey login all exist in the browser. The next product blocker is no longer the passkey hook or missing setup page. It is that, after first bootstrap, there is still no supported browser flow to create another family on the same deployment.
 
 ---
 
-## What just happened (2026-03-02)
+## What just happened (2026-03-08)
 
-- **Front door LiveView built** — login page, invite accept flow, passkey registration step, auth-gated `HomeLive` all exist and mostly render. Not fully working yet (see bugs below).
-- **API hardened** — `fetch_session` added to `:api` pipeline (was crashing all auth endpoints), `POST /api/v1/conversations` added, `/health`, `/me`, catch-all 404 all wired.
-- **Routing fixed** — `/` → `/en` → `/en/login` for unauthenticated users. `locale_path/2` helper added to `LiveHelpers`; hardcoded `/#{locale}/...` strings eliminated from all LiveViews.
-- **Bug bash** — 6 bugs found and fixed via curl-based QA: portfolio content in 404, `dynamic_home_url` compile crash, invalid invite fallthrough to 404, disconnected flash not translated, `ValidateInviteToken` plug swallowing invite errors before LiveView.
-- **Critical regression introduced then fixed** — 404 agent deleted `dynamic_home_url/0` from `error_html.ex` without checking 410/500 templates, which still called it. Took app down. Fixed immediately but the lesson is: **commit nothing without curling the endpoint first**.
+- **Passkey registration bug fixed** — `passkey_register_hook.js` now decodes `challengeData.public_key_options`, so invite registration no longer crashes before WebAuthn starts.
+- **Browser setup path exists** — `/:locale/setup` is the first-run path. It collects the initial admin name + family name, runs passkey registration, and can issue the first invite link from the browser.
+- **Dead OTP affordance removed** — the login page no longer links to `/login/otp`, which still does not exist.
+- **Invite UX tightened** — invalid/expired/used invite links stay in LiveView and show friendly guidance instead of falling through to generic route errors. Completed invite reuse now has an explicit sign-in fallback path in the LiveView state machine.
+- **Incomplete bootstrap recovery fixed** — `SetupLive` no longer redirects away before its recovery branch can run, and the public front door now routes users back to `/:locale/setup` while the instance is still in the single-user, no-passkey bootstrap limbo (`/` first canonicalizes to `/:locale/`, then `LocaleRedirection` sends that path to setup).
+- **Public redirect chain tightened** — `/` now redirects to the canonical `/:locale/` path, and a bootstrapped `/:locale/setup` request now goes straight to `/:locale/login` instead of bouncing through home first.
+- **Invite token gate hardened** — `ValidateInviteToken` now rejects structurally invalid tokens before they hit the onboarding lookup.
+- **Malformed invite 404 fixed** — structurally invalid invite tokens now render a standalone 404 page instead of nesting a full-document error template inside the app root layout.
+- **Front-door coverage expanded** — focused LiveView tests now cover the login passkey button, empty-instance setup form, setup submit → passkey step, valid invite username form, and invite username validation.
 
 ---
 
-## Actual state of the CUJ (as verified by curl, 2026-03-02)
+## Actual state of the CUJ (verified 2026-03-08)
 
 | URL | Status | Notes |
 |-----|--------|-------|
-| `/` | ✓ 302 → `/en` | Works |
-| `/en` | ✓ 302 → `/en/login` | Works — unauthenticated redirect fixed |
-| `/en/login` | ✓ 200 | Renders correctly |
-| `/en/login/otp` | ✗ **404** | Route never built — "Sign in another way" link is dead |
-| `/en/invites/:token` | ✓ 200 | Renders invite flow — but passkey step crashes (P0 below) |
+| `/` | ✓ 302 → `/en/` | Canonical root redirect |
+| `/en` | ✓ 302 → `/en/login` | Works for unauthenticated users |
+| `/en/login` | ✓ 200 | Renders passkey sign-in page with no dead OTP link |
+| `/en/setup` | ✓ 302 → `/en/login` on a bootstrapped instance | Incomplete-bootstrap recovery is covered by tests; fully bootstrapped flow no longer bounces through home |
+| `/en/invites/:token` | ✓ 200 | Invalid/used tokens stay on the invite LiveView instead of falling through to 404 |
 | `/api/v1/health` | ✓ 200 | Works |
-| Admin bootstrap | ✗ **browser-inaccessible** | Requires curl; no UI exists |
+| Front-door regression tests | ✓ pass | `front_door_live_test.exs` + `session_refresh_test.exs` pass for the touched slice |
 
 ---
 
-## Known bugs (blocking L1)
+## Current blockers
 
-### P0 — Passkey registration crashes, no new user can register
+### P0 — No post-bootstrap family creation flow
 
-`passkey_register_hook.js` passes the full challenge response object to `decodeCreationOptions` instead of `challengeData.public_key_options`. Accessing `.user.id` on the wrong object throws `TypeError` immediately. The login hook does this correctly; the register hook does not.
+Once any user exists, `Onboarding.bootstrap_admin/2` is closed permanently. The only remaining onboarding path is "join an existing household by invite." That means the first successful bootstrap also closes the only product path that can create a family.
 
-**Fix:** One-line change in `passkey_register_hook.js`. Curl and verify before committing.
+### P0 — Public UX still assumes a single household per deployment
 
-### P1 — No browser path to bootstrap or register
+The browser entry points are `/:locale/setup`, `/:locale/login`, and `/:locale/invites/:token`. After bootstrap, the new-person copy still resolves to "sign in" or "ask for an invite." There is no product surface for "start a family on this server."
 
-To register, an admin must first be bootstrapped via `POST /api/v1/setup` (curl only), then issue an invite via `POST /api/v1/auth/invites` (curl, authenticated). There is no UI for either step.
+### P1 — Signed-in app is still first-membership-wins
 
-**Fix needed:** A dev-mode setup page (e.g. `/admin/setup` behind basic auth) that bootstraps the instance and issues the first invite link.
+`HomeLive.load_family_data/1` still picks the first membership and collapses the user into one family context. Even if the DB model can represent multi-family membership, the signed-in browser surface cannot yet.
 
-### P1 — `/en/login/otp` is a dead link (404)
+### P2 — Browser-walkable front door still needs a real browser pass
 
-The OTP login LiveView and route do not exist. The link is rendered on every login page load.
-
-**Fix needed:** Either build the OTP LiveView or remove the link until the route exists.
-
-### P2 — Inviter name never shown on invite page
-
-`invite_live.html.heex` renders `"%{name} invited you"` when `@payload[:inviter_username]` is set. It never is — `Onboarding.accept_invite/1` likely uses a string key or different atom. Always falls back to "You're invited."
-
-### P2 — Three font files 404
-
-`CardinalFruitWeb-Medium-Trial.woff2`, `GT-Flexa-Trial-VF.woff2`, `noto-sans-jp.ttf` all 404 on every page load. Console polluted with font errors, masking real errors.
-
-### P2 — Bootstrap API field names not documented
-
-`POST /api/v1/setup` expects `username` and `family_name`. Using `admin_handle`/`household_name` returns a non-descriptive 400.
+Route QA and LiveView tests now cover the root/login/setup recovery contract, but a fresh-browser manual walkthrough of bootstrap → passkey → signed-in home was not rerun in this update window.
 
 ---
 
 ## Immediate next steps (in order)
 
-### 1. Fix P0 passkey register hook (one line)
-`decodeCreationOptions(challengeData)` → `decodeCreationOptions(challengeData.public_key_options)` in `passkey_register_hook.js`. Curl the challenge endpoint and verify the shape before touching the file.
+### 1. Phase 2: add community-admin family creation
+Introduce a real post-bootstrap flow to create a family and issue a first-admin setup link. Do not reuse `bootstrap_admin/2`.
 
-### 2. Build dev setup page (~1–2 hours)
-LiveView at `/admin/setup` (behind existing basic auth) that bootstraps the instance and issues the first invite link. Without this, dogfooding requires curl to enter the app at all.
+### 2. Replace implicit family selection
+Add explicit active-family selection/persistence before claiming multi-family support in the signed-in app.
 
-### 3. Fix or remove the OTP link (~30 min)
-Remove "Sign in another way" from the login page until the route exists. Or stub it with a "coming soon" page.
-
-### 4. Onboard the spouse
-Real-world L1 test. Not a dev task. If anything causes friction, fix it first.
+### 3. Run a real browser walkthrough
+Fresh instance bootstrap, invite acceptance, and returning sign-in should all be walked in a real browser after the current auth/onboarding fixes.
 
 ---
 
 ## What was completed (no longer in the build queue)
 
-- ✓ Login page (LiveView) — passkey button, loading state, friendly errors
-- ✓ Invite accept flow (LiveView) — token consumed, username form, passkey step, success state
+- ✓ Login page (LiveView) — passkey button, loading state, friendly errors, no dead OTP link
+- ✓ Invite accept flow (LiveView) — token consumed, username form, passkey step, success state, friendly invalid/used states
+- ✓ `/:locale/setup` browser bootstrap path — initial admin bootstrap, passkey step, first invite issuance
+- ✓ Incomplete bootstrap recovery — `/setup` can resume the passkey step when the instance is in single-user, no-passkey limbo
+- ✓ Root/setup route cleanup — `/` is canonicalized to `/:locale/`, and bootstrapped `/setup` now goes straight to login
+- ✓ Structural invite token validation — malformed tokens are rejected in the plug before lookup
 - ✓ `HomeLive` requires real auth (hardcoded test users removed)
 - ✓ `POST /api/v1/conversations` — idempotent, auto-called on registration
 - ✓ `locale_path/2` — DRY locale-prefixed navigation throughout LiveViews

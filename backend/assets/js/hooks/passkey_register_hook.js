@@ -50,8 +50,13 @@ const PasskeyRegisterHook = {
     DEBUG && console.log("[PasskeyRegister] Hook mounted", { el: this.el.id });
 
     this._csrfToken = getCsrfToken();
+    this._hydrateRetryStateFromDataset();
     this._clickHandler = () => this.startRegistration();
     this.el.addEventListener("click", this._clickHandler);
+  },
+
+  updated() {
+    this._hydrateRetryStateFromDataset();
   },
 
   destroyed() {
@@ -69,9 +74,30 @@ const PasskeyRegisterHook = {
     this._cachedPublicKey = null;
   },
 
+  _hydrateRetryStateFromDataset() {
+    const passkeyRegisterToken = this.el.dataset.passkeyRegisterToken;
+
+    if (passkeyRegisterToken) {
+      this._passkeyRegisterToken = passkeyRegisterToken;
+    }
+  },
+
   async startRegistration() {
     const registrationToken = this.el.dataset.registrationToken;
     const username = this.el.dataset.username;
+
+    if (
+      typeof navigator === "undefined" ||
+      typeof navigator.credentials === "undefined" ||
+      typeof navigator.credentials.create !== "function"
+    ) {
+      this._clearRetryState();
+      this.pushEvent("register-error", {
+        code: "unsupported",
+        message: friendlyWebAuthnError({ name: "NotSupportedError" }),
+      });
+      return;
+    }
 
     if (!registrationToken) {
       DEBUG && console.error("[PasskeyRegister] Missing registration_token on element");

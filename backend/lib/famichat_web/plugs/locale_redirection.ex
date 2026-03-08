@@ -9,6 +9,7 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
   import Phoenix.Controller, only: [redirect: 2]
 
   alias Famichat.Accounts.FirstRun
+  alias Famichat.Auth.Onboarding
   alias FamichatWeb.SessionKeys
   require Logger
 
@@ -60,8 +61,12 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
 
         # First-run gate: if no users exist, redirect to setup page.
         remaining = conn.assigns[:path_without_locale] || "/"
+        bootstrapped? = FirstRun.bootstrapped?()
 
-        if not FirstRun.bootstrapped?() and
+        incomplete_bootstrap? =
+          bootstrapped? and incomplete_bootstrap_available?()
+
+        if (not bootstrapped? or incomplete_bootstrap?) and
              remaining not in ["/setup", "/setup/"] do
           log(
             :info,
@@ -193,6 +198,12 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
     conn.assigns[:user_locale] ||
       get_session(conn, SessionKeys.user_locale()) ||
       @default_locale
+  end
+
+  defp incomplete_bootstrap_available? do
+    match?({:ok, _, _}, Onboarding.fetch_incomplete_bootstrap())
+  rescue
+    _ -> false
   end
 
   @spec build_path_with_locale(path(), locale()) :: [path()]
