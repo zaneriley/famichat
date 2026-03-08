@@ -360,3 +360,78 @@ msgstr "Connected"
 
 msgid "Connect"
 msgstr "Connect"
+
+msgid "Your family"
+msgstr "Your family"
+
+msgid "Family name"
+msgstr "Family name"
+
+msgid "Sign in to get started"
+msgstr "Sign in to get started"
+
+msgid "This is the name for your family. You can change it later."
+msgstr "This is the name for your family. You can change it later."
+
+msgid "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt."
+msgstr "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt."
+
+msgid "Your browser blocked the sign-in attempt. Try using a different browser or check your security settings."
+msgstr "Your browser blocked the sign-in attempt. Try using a different browser or check your security settings."
+
+msgid "A passkey is already in use. Try refreshing the page."
+msgstr "A passkey is already in use. Try refreshing the page."
+
+msgid "Could not reach the server. Check your connection and try again."
+msgstr "Could not reach the server. Check your connection and try again."
+
+msgid "Something went wrong signing in. Please try again."
+msgstr "Something went wrong signing in. Please try again."
+
+msgid "Something went wrong connecting. Try refreshing."
+msgstr "Something went wrong connecting. Try refreshing."
+
+msgid "Still connecting. Try again in a moment."
+msgstr "Still connecting. Try again in a moment."
+
+msgid "This device has been removed. Please sign in again."
+msgstr "This device has been removed. Please sign in again."
+
+msgid "Something went wrong with the connection. Try refreshing."
+msgstr "Something went wrong with the connection. Try refreshing."
+
+msgid "You must be in a family to generate an invite."
+msgstr "You must be in a family to generate an invite."
+
+msgid "Could not generate invite link."
+msgstr "Could not generate invite link."
+
+msgid "Something went wrong with this session. Try refreshing."
+msgstr "Something went wrong with this session. Try refreshing."
+
+msgid "Setting things up. This should only take a moment."
+msgstr "Setting things up. This should only take a moment."
+
+msgid "Something went wrong. Try refreshing."
+msgstr "Something went wrong. Try refreshing."
+
+msgid "Something needs attention. Try refreshing."
+msgstr "Something needs attention. Try refreshing."
+
+msgid "Your session is out of date. Try refreshing."
+msgstr "Your session is out of date. Try refreshing."
+
+msgid "Sign out"
+msgstr "Sign out"
+
+msgid "Developer Tools"
+msgstr "Developer Tools"
+
+msgid "Admin Controls"
+msgstr "Admin Controls"
+
+msgid "Getting started? Ask the person who told you about Famichat to send you an invite link."
+msgstr "Getting started? Ask the person who told you about Famichat to send you an invite link."
+
+msgid "Your browser doesn't support passkeys. Try Chrome or Safari."
+msgstr "Your browser doesn't support passkeys. Try Chrome or Safari."
