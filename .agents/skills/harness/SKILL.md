@@ -31,7 +31,7 @@ Run this after a review round when you notice agents making the same class of mi
 - `docs/BACKLOG.md`
 - All existing skill files: `.agents/skills/*/SKILL.md`
 - CI config: `.github/workflows/lint.yml`
-- Project instructions: `CLAUDE.md` (if it exists)
+- Project instructions: `AGENTS.md` (if it exists)
 
 ## Step 2: Categorize Findings
 
@@ -54,7 +54,7 @@ For each qualifying category, check whether an automated check already exists:
 
 - Does CI already catch this? (Check `lint.yml`)
 - Does a skill already instruct agents to check for this? (Check SKILL.md files)
-- Does a project-level instruction already cover this? (Check CLAUDE.md)
+- Does a project-level instruction already cover this? (Check AGENTS.md)
 
 **If a harness exists but agents didn't use it:** The fix is surfacing, not creating. Add the existing check to the relevant skill prompt.
 
@@ -70,10 +70,10 @@ Add constraints to existing `.agents/skills/*/SKILL.md` files. Example: adding "
 This is the highest-leverage, lowest-risk harness. The cost of a wrong skill prompt update is near zero (agents run an extra check that doesn't help). The cost of a missing one is repeated review findings.
 
 **2. Project instruction updates** — APPLY DIRECTLY
-Add instructions to `CLAUDE.md` that all agents see regardless of which skill is running.
+Add instructions to `AGENTS.md` that all agents see regardless of which skill is running.
 
-**3. Claude hooks** — PROPOSE ONLY
-Hooks in `.claude/hooks/` that run pre/post tool execution. These add latency and may break tool execution. Propose with risk assessment. Do not implement without user approval.
+**3. agents hooks** — PROPOSE ONLY
+Hooks in `.agents/hooks/` that run pre/post tool execution. These add latency and may break tool execution. Propose with risk assessment. Do not implement without user approval.
 
 **4. CI workflow additions** — PROPOSE ONLY
 New steps in `.github/workflows/lint.yml`. These block merges if they fail. Propose with false-positive assessment.
@@ -115,8 +115,8 @@ Structure the output as:
 If a mistake category persists across rounds despite a skill prompt update, escalate:
 
 1. **Skill prompt instruction** — relies on agent compliance
-2. **Project-level instruction (CLAUDE.md)** — broader reach, same compliance model
-3. **Claude hook** — automated enforcement, does not rely on agent compliance
+2. **Project-level instruction (AGENTS.md)** — broader reach, same compliance model
+3. **agents hook** — automated enforcement, does not rely on agent compliance
 4. **CI check** — automated, blocks merge
 
 Each `/harness` invocation proposes one escalation level per category. The user decides whether to apply.
