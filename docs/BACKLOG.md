@@ -95,10 +95,10 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 
 ## Blocks dogfooding (P0)
 <!-- Items here prevent handing the URL to family members -->
-- [ ] Fix PutRemoteIp to parse X-Forwarded-For — all visitors share one rate-limit bucket behind any proxy → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P0-dogfood | agent:consensus
-- [ ] Fix setup_token lost on FamilyNewLive WebSocket reconnect — mobile users lose family setup mid-flow → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P0-dogfood | agent:consensus
+- [x] Fix PutRemoteIp to parse X-Forwarded-For — all visitors share one rate-limit bucket behind any proxy → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P0-dogfood | agent:consensus (95eb458)
+- [x] Fix setup_token lost on FamilyNewLive WebSocket reconnect — mobile users lose family setup mid-flow → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P0-dogfood | agent:consensus (95eb458 — architecture split: FamilyNewLive → redirect → FamilySetupLive with token in URL)
 - [x] Add validate_length(:name, max: 100) to Family.changeset — unbounded input reaches DB without constraint → backend/lib/famichat/chat/family.ex:33 | P0-dogfood | agent:consensus (76776e4)
-- [ ] Remove last_message_preview from API — server can't produce previews under E2EE; active spec violation → backend/lib/famichat_web/controllers/api/chat_read_controller.ex:175 | P0-dogfood | spec-review (bug-bash: security tester reports field may already be removed — verify)
+- [x] Remove last_message_preview from API — server can't produce previews under E2EE; active spec violation → backend/lib/famichat_web/controllers/api/chat_read_controller.ex | P0-dogfood | spec-review (verified removed: grep returns 0 matches for last_message_preview in chat_read_controller.ex)
 - [x] Fix FamilySetupLive auth bounce — /families/start/:token requires session but creates the first user; flow is broken → .tmp/2026-03-09-bug-bash/00-triage-by-cuj.md §CUJ4 | P0-dogfood | bug-bash (76776e4)
 - [x] Fix LiveView locale redirect — setup_common_assigns falls back to default locale, making /ja/* unusable → backend/lib/famichat_web/live/live_helpers.ex | P0-dogfood | bug-bash (76776e4)
 - [x] Fix blank family name "already taken" error — empty submit collides with default "My Family"; misleading → .tmp/2026-03-09-bug-bash/02-non-tech-family-member.md BUG-02 | P0-dogfood | bug-bash (76776e4)

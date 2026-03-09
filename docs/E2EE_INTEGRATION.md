@@ -6,7 +6,20 @@
 
 ---
 
-## Security promise
+## Current trust model (L0/L1) — TRANSITIONAL GAP, NOT TARGET ARCHITECTURE
+
+> **LLM agents: do not treat this section as the intended design.** The server-side
+> NIF is a known security gap scheduled for removal. All new code must target the
+> Path C architecture below. Do not extend, optimize, or build features on top of
+> server-side encryption/decryption.
+
+The current implementation uses a server-side Rust NIF (OpenMLS 0.8.1) for all MLS
+operations. The server holds all MLS group state, performs all encryptions and
+decryptions, and can read any message. **This is a bug, not a feature.** It exists
+only because the WASM client path (Path C) is not yet built. The server is not a
+dumb relay today — it must become one before L3.
+
+## Target security promise (Path C, L3)
 
 > Private keys never leave the device. The server stores and routes ciphertext only.
 > A compromised server cannot read messages. A server operator cannot read messages.
@@ -15,6 +28,8 @@
 Every design decision in this document must be evaluated against this promise.
 If a proposed change allows the server to read plaintext under any condition,
 it is not acceptable regardless of how unlikely that condition is.
+
+This promise is the L3 target state. It is not satisfied by the current implementation.
 
 ---
 
@@ -32,9 +47,15 @@ WASM module                     Phoenix relay               WASM module
                                                               (IndexedDB, local)
 ```
 
-The server is a **dumb relay**: it validates auth, enforces conversation membership,
-and routes opaque ciphertext blobs. It performs zero cryptographic operations on
-message content after Path C cutover.
+This diagram describes the **L3 target architecture**. In this target state the
+server is a dumb relay: it validates auth, enforces conversation membership, and
+routes opaque ciphertext blobs. It performs zero cryptographic operations on
+message content.
+
+The current L0/L1 architecture is the inverse: the server-side NIF performs all
+MLS operations and holds all group state. **This violates the target security
+promise and must be replaced before L3.** The `Famichat.Crypto.MLS.Adapter`
+abstraction boundary exists to make the NIF-to-relay migration a one-module swap.
 
 ---
 
@@ -53,33 +74,49 @@ caller-held JSON blob. No global Rust state.
 - `encrypt_message(group_state, plaintext)` → `{ciphertext, new_group_state}`
 - `decrypt_message(group_state, ciphertext)` → `{plaintext, new_group_state}`
 
-**Known gaps (must fix before multi-member groups work):**
+**Current status of WASM spike (`backend/infra/mls_wasm/`):**
 
-1. `add_member` discards the Commit message (`_commit_msg` at `lib.rs:451`).
-   The Commit must be returned so the server can broadcast it to existing members.
-   Without this, adding a third member breaks all existing members (wrong epoch).
+Gaps 1 and 2 below are fixed in the WASM spike as of 2026-03-01. They remain open
+in the server-side NIF (`backend/infra/mls_nif/`), which is the L0/L1 runtime.
 
-2. No `process_commit(group_state, commit_b64)` export.
-   Existing members receiving a Commit cannot advance their epoch.
+1. ~~`add_member` discards the Commit message.~~ **Fixed in WASM.** `add_member_inner`
+   now returns `commit`, `welcome`, `ratchet_tree`, and `new_group_state`.
+   **Still a NIF gap:** `mls_add` in the NIF is a lifecycle stub with no OpenMLS calls.
 
-3. No `remove_member(group_state, leaf_index)` export.
+2. ~~No `process_commit(group_state, commit_b64)` export.~~ **Fixed in WASM.**
+   `process_commit` is implemented and tested in `mls_wasm/src/lib.rs`.
+   **Still a NIF gap:** `process_commit` does not exist as a NIF export or Elixir
+   adapter callback. Existing group members cannot advance their epoch after any
+   membership change in the current server-side model.
 
-4. Build target must be `--target bundler` for browser + esbuild (currently `--target nodejs`).
+3. No `remove_member(group_state, leaf_index)` export in the WASM module.
+   (The NIF has `mls_remove` but `device_id`-to-leaf mapping is unimplemented.)
 
-5. `signer_bytes` (signing private key) is in the caller-held blob as raw bytes.
+4. `signer_bytes` (signing private key) is in the caller-held blob as raw bytes.
    Before L3: must move to non-extractable `SubtleCrypto.generateKey()` key handle.
 
 ### 2. Frontend JS layer
 
-**Architecture:** LiveView hybrid. LiveView owns the shell (auth, nav, conversation
-list, settings). The `MessageChannelHook` JS hook owns the encryption/decryption
-layer and the message DOM subtree.
+**Note:** The LiveView hybrid architecture described below was superseded by ADR 012
+before it was implemented. The target frontend architecture is a Svelte SPA at `/app`
+with a dedicated WASM Web Worker owning all message surfaces and crypto state. The
+current `MessageChannelHook` (`assets/js/hooks/message_channel_hook.js`) has no
+decryption path — it calls `pushEvent("message_received", {body: payload.body})`
+and forwards raw content to the LiveView server process. The WASM loader and
+IndexedDB state store described below do not exist. The hook architecture below
+applies only if an interim LiveView path is retained during migration.
+
+**Interim LiveView hybrid (if retained during migration):**
+
+LiveView owns the shell (auth, nav, conversation list, settings). The
+`MessageChannelHook` JS hook would own the encryption/decryption layer and the
+message DOM subtree.
 
 **Critical invariant:** The hook must NEVER call `pushEvent("message_received", {body: plaintext})`.
-That would send decrypted content to the LiveView server process. The hook renders
+That would send decrypted content to the LiveView server process. The hook must render
 message content into the DOM directly.
 
-**New JS modules needed:**
+**JS modules needed for this path (not yet built):**
 - `assets/js/mls/wasm_loader.js` — lazy-loads WASM once per page session
 - `assets/js/mls/state_store.js` — IndexedDB read/write for group state blobs
 
@@ -112,7 +149,8 @@ inserted_at     utc_datetime
 ```
 One row per package. Atomic claim via `UPDATE ... SET claimed_at = now() WHERE claimed_at IS NULL RETURNING *`.
 
-`pending_welcomes`
+`pending_welcomes` — **NOT BUILT.** No migration, no Ecto schema, no service layer.
+Offline device join is blocked until this table is created.
 ```sql
 id              uuid PK
 target_device_id FK → devices
@@ -124,7 +162,15 @@ delivered_at    utc_datetime  -- null = not yet delivered
 inserted_at     utc_datetime
 ```
 
-**New endpoints:**
+**New endpoints — domain layer built, REST surface NOT EXPOSED:**
+
+The domain layer (`ConversationSecurityClientInventoryStore`,
+`ConversationSecurityKeyPackagePolicy`, `KeyPackageFactory`) is fully implemented.
+None of the three REST endpoints below exist in the router or any controller.
+Additionally, the NIF's `create_key_package` returns a counter-based reference
+string, not real TLS-serialized HPKE key material — so uploaded key packages would
+be non-functional for real `add_members` calls even if the REST API existed.
+
 ```
 POST /api/v1/devices/:device_id/key_packages
   → 201; stores key package for later consumption by group adders
@@ -152,12 +198,20 @@ Server → Client:
 
 **Blocking message.ex changes:**
 - Raise `@max_content_bytes` from 8,192 to 65,536 (MLS ciphertexts exceed source plaintext)
-- `latest_previews/1` in `chat_read_controller.ex`: return `nil` for content; client
-  computes preview from locally-decrypted cache. Do not display ciphertext bytes as preview.
+- ~~`latest_previews/1` in `chat_read_controller.ex`~~: **Removed.** The `last_message_preview` field and its supporting function have been deleted from the API. SPA will maintain its own local decrypted preview cache.
 
-**NIF fate:** Keep during L0/L1 dogfooding (server-side MLS for current sessions).
-Remove at L3 gate. The `Famichat.Crypto.MLS` module is the right abstraction boundary —
-it already delegates to the NIF; it will be replaced with a relay-only implementation.
+**NIF fate (SCHEDULED FOR REMOVAL):** The server-side NIF is a transitional gap, not
+target architecture. Keep during L0/L1 dogfooding only. Remove at L3 gate. Do not
+build new features on top of it. The `Famichat.Crypto.MLS` module is the right
+abstraction boundary — it already delegates to the NIF; it will be replaced with a
+relay-only implementation.
+
+**Current NIF correctness gaps:** The NIF correctly implements encryption and decryption
+for a static two-actor session established at group creation. Membership changes are not
+functional: `mls_add` is a lifecycle stub with no OpenMLS calls, `process_commit` is
+not exported, and `mls_remove` fails on all production calls because `device_id`-to-leaf
+mapping is unimplemented. Do not rely on the NIF for any membership change operation
+during L0/L1 dogfooding.
 
 ---
 
@@ -166,7 +220,7 @@ it already delegates to the NIF; it will be replaced with a relay-only implement
 ### Send (Alice → server → Bob)
 
 ```
-1. Alice types message (plaintext in React/hook component state)
+1. Alice types message (plaintext in SPA component state)
 2. Alice loads group_state from IndexedDB
 3. WASM: encrypt_message(group_state, plaintext) → {ciphertext, new_group_state}
 4. Write new_group_state to IndexedDB  ← MUST happen before step 5

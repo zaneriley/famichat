@@ -441,6 +441,7 @@ These are either things we tried and rejected, known security anti-patterns in M
 - `:invite`, `:invite_registration`, `:pair_qr`, `:pair_admin_code`
 - `:passkey_registration`, `:passkey_assertion`, `:magic_link`
 - `:otp`, `:recovery`, `:access`, `:session_refresh`
+- `:family_setup` — issued by community admin or self-service; 72-hour TTL; consumed on first family setup completion
 - Canonical kind mapping lives in `Auth.Tokens.Policy` only; no scattered string literals
 
 ---

@@ -8,12 +8,13 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-The browser front door is mostly walkable for first-family dogfood: setup, invite acceptance, passkey registration, and passkey login all exist in the browser. The message plane, data model, and client crypto layers are materially incomplete against the execution plan. Zero of five MLP dogfood gates can be cleared in the current build.
+The browser front door is walkable for first-family dogfood: setup, invite acceptance, passkey registration, passkey login, self-service family creation, and community admin family management all exist and are committed. All P0-dogfood items are closed. The message plane data model substrate is in place (message_seq, conversation_summaries, user_read_cursors) but unread count math and HomeLive family context wiring are not yet connected. Zero of five MLP dogfood gates have been browser-verified.
 
 ---
 
 ## What just happened (2026-03-09)
 
+- **Onboarding infrastructure committed** (95eb458) — PutRemoteIp (X-Forwarded-For with compile-time CIDR + IPv4-mapped IPv6 normalization), FamilyNewLive (self-service family creation), CommunityAdminLive (admin panel), FamilyContext (multi-family resolution + switching), PendingUserReaper, ValidateFamilySetupToken, SessionController (logout). 8 migrations: message_seq, conversation_summaries, user_read_cursors, backfill, family_setup token kind, invite token audience fix, last_active_family_id. All 3 remaining P0-dogfood items closed.
 - **Bug bash completed** — 5-persona automated bug bash (community admin, non-tech family member, grandparent, security tester, Japanese-speaking user) found 19 issues across 4 categories. 11 closed in this round.
 - **Router/locale hardened** — `/:locale` no longer swallows API routes; `SetLocale` plug returns early 404 for unsupported locale segments; locale catch-all controller deleted. HSTS wired into `:browser` pipeline. LocaleRedirection now uses 302 (was 301).
 - **Security config baseline** — HEEx debug annotations explicitly disabled in prod. CSP `unsafe-eval` removed from prod `script-src` (dev retains it for hot-reload). Server header strip plug added to endpoint. Console.log gated behind `isDev` flag in app.js.
@@ -55,17 +56,13 @@ The browser front door is mostly walkable for first-family dogfood: setup, invit
 
 ## Current blockers
 
-### P0 — Self-service family creation has two user-blocking bugs
+### ~~P0 — Self-service family creation~~ RESOLVED (95eb458)
 
-The code for `/families/new` (self-service) and `/families/start/:token` (token-gated) exists in the working tree but is uncommitted. Two bugs block dogfooding:
-1. **PutRemoteIp ignores X-Forwarded-For** — behind any reverse proxy, all visitors share one rate-limit bucket. Every production topology uses a proxy.
-2. **setup_token lost on LiveView reconnect** — mobile users on cellular will hit this within the first session. Family name "taken" by your own orphan with no recovery path.
+PutRemoteIp committed with compile-time CIDR caching and IPv4-mapped IPv6 normalization. FamilyNewLive reconnect fixed via architecture split (FamilyNewLive → redirect → FamilySetupLive with token in URL params, survives WebSocket disconnect). Both `/families/new` and `/families/start/:token` are committed and functional.
 
-See `BACKLOG.md` P0 items and `.tmp/2026-03-08-new-accounts/07-robustness-error-paths.md` for detail.
+### ~~P0 — `last_message_preview`~~ RESOLVED
 
-### P0 — `last_message_preview` actively violates the E2EE spec
-
-`GET /api/v1/me/conversations` returns a `last_message_preview` field built from plaintext `m.content`. The spec explicitly forbids this and calls it a "migration trap." The field is in the API contract today. File: `backend/lib/famichat_web/controllers/api/chat_read_controller.ex`, lines 17, 28, 106, 175–192.
+`last_message_preview` has been removed from `chat_read_controller.ex`. Grep confirms zero matches. No longer in the API contract.
 
 ### P1 — Signed-in app is still first-membership-wins
 
@@ -92,8 +89,8 @@ From `.tmp/2026-03-07-mlp/05-mlp-rollout-and-success-signals.md`. All five gates
 
 | Gate | Status | What is needed |
 |---|---|---|
-| Operator bootstraps, then creates second family | PARTIAL | Code exists (uncommitted); PutRemoteIp and reconnect bugs block real use |
-| Second-family first adult completes setup link | PARTIAL | `/families/start/:token` exists; `/families/new` has two bugs — see BACKLOG.md P0 |
+| Operator bootstraps, then creates second family | PARTIAL | Code committed (95eb458); needs browser walkthrough to confirm |
+| Second-family first adult completes setup link | PARTIAL | Code committed (95eb458); needs browser walkthrough to confirm |
 | Household admin invites member into new family | PARTIAL | Invite flow works for first family; multi-family not tested |
 | Multi-family context switch works cleanly | BLOCKED | `HomeLive.load_family_data/1` uses first-membership-wins |
 | Abandoned family setup is recoverable | BLOCKED | No post-bootstrap family setup flow exists to recover from |
@@ -107,24 +104,24 @@ From `.tmp/2026-03-07-mlp/05-mlp-rollout-and-success-signals.md`. All five gates
 | `/setup` for first-run only | EXISTS — one-shot; permanently closes after first user |
 | `/login` for existing members | EXISTS — passkey discoverable flow only; no OTP/magic link fallback |
 | `/invites/:token` for joining an existing family | EXISTS — functional |
-| `/families/start/:token` for starting a newly created family | EXISTS — functional (in working tree, uncommitted) |
-| `/families/new` for self-service family creation | EXISTS — has reconnect + rate-limit bugs (in working tree, uncommitted) |
+| `/families/start/:token` for starting a newly created family | EXISTS — committed (95eb458) |
+| `/families/new` for self-service family creation | EXISTS — committed (95eb458); rate-limited via PutRemoteIp |
 
 ---
 
 ## Immediate next steps (in order)
 
-### 1. Remove `last_message_preview` from the conversation list API
-Delete `@max_preview_length`, `latest_previews/1`, and the `"last_message_preview"` key from `present_conversation/3` in `chat_read_controller.ex`. This is an active E2EE spec violation that creates a migration trap.
+### 1. ~~Remove `last_message_preview`~~ DONE
+Already removed from `chat_read_controller.ex`.
 
-### 2. Phase 2: add community-admin family creation
-Introduce a real post-bootstrap flow to create a family and issue a first-admin setup link. Do not reuse `bootstrap_admin/2`. Wire the "Start a family on this server" public entry point.
+### 2. ~~Community-admin family creation~~ DONE (95eb458)
+CommunityAdminLive committed. FamilyNewLive committed for self-service path.
 
-### 3. Replace implicit family selection
-Add explicit active-family selection/persistence before claiming multi-family support in the signed-in app.
+### 3. Wire FamilyContext into HomeLive
+`FamilyContext.resolve/2` and the family switching controller are committed (95eb458). HomeLive still uses `load_family_data/1` with first-membership-wins. Next step: wire the context switcher into HomeLive so multi-family users can switch.
 
 ### 4. Run a real browser walkthrough
-Fresh instance bootstrap, invite acceptance, and returning sign-in should all be walked in a real browser after the current auth/onboarding fixes.
+Fresh instance bootstrap, invite acceptance, family creation, family switching, and returning sign-in should all be walked in a real browser.
 
 ---
 
@@ -148,6 +145,13 @@ Fresh instance bootstrap, invite acceptance, and returning sign-in should all be
 - ✓ Token-gated reconnect recovery — `FamilySetupLive` with `peek_family_setup/1`; blank family name default removed
 - ✓ Error tag normalization — `:retryable` → `:recoverable` across SetupLive, FamilySetupLive
 - ✓ Harness tests — route table ordering, security config baseline, token reconnect recovery
+- ✓ PutRemoteIp — X-Forwarded-For parsing with compile-time CIDR caching + IPv4-mapped IPv6 normalization; 11 tests
+- ✓ FamilyNewLive + FamilySetupLive — self-service family creation; architecture split for reconnect safety (token in URL)
+- ✓ CommunityAdminLive — admin panel for family management + setup link issuance/reissuance
+- ✓ FamilyContext — multi-family resolution (`resolve/2`) + family switching controller + `last_active_family_id`
+- ✓ PendingUserReaper — GenServer sweeping pending users every 15 min
+- ✓ Cursor pagination substrate — `message_seq` column, `conversation_summaries` table with trigger, `user_read_cursors` table
+- ✓ `last_message_preview` removed from conversation list API (E2EE spec compliance)
 
 ---
 
@@ -188,12 +192,13 @@ Fresh instance bootstrap, invite acceptance, and returning sign-in should all be
 
 ## Known gaps — blocking Phase 1 (message plane)
 
-- `message_seq` absent from `messages` table — cursor pagination uses `(inserted_at, id)` instead of monotonic integer; unread math has no substrate
-- `device_read_cursors` table does not exist — acks are ephemeral, unread counts impossible
-- `conversation_summaries` table does not exist — inbox API runs live joins; `last_message_at` and `member_count` absent from conversation list response
+- ~~`message_seq` absent from `messages` table~~ Committed (95eb458): column, migration, backfill, and old pagination index dropped
+- ~~`user_read_cursors` table does not exist~~ Committed (95eb458): `user_read_cursors` table with `(user_id, conversation_id)` composite key, per SPEC's per-user watermark model
+- ~~`conversation_summaries` table does not exist~~ Committed (95eb458): table + PostgreSQL trigger on message insert
 - `pending_welcomes` table does not exist — offline device join is not durable
-- `last_message_preview` actively returned by `GET /api/v1/me/conversations` — E2EE spec violation
-- `unread_count` absent from conversation list response — inbox is not a usable inbox
+- ~~`last_message_preview` actively returned by `GET /api/v1/me/conversations`~~ Removed
+- `unread_count` absent from conversation list response — inbox is not a usable inbox (substrate now exists via `user_read_cursors` + `conversation_summaries`; math not wired)
+- `Idempotency-Key` header — not read by any mutation endpoint; reconnect retries produce duplicate messages
 
 ## Known gaps — pre-existing, not blocking L1
 
