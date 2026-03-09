@@ -284,7 +284,7 @@ defmodule FamichatWeb.CoreComponents do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id}>
+    <div id={@id} class="contents">
       <.flash kind={:info} title="Success!" flash={@flash} />
       <.flash kind={:error} title="Error!" flash={@flash} />
       <.flash

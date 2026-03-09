@@ -146,20 +146,20 @@ defmodule Famichat.Auth.Onboarding do
                                           %{user: user, family: family} ->
           Households.add_member(family.id, user.id, :admin)
         end)
+        |> Ecto.Multi.run(:passkey_token, fn _repo, %{user: user} ->
+          Tokens.issue(:passkey_registration, %{"user_id" => user.id},
+            user_id: user.id
+          )
+        end)
         |> Repo.transaction()
 
       case result do
-        {:ok, %{user: user, family: family}} ->
+        {:ok, %{user: user, family: family, passkey_token: %IssuedToken{raw: register_token}}} ->
           :telemetry.execute(
             [:famichat, :auth, :onboarding, :bootstrap_admin_created],
             %{count: 1},
             %{user_id: user.id, family_id: family.id}
           )
-
-          {:ok, %IssuedToken{raw: register_token}} =
-            Tokens.issue(:passkey_registration, %{"user_id" => user.id},
-              user_id: user.id
-            )
 
           {:ok,
            %{user: user, family: family, passkey_register_token: register_token}}

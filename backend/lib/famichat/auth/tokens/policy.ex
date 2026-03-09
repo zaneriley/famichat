@@ -189,13 +189,13 @@ defmodule Famichat.Auth.Tokens.Policy do
     pair_qr: "pair_qr",
     pair_admin_code: "pair_admin_code",
     invite_registration: "invite_registration",
-    passkey_registration: "passkey_reg",
-    passkey_assertion: "passkey_assert",
+    passkey_registration: "passkey_registration",
+    passkey_assertion: "passkey_assertion",
     magic_link: "magic_link",
     otp: "otp",
     recovery: "recovery",
     access: nil,
-    session_refresh: "device_refresh",
+    session_refresh: "session_refresh",
     channel_bootstrap: nil,
     family_setup: "family_setup"
   }

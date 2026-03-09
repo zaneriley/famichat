@@ -97,6 +97,7 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 <!-- Items here prevent handing the URL to family members -->
 - [ ] Fix @legacy_kind_map to match DB constraint — `"passkey_reg"` rejected by `user_tokens_kind_check`; ALL auth flows crash → backend/lib/famichat/auth/tokens/policy.ex:192 | P0-dogfood | browser-walkthrough
 - [ ] Wrap user+token creation in Ecto.Multi transaction — partial user creation leaves app unrecoverable without DB intervention → backend/lib/famichat/auth/onboarding.ex | P0-dogfood | browser-walkthrough
+- [ ] Add :not_found_html clause to FallbackController.call/2 — valid-locale 404s return 500 with stacktrace in dev, bare 500 in prod → backend/lib/famichat_web/controllers/fallback_controller.ex | P0-dogfood | browser-walkthrough
 - [x] Fix PutRemoteIp to parse X-Forwarded-For — all visitors share one rate-limit bucket behind any proxy → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P0-dogfood | agent:consensus (95eb458)
 - [x] Fix setup_token lost on FamilyNewLive WebSocket reconnect — mobile users lose family setup mid-flow → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P0-dogfood | agent:consensus (95eb458 — architecture split: FamilyNewLive → redirect → FamilySetupLive with token in URL)
 - [x] Add validate_length(:name, max: 100) to Family.changeset — unbounded input reaches DB without constraint → backend/lib/famichat/chat/family.ex:33 | P0-dogfood | agent:consensus (76776e4)
@@ -121,6 +122,9 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Disable HEEx debug annotations in prod — 85 HTML comments leak internal file paths → backend/config/prod.exs | P1-confidence | bug-bash (76776e4)
 - [x] Switch CSP from report-only to enforcing; remove unsafe-eval — zero XSS protection currently → .tmp/2026-03-09-bug-bash/04-security-tester.md SEC-02 | P1-confidence | bug-bash (76776e4)
 - [ ] Add ~30 missing Japanese gettext translations — login, invite, family creation, home all partially English → .tmp/2026-03-09-bug-bash/05-japanese-user.md | P1-confidence | bug-bash
+- [ ] Fix flash-group div intercepting pointer events on header nav — error banner makes home link and language switcher unclickable | P1-confidence | browser-walkthrough
+- [ ] Add LiveView mount crash fallback — perpetual "Getting things ready..." with no timeout or actionable error | P1-confidence | browser-walkthrough
+- [ ] Fix duplicate "Skip to main content" links on 404 error page — screen readers announce two identical skip links | P1-confidence | browser-walkthrough
 
 ## Known debt (P2)
 <!-- Tracked, not blocking, will matter at scale or for public launch -->
@@ -131,6 +135,8 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Gate console.log output behind dev flag — LiveSocket config leaks to browser console | P2-debt | bug-bash (76776e4)
 - [ ] Fix 410 page hardcoded lang="en" — CJK font overrides won't apply → backend/lib/famichat_web/controllers/error_html/410.html.heex | P2-debt | bug-bash
 - [ ] Root / should respect Accept-Language header for locale redirect | P2-debt | bug-bash
+- [ ] Make 404 page locale-aware and fix hardcoded /en/ in RETURN TO HOME link — Japanese users see English-only 404 | P2-debt | browser-walkthrough
+- [ ] Fix duplicate LiveSocket initialization on 404 page — app.js loads twice | P2-debt | browser-walkthrough
 
 ## Decisions needed
 <!-- Need human judgment, not implementation -->
@@ -140,6 +146,7 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [ ] Decide: clean error path for browsers without WebAuthn support — no fallback for browsers that can't do passkeys → .tmp/2026-03-08-new-accounts/acceptance/consensus.md §5.4 | agent:consensus
 - [ ] Decide: Japanese translations for new gettext strings — LLM candidates need native review → .tmp/2026-03-08-new-accounts/acceptance/consensus.md §5.5 | agent:consensus
 - [ ] Decide: clean up 66 pre-existing test failures as prerequisite or separate workstream? — new tests may not run cleanly on broken foundation → .tmp/2026-03-08-new-accounts/acceptance/consensus.md §5.6 | agent:consensus
+- [ ] Decide: is unauthenticated POST /api/v1/auth/passkeys/assert/challenge intentional? — returns valid challenge with empty body and no auth → .tmp/2026-03-09-browser-walkthrough/agent-6-api-basher.md | browser-walkthrough
 
 ## Cut / Won't do
 <!-- Explicitly rejected — reason noted inline on each item -->

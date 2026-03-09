@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang={@conn.assigns[:user_locale] || "en"}>
   <head>
     <.live_title>
       <%= assigns[:page_title] || "Famichat — Page not found" %>

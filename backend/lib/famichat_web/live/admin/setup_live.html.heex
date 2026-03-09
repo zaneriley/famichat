@@ -11,6 +11,17 @@
           <%= gettext("Getting things ready\u2026") %>
         </.typography>
       </div>
+    <% :mount_error -> %>
+      <div class="flex flex-col items-center gap-md" role="alert">
+        <.typography tag="p" size="md" color="callout">
+          <%= @error_message %>
+        </.typography>
+        <a href="" class="ac-primary-button">
+          <.typography tag="span" size="md" color="main">
+            <%= gettext("Reload") %>
+          </.typography>
+        </a>
+      </div>
     <% :bootstrap -> %>
       <div class="flex flex-col gap-md">
         <.typography tag="h1" size="2xl" color="main">

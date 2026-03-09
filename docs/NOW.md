@@ -64,6 +64,12 @@ Additionally, user creation is not wrapped in a transaction with token issuance.
 
 **Fix**: Update `@legacy_kind_map` entries to match DB constraint values; wrap user+token creation in `Ecto.Multi`.
 
+### P0 — FallbackController missing :not_found_html clause (browser-walkthrough 2026-03-09)
+
+`FallbackController.call/2` has no clause for the `:not_found_html` atom. When a user navigates to an unknown path under a valid locale prefix (e.g., `/en/nonexistent`), the router passes `(conn, :not_found_html)` to the fallback controller, which has no matching clause. In dev this shows a full stacktrace; in prod it would be a bare 500.
+
+**Fix**: Add a `call(conn, :not_found_html)` clause that renders the custom 404 page.
+
 ### ~~P0 — Self-service family creation~~ RESOLVED (95eb458)
 
 PutRemoteIp committed with compile-time CIDR caching and IPv4-mapped IPv6 normalization. FamilyNewLive reconnect fixed via architecture split (FamilyNewLive → redirect → FamilySetupLive with token in URL params, survives WebSocket disconnect). Both `/families/new` and `/families/start/:token` are committed and functional.

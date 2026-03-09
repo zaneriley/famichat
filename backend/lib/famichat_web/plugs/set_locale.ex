@@ -59,8 +59,13 @@ defmodule FamichatWeb.Plugs.SetLocale do
     url_locale = conn.path_params["locale"]
 
     if url_locale != nil and url_locale not in @supported_locales do
+      fallback_locale = extract_preferred_locale(conn)
+      Gettext.put_locale(FamichatWeb.Gettext, fallback_locale)
+
       conn
+      |> Plug.Conn.assign(:user_locale, fallback_locale)
       |> Plug.Conn.put_status(:not_found)
+      |> Phoenix.Controller.put_layout(false)
       |> Phoenix.Controller.put_view(FamichatWeb.ErrorHTML)
       |> Phoenix.Controller.render("404.html")
       |> halt()

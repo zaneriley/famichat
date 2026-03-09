@@ -102,6 +102,14 @@ defmodule FamichatWeb.AdminLive.SetupLive do
     else
       {:ok, setup_socket(socket, :bootstrap)}
     end
+  rescue
+    e in [Ecto.ConstraintError, DBConnection.ConnectionError] ->
+      Logger.error("[SetupLive] mount_connected crashed: #{Exception.message(e)}")
+
+      {:ok,
+       socket
+       |> assign(:step, :mount_error)
+       |> assign(:error_message, gettext("Something went wrong loading this page."))}
   end
 
   defp setup_socket(socket, step) do
@@ -116,6 +124,7 @@ defmodule FamichatWeb.AdminLive.SetupLive do
     |> assign(:invite_url, nil)
     |> assign(:copied, false)
     |> assign(:copy_failed, false)
+    |> assign(:error_message, nil)
     |> assign_page_metadata(gettext("Set up your family space"))
   end
 
