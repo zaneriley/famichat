@@ -90,12 +90,11 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
     }
   end
 
-  test "lists visible conversations with previews and without PII", %{
+  test "lists visible conversations without PII", %{
     authed_conn: authed_conn,
     conversation: conversation,
     partner: partner,
-    user: user,
-    long_body: long_body
+    user: user
   } do
     response =
       authed_conn
@@ -114,11 +113,7 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
              String.contains?(username, "@")
            end)
 
-    expected_preview =
-      long_body |> String.trim() |> String.slice(0, 120)
-
-    assert conversation_json["last_message_preview"] == expected_preview
-    assert String.length(conversation_json["last_message_preview"]) <= 120
+    refute Map.has_key?(conversation_json, "last_message_preview")
   end
 
   test "does not include another user's self conversation in me conversations",
@@ -245,14 +240,14 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
     page_1 =
       authed_conn
       |> get(~p"/api/v1/conversations/#{conversation.id}/messages", %{
-        after: m1.id,
+        after: m1.message_seq,
         limit: "2"
       })
       |> json_response(200)
 
     assert Enum.map(page_1["data"], & &1["id"]) == [m2.id, m3.id]
     assert page_1["meta"]["has_more"] == true
-    assert page_1["meta"]["next_cursor"] == m3.id
+    assert page_1["meta"]["next_cursor"] == m3.message_seq
 
     page_2 =
       authed_conn
@@ -264,10 +259,10 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
 
     assert Enum.map(page_2["data"], & &1["id"]) == [m4.id]
     assert page_2["meta"]["has_more"] == false
-    assert page_2["meta"]["next_cursor"] == m4.id
+    assert page_2["meta"]["next_cursor"] == m4.message_seq
   end
 
-  test "returns invalid_pagination when after is malformed", %{
+  test "returns invalid_pagination when after cursor is not a valid integer", %{
     authed_conn: authed_conn,
     conversation: conversation
   } do
@@ -297,7 +292,7 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
     response =
       authed_conn
       |> get(~p"/api/v1/conversations/#{conversation.id}/messages", %{
-        after: first_message.id,
+        after: first_message.message_seq,
         offset: "1"
       })
       |> json_response(422)
@@ -306,38 +301,23 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
     assert Map.has_key?(response["details"], "offset")
   end
 
-  test "returns invalid_pagination when after cursor points to another conversation",
+  test "after cursor with message_seq beyond conversation range returns empty data",
        %{
          authed_conn: authed_conn,
-         partner: partner,
          conversation: conversation
        } do
-    outsider = ChatFixtures.user_fixture()
-
-    other_conversation =
-      ChatFixtures.conversation_fixture(%{
-        family_id: conversation.family_id,
-        conversation_type: :direct,
-        user1: partner,
-        user2: outsider
-      })
-
-    {:ok, foreign_message} =
-      MessageService.send_message(%{
-        conversation_id: other_conversation.id,
-        sender_id: partner.id,
-        content: "foreign-message"
-      })
-
+    # With integer message_seq cursors, there is no cross-conversation
+    # validation. A message_seq value beyond the conversation's range
+    # simply returns no results.
     response =
       authed_conn
       |> get(~p"/api/v1/conversations/#{conversation.id}/messages", %{
-        after: foreign_message.id
+        after: 999_999
       })
-      |> json_response(422)
+      |> json_response(200)
 
-    assert response["error"] == "invalid_pagination"
-    assert Map.has_key?(response["details"], "after")
+    assert response["data"] == []
+    assert response["meta"]["has_more"] == false
   end
 
   test "returns not_found for conversations the user does not belong to", %{

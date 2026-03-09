@@ -4,7 +4,7 @@ defmodule Famichat.Application do
 
   use Boundary,
     top_level?: true,
-    deps: [Famichat, FamichatWeb]
+    deps: [Famichat, FamichatWeb, Famichat.Auth.PendingUserReaper]
 
   @impl true
   def start(_type, _args) do
@@ -26,6 +26,7 @@ defmodule Famichat.Application do
       {Finch, name: Famichat.Finch},
       {Task.Supervisor, name: Famichat.TaskSupervisor},
       Famichat.Chat.MessageRateLimiter,
+      Famichat.Auth.PendingUserReaper,
       FamichatWeb.TokenVerifyCache,
       FamichatWeb.Endpoint,
       Famichat.Cache

@@ -226,7 +226,7 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStore do
 
     {:ok, ciphertext}
   rescue
-    e in [RuntimeError, ArgumentError] ->
+    _e in [RuntimeError, ArgumentError] ->
       {:error, :state_encode_failed,
        %{reason: :state_encode_failed, operation: :upsert}}
 
@@ -247,7 +247,7 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStore do
          %{reason: :state_decode_failed, operation: :load}}
     end
   rescue
-    e in [RuntimeError, ArgumentError] ->
+    _e in [RuntimeError, ArgumentError] ->
       {:error, :state_decode_failed,
        %{reason: :state_decode_failed, operation: :load}}
 

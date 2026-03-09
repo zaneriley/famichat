@@ -62,7 +62,7 @@ defmodule Famichat.Chat.MessageServiceTest do
       assert length(messages) == 2
     end
 
-    test "supports catch-up cursor via after message id (exclusive)", %{
+    test "supports catch-up cursor via after message_seq (exclusive)", %{
       conversation: conv,
       user: user
     } do
@@ -89,7 +89,7 @@ defmodule Famichat.Chat.MessageServiceTest do
       assert {:ok, [msg2, msg3]} =
                MessageService.get_conversation_messages(conv.id,
                  limit: 2,
-                 after: m1.id
+                 after: m1.message_seq
                )
 
       assert msg2.id == m2.id
@@ -98,13 +98,13 @@ defmodule Famichat.Chat.MessageServiceTest do
       assert {:ok, [msg4]} =
                MessageService.get_conversation_messages(conv.id,
                  limit: 2,
-                 after: m3.id
+                 after: m3.message_seq
                )
 
       assert msg4.id == m4.id
     end
 
-    test "returns invalid pagination when after is malformed", %{
+    test "returns invalid pagination when after cursor is not a positive integer", %{
       conversation: conv
     } do
       assert {:error, {:invalid_pagination, changeset}} =
@@ -115,23 +115,23 @@ defmodule Famichat.Chat.MessageServiceTest do
       assert {"is invalid", _} = Keyword.fetch!(changeset.errors, :after)
     end
 
-    test "returns invalid pagination when after cursor is outside conversation",
-         %{conversation: conv} do
-      other_conversation = conversation_fixture(%{conversation_type: :direct})
-      [other_user | _] = ConversationService.list_members(other_conversation)
-
-      {:ok, foreign_message} =
+    test "after cursor with message_seq beyond conversation range returns empty", %{
+      conversation: conv,
+      user: user
+    } do
+      # With integer message_seq cursors, there is no cross-conversation
+      # validation. A message_seq value that exceeds the conversation's range
+      # simply returns no results (the WHERE clause filters everything out).
+      {:ok, _m1} =
         MessageService.send_message(
-          valid_message_params(other_user, other_conversation, "foreign", 1)
+          valid_message_params(user, conv, "msg-1", 1)
         )
 
-      assert {:error, {:invalid_pagination, changeset}} =
+      # Use a message_seq far beyond what exists in this conversation
+      assert {:ok, []} =
                MessageService.get_conversation_messages(conv.id,
-                 after: foreign_message.id
+                 after: 999_999
                )
-
-      assert {"does not belong to this conversation", _} =
-               Keyword.fetch!(changeset.errors, :after)
     end
 
     test "returns invalid pagination when after and offset are combined", %{
@@ -145,7 +145,7 @@ defmodule Famichat.Chat.MessageServiceTest do
 
       assert {:error, {:invalid_pagination, changeset}} =
                MessageService.get_conversation_messages(conv.id,
-                 after: m1.id,
+                 after: m1.message_seq,
                  offset: 1
                )
 
@@ -153,7 +153,7 @@ defmodule Famichat.Chat.MessageServiceTest do
                Keyword.fetch!(changeset.errors, :offset)
     end
 
-    test "uses inserted_at + id ordering for stable cursor paging", %{
+    test "uses message_seq ordering for stable cursor paging", %{
       conversation: conv,
       user: user
     } do
@@ -169,17 +169,19 @@ defmodule Famichat.Chat.MessageServiceTest do
           DateTime.add(timestamp, 1, :second)
         )
 
-      expected_first_ids = Enum.sort([m1.id, m2.id])
-
+      # message_seq is assigned by the DB trigger in insertion order,
+      # so m1 gets seq 1, m2 gets seq 2, m3 gets seq 3 regardless of timestamps.
       assert {:ok, first_page} =
                MessageService.get_conversation_messages(conv.id, limit: 2)
 
-      assert Enum.map(first_page, & &1.id) == expected_first_ids
+      assert length(first_page) == 2
+      first_page_ids = Enum.map(first_page, & &1.id)
+      last_msg = List.last(first_page)
 
       assert {:ok, [next_message]} =
                MessageService.get_conversation_messages(conv.id,
                  limit: 2,
-                 after: List.last(expected_first_ids)
+                 after: last_msg.message_seq
                )
 
       assert next_message.id == m3.id

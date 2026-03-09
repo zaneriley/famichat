@@ -1,8 +1,43 @@
 /**
- * Shared WebAuthn helpers used by both passkey hook files.
+ * Shared WebAuthn helpers used by passkey hook files.
  *
  * Exported individually so each hook only imports what it needs.
  */
+
+// ── Timeout helper ────────────────────────────────────────────────────────────
+
+/**
+ * Default safety-net timeout for WebAuthn credential operations (ms).
+ *
+ * The server-provided `publicKey.timeout` is the primary mechanism — browsers
+ * respect it and reject with NotAllowedError when it fires. This outer timeout
+ * is a backstop for buggy browsers or authenticators that silently hang.
+ *
+ * 2 minutes is generous: the WebAuthn spec allows authenticators up to 60s, and
+ * most OS prompts auto-dismiss well before that. We double it to avoid
+ * false-positives on slow hardware keys.
+ */
+const WEBAUTHN_TIMEOUT_MS = 120_000;
+
+/**
+ * Races a WebAuthn promise against a timeout. If the timeout fires first, the
+ * returned promise rejects with a DOMException("NotAllowedError") so callers
+ * see the same error shape as a user-cancelled prompt.
+ *
+ * @param {Promise} promise  The navigator.credentials.get/create call
+ * @param {number}  [ms]     Timeout in milliseconds (default: WEBAUTHN_TIMEOUT_MS)
+ * @returns {Promise}
+ */
+export function withWebAuthnTimeout(promise, ms = WEBAUTHN_TIMEOUT_MS) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new DOMException("The operation timed out.", "NotAllowedError"));
+    }, ms);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 /**
  * Encodes an ArrayBuffer to a base64url string (no padding).
@@ -55,15 +90,20 @@ export function getCsrfToken() {
 /**
  * Maps a WebAuthn browser error to a user-friendly message.
  *
+ * These messages follow brand voice: soft openers ("Something went wrong..."),
+ * casual actions ("Try again" not "Please retry"), describe what happens
+ * rather than naming the technology.
+ *
  * @param {Error|null|undefined} err
  * @returns {string}
  */
 export function friendlyWebAuthnError(err) {
-  if (!err) return "Something went wrong. Please try again.";
+  if (!err) return "Something went wrong. Try again.";
   const name = err.name || "";
   if (name === "NotAllowedError") return "Passkey setup was cancelled or timed out. Tap the button to try again.";
   if (name === "NotSupportedError") return "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge.";
-  if (name === "AbortError") return "Passkey setup was interrupted. Please try again.";
+  if (name === "AbortError") return "Passkey setup was interrupted. Try again.";
   if (name === "InvalidStateError") return "A passkey is already set up on this device.";
-  return "Passkey setup failed. Please try again.";
+  if (name === "SecurityError") return "Something went wrong connecting securely. Try a different browser or check your URL.";
+  return "Something went wrong with passkey setup. Try again.";
 }

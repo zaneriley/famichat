@@ -55,7 +55,7 @@ defmodule Famichat.Accounts.FirstRun do
 
   defp user_exists? do
     try do
-      Repo.exists?(from(u in User, limit: 1))
+      Repo.exists?(from(u in User, where: u.status == :active, limit: 1))
     rescue
       # During compilation or before Repo is started, return false gracefully.
       _ -> false

@@ -107,6 +107,7 @@ defmodule FamichatWeb.MessageChannel do
     Conversation,
     ConversationSecurityPolicy,
     ConversationQueries,
+    Message,
     Self
   }
 
@@ -521,30 +522,35 @@ defmodule FamichatWeb.MessageChannel do
         start_time = System.monotonic_time()
 
         case topic_context(socket) do
-          {:ok, type, id} ->
-            message_id = Map.get(payload, "message_id", "unknown")
+          {:ok, type, conversation_id} ->
+            user_id = socket.assigns.user_id
+            message_seq = extract_acked_seq(payload, conversation_id)
 
-            # Create measurements for telemetry
+            result =
+              if is_integer(message_seq) and message_seq > 0 do
+                upsert_read_cursor(user_id, conversation_id, message_seq)
+              else
+                :ok
+              end
+
             measurements = compute_measurements(start_time)
 
-            # Metadata for the acknowledgment
             metadata = %{
-              user_id: socket.assigns.user_id,
+              user_id: user_id,
               conversation_type: type,
-              conversation_id: id,
-              message_id: message_id
+              conversation_id: conversation_id,
+              message_seq: message_seq
             }
 
-            # Log the acknowledgment
             Logger.info(
               "[MessageChannel] Message acknowledgment: " <>
                 "conversation_type=#{type} " <>
-                "conversation_id=#{id} " <>
-                "user_id=#{socket.assigns.user_id} " <>
-                "message_id=#{message_id}"
+                "conversation_id=#{conversation_id} " <>
+                "user_id=#{user_id} " <>
+                "message_seq=#{inspect(message_seq)} " <>
+                "cursor_write=#{inspect(result)}"
             )
 
-            # Emit telemetry for the acknowledgment
             emit_ack_telemetry(measurements, metadata)
 
             {:reply, :ok, socket}
@@ -555,6 +561,68 @@ defmodule FamichatWeb.MessageChannel do
 
       {:error, reason} ->
         {:reply, {:error, %{reason: reason_to_string(reason)}}, socket}
+    end
+  end
+
+  # Extracts the message_seq from the ack payload.
+  # New clients send "message_seq" directly.
+  # Old/transitional clients send "message_id" (UUID); look up the seq.
+  defp extract_acked_seq(payload, conversation_id) do
+    case Map.get(payload, "message_seq") do
+      seq when is_integer(seq) and seq > 0 ->
+        seq
+
+      nil ->
+        case Map.get(payload, "message_id") do
+          nil ->
+            nil
+
+          message_id ->
+            case from(m in Message,
+                   where: m.id == ^message_id and m.conversation_id == ^conversation_id,
+                   select: m.message_seq
+                 )
+                 |> Repo.one() do
+              nil ->
+                Logger.warning(
+                  "[MessageChannel] Ack message_id lookup failed: " <>
+                    "message_id=#{message_id} conversation_id=#{conversation_id}"
+                )
+
+                nil
+
+              seq ->
+                seq
+            end
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp upsert_read_cursor(user_id, conversation_id, message_seq) do
+    now = DateTime.utc_now()
+
+    sql = """
+    INSERT INTO user_read_cursors (user_id, conversation_id, last_acked_seq, updated_at)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (user_id, conversation_id)
+    DO UPDATE SET
+      last_acked_seq = GREATEST(user_read_cursors.last_acked_seq, EXCLUDED.last_acked_seq),
+      updated_at = EXCLUDED.updated_at
+    """
+
+    case Repo.query(sql, [user_id, conversation_id, message_seq, now]) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error(
+          "[MessageChannel] Failed to upsert read cursor: #{inspect(reason)}"
+        )
+
+        {:error, :cursor_write_failed}
     end
   end
 

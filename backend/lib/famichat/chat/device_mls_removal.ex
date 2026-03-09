@@ -83,7 +83,7 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
 
   ## Private
 
-  defp do_remove(user_id, device_id, revocation_ref, opts \\ []) do
+  defp do_remove(user_id, device_id, revocation_ref, opts) do
     with_timeout? = Keyword.get(opts, :with_timeout, true)
     conversation_ids = list_conversation_ids(user_id)
 

@@ -394,8 +394,7 @@ defmodule Famichat.Auth.Passkeys do
     user
     |> User.changeset(%{
       status: :active,
-      confirmed_at: DateTime.utc_now(),
-      registration_token_id: nil
+      confirmed_at: DateTime.utc_now()
     })
     |> Repo.update()
   end

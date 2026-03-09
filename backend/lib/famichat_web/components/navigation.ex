@@ -5,7 +5,6 @@ defmodule FamichatWeb.Navigation do
   Renders the top-level application bar with:
   - Famichat logo (links to home)
   - EN/JA language switcher
-  - Theme switcher
 
   Usage:
       <.live_component module={FamichatWeb.Navigation} id="nav" current_path={@current_path} user_locale={@locale} />
@@ -13,7 +12,6 @@ defmodule FamichatWeb.Navigation do
   Assigns:
   - `current_path`: Current URL path (default: "/")
   - `user_locale`: User's locale string, e.g. "en" or "ja" (default: "en")
-  - `selected_theme`: Active theme name (default: "dark")
 
   All user-visible labels use `gettext/1` for i18n support.
 
@@ -22,7 +20,6 @@ defmodule FamichatWeb.Navigation do
   """
   use FamichatWeb, :live_component
   alias FamichatWeb.Router.Helpers, as: Routes
-  import FamichatWeb.Components.ThemeSwitcher
   import FamichatWeb.Components.Typography
 
   def update(assigns, socket) do
@@ -31,9 +28,6 @@ defmodule FamichatWeb.Navigation do
       |> assign(assigns)
       |> assign_new(:current_path, fn -> assigns[:current_path] || "/" end)
       |> assign_new(:user_locale, fn -> assigns[:user_locale] || "en" end)
-      |> assign_new(:selected_theme, fn ->
-        assigns[:selected_theme] || "dark"
-      end)
 
     {:ok, socket}
   end
@@ -54,7 +48,6 @@ defmodule FamichatWeb.Navigation do
         <.typography tag="span" size="1xl" font="cardinal">Famichat</.typography>
       </.link>
       <div class="flex flex-wrap items-center gap-md justify-end">
-        <.theme_switcher />
         <nav aria-label={gettext("Language switcher")}>
           <ul class="flex gap-md">
             <li>

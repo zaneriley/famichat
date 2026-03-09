@@ -26,7 +26,7 @@
  * State is preserved on recoverable errors (NotAllowedError, AbortError, network).
  */
 
-import { bufferToBase64url, base64urlToBuffer, getCsrfToken, friendlyWebAuthnError } from "./webauthn_helpers.js";
+import { bufferToBase64url, base64urlToBuffer, getCsrfToken, friendlyWebAuthnError, withWebAuthnTimeout } from "./webauthn_helpers.js";
 
 // ── Debug configuration ────────────────────────────────────────────────────────
 
@@ -145,9 +145,9 @@ const PasskeyAdminSetupHook = {
       // -----------------------------------------------------------------------
       let credential;
       try {
-        credential = await navigator.credentials.create({
-          publicKey: publicKeyOptions,
-        });
+        credential = await withWebAuthnTimeout(
+          navigator.credentials.create({ publicKey: publicKeyOptions }),
+        );
       } catch (err) {
         DEBUG && console.error("[PasskeyAdminSetup] navigator.credentials.create failed", err);
         const name = err?.name || "";
@@ -214,17 +214,17 @@ const PasskeyAdminSetupHook = {
    */
   _friendlyServerError(code) {
     const map = {
-      expired: "This setup session has expired. Please reload the page and start again.",
-      used: "This setup token has already been used. Please reload the page.",
-      invalid: "This setup token is not valid. Please reload the page.",
-      invalid_token: "Session expired. Please reload the page and start again.",
-      rate_limited: "Too many attempts. Please wait a moment.",
-      invalid_challenge: "The setup session expired. Please reload the page.",
-      passkey_registration_failed: "Passkey setup failed. Please try again.",
-      missing_registration_token: "Session expired. Please reload the page and start again.",
-      challenge_failed: "Could not start passkey creation. Please try again.",
+      expired: "This setup session has expired. Try reloading the page.",
+      used: "This setup token has already been used. Try reloading the page.",
+      invalid: "This setup token is not valid. Try reloading the page.",
+      invalid_token: "Session expired. Try reloading the page.",
+      rate_limited: "Too many attempts. Wait a moment and try again.",
+      invalid_challenge: "The setup session expired. Try reloading the page.",
+      passkey_registration_failed: "Something went wrong with passkey setup. Try again.",
+      missing_registration_token: "Session expired. Try reloading the page.",
+      challenge_failed: "Something went wrong starting passkey setup. Try again.",
     };
-    return map[code] || "Something went wrong. Please try again.";
+    return map[code] || "Something went wrong. Try again.";
   },
 
   /**

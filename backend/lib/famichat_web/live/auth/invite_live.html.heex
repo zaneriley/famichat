@@ -168,15 +168,17 @@
                 <%= gettext("Set up passkey") %>
               </.typography>
             </button>
-            <button
-              type="button"
-              phx-click="go-back"
-              class="ac-secondary-button w-full"
-            >
-              <.typography tag="span" size="md" color="deemphasized">
-                <%= gettext("Go back") %>
-              </.typography>
-            </button>
+            <%= unless @passkey_register_token do %>
+              <button
+                type="button"
+                phx-click="go-back"
+                class="ac-secondary-button w-full"
+              >
+                <.typography tag="span" size="md" color="deemphasized">
+                  <%= gettext("Go back") %>
+                </.typography>
+              </button>
+            <% end %>
             <.typography tag="p" size="2xs" color="deemphasized">
               <%= gettext(
                 "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
@@ -213,6 +215,14 @@
             "Ask the person who invited you to send a new link, or reply to the message you received."
           ) %>
         </.typography>
+        <a
+          href={locale_path(assigns, "/login")}
+          class="ac-secondary-button w-full text-center rounded-full px-md py-2xs"
+        >
+          <.typography tag="span" size="md" color="deemphasized">
+            <%= gettext("Already have an account? Sign in") %>
+          </.typography>
+        </a>
       </div>
   <% end %>
 </div>

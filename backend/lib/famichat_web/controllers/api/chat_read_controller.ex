@@ -1,20 +1,18 @@
 defmodule FamichatWeb.API.ChatReadController do
   use FamichatWeb, :controller
-
   import Ecto.Query
+
+  alias Famichat.Repo
 
   alias Famichat.Chat.{
     Conversation,
     ConversationAccess,
     ConversationService,
+    ConversationSummary,
     ConversationVisibilityService,
-    Message,
-    MessageService
+    MessageService,
+    UserReadCursor
   }
-
-  alias Famichat.Repo
-
-  @max_preview_length 120
 
   def index_me_conversations(
         %{assigns: %{current_user_id: user_id}} = conn,
@@ -25,12 +23,35 @@ defmodule FamichatWeb.API.ChatReadController do
         preload: [:explicit_users]
       )
 
-    preview_map = latest_previews(conversations)
+    conversation_ids = Enum.map(conversations, & &1.id)
+
+    # Batch-load summaries and cursors in two queries rather than N+1.
+    summaries = load_conversation_summaries(conversation_ids)
+    cursors = load_user_cursors(user_id, conversation_ids)
 
     data =
       conversations
-      |> Enum.sort_by(& &1.updated_at, {:desc, DateTime})
-      |> Enum.map(&present_conversation(&1, user_id, preview_map))
+      |> Enum.sort_by(
+        fn c ->
+          summary = Map.get(summaries, c.id)
+          last_message_at = if summary, do: summary.last_message_at, else: nil
+          last_message_at || c.updated_at
+        end,
+        {:desc, DateTime}
+      )
+      |> Enum.map(fn conversation ->
+        summary =
+          Map.get(summaries, conversation.id, %{
+            latest_message_seq: 0,
+            last_message_at: nil
+          })
+
+        cursor = Map.get(cursors, conversation.id, %{last_acked_seq: 0})
+        latest_seq = Map.get(summary, :latest_message_seq, 0)
+        acked_seq = Map.get(cursor, :last_acked_seq, 0)
+        unread_count = max(0, latest_seq - acked_seq)
+        present_conversation(conversation, user_id, summary, unread_count)
+      end)
 
     json(conn, %{data: data})
   end
@@ -93,9 +114,12 @@ defmodule FamichatWeb.API.ChatReadController do
   defp present_conversation(
          %Conversation{} = conversation,
          current_user_id,
-         preview_map
+         summary,
+         unread_count
        ) do
     usernames = participant_usernames(conversation)
+    last_message_at = Map.get(summary, :last_message_at)
+    latest_message_seq = Map.get(summary, :latest_message_seq, 0)
 
     %{
       "id" => conversation.id,
@@ -103,7 +127,10 @@ defmodule FamichatWeb.API.ChatReadController do
       "title" => conversation_title(conversation, usernames, current_user_id),
       "participant_usernames" => usernames,
       "updated_at" => DateTime.to_iso8601(conversation.updated_at),
-      "last_message_preview" => Map.get(preview_map, conversation.id)
+      "last_message_at" =>
+        if(last_message_at, do: DateTime.to_iso8601(last_message_at), else: nil),
+      "unread_count" => unread_count,
+      "latest_message_seq" => latest_message_seq
     }
   end
 
@@ -172,48 +199,12 @@ defmodule FamichatWeb.API.ChatReadController do
     end
   end
 
-  defp latest_previews([]), do: %{}
-
-  defp latest_previews(conversations) do
-    ids = Enum.map(conversations, & &1.id)
-
-    query =
-      from m in Message,
-        where: m.conversation_id in ^ids,
-        order_by: [desc: m.inserted_at, desc: m.id],
-        distinct: m.conversation_id,
-        select: {m.conversation_id, m.content}
-
-    query
-    |> Repo.all()
-    |> Map.new(fn {conversation_id, content} ->
-      {conversation_id, truncate_preview(content)}
-    end)
-  end
-
-  defp truncate_preview(nil), do: nil
-
-  defp truncate_preview(content) do
-    content
-    |> String.trim()
-    |> case do
-      "" ->
-        nil
-
-      trimmed ->
-        if String.length(trimmed) > @max_preview_length do
-          String.slice(trimmed, 0, @max_preview_length)
-        else
-          trimmed
-        end
-    end
-  end
-
   defp present_message(message) do
     %{
       "id" => message.id,
       "sender_id" => message.sender_id,
       "content" => message.content,
+      "message_seq" => message.message_seq,
       "inserted_at" => DateTime.to_iso8601(message.inserted_at)
     }
   end
@@ -224,6 +215,29 @@ defmodule FamichatWeb.API.ChatReadController do
         String.replace(acc, "%{#{key}}", to_string(value))
       end)
     end)
+  end
+
+  defp load_conversation_summaries([]), do: %{}
+
+  defp load_conversation_summaries(conversation_ids) do
+    from(cs in ConversationSummary,
+      where: cs.conversation_id in ^conversation_ids,
+      select: {cs.conversation_id, cs}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp load_user_cursors(_user_id, []), do: %{}
+
+  defp load_user_cursors(user_id, conversation_ids) do
+    from(urc in UserReadCursor,
+      where:
+        urc.user_id == ^user_id and urc.conversation_id in ^conversation_ids,
+      select: {urc.conversation_id, urc}
+    )
+    |> Repo.all()
+    |> Map.new()
   end
 
   defp not_found(conn) do

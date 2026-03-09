@@ -40,16 +40,25 @@
       <%= if @error do %>
         <div role="alert" class="flex flex-col gap-3xs">
           <.typography tag="p" size="2xs" color="callout">
-            <%= @error %>
+            <%= error_message(@error) %>
           </.typography>
         </div>
       <% end %>
 
       <.typography tag="p" size="2xs" color="deemphasized">
         <%= gettext(
-          "New to Famichat? You need an invite link from a family member to get started."
+          "Getting started? Ask the person who told you about Famichat to send you an invite link."
         ) %>
       </.typography>
+
+      <a
+        href={locale_path(assigns, "/families/new")}
+        class="ac-secondary-button w-full text-center rounded-full px-md py-2xs"
+      >
+        <.typography tag="span" size="md" color="deemphasized">
+          <%= gettext("Set up your own family space") %>
+        </.typography>
+      </a>
     </div>
   </div>
 </div>

@@ -7,51 +7,14 @@
  * 3. Decode challenge options, call navigator.credentials.get(options)
  * 4. POST /api/v1/auth/passkeys/assert with the credential
  * 5. On success: pushEvent("passkey-result", { token: data.access_token })
- * 6. On error:  pushEvent("passkey-error",  { message: "..." })
+ * 6. On error:  pushEvent("passkey-error",  { code: "ErrorName", message: "..." })
  */
+
+import { bufferToBase64url, base64urlToBuffer, getCsrfToken, withWebAuthnTimeout } from "./webauthn_helpers.js";
 
 // ── Debug configuration ────────────────────────────────────────────────────────
 
 const DEBUG = document.documentElement.dataset.debug === "true";
-
-// ── Base64url helpers ──────────────────────────────────────────────────────────
-
-/**
- * Convert an ArrayBuffer (or Uint8Array) to a base64url string without padding.
- */
-function bufferToBase64url(buffer) {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-/**
- * Convert a base64url string (with or without padding) to an ArrayBuffer.
- */
-function base64urlToBuffer(base64url) {
-  // Normalise: base64url → base64 with padding
-  const padded =
-    base64url.replace(/-/g, "+").replace(/_/g, "/") +
-    "===".slice((base64url.length + 3) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
-// ── CSRF helper ────────────────────────────────────────────────────────────────
-
-function getCsrfToken() {
-  return (
-    document.querySelector("meta[name='csrf-token']")?.getAttribute("content") ||
-    ""
-  );
-}
 
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
@@ -68,36 +31,21 @@ const PasskeyLoginHook = {
 
   // ── Error helpers ──────────────────────────────────────────────────────────
 
-  _friendlyError(err) {
-    if (!err) return "Something went wrong. Please try again.";
-    const name = err.name || "";
-    const msg = err.message || "";
-    if (name === "NotAllowedError" || msg.includes("not allowed") || msg.includes("timed out")) {
-      return "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt.";
-    }
-    if (name === "SecurityError") {
-      return "Sign-in requires a secure connection (HTTPS). Please check your URL.";
-    }
-    if (name === "NotSupportedError") {
-      return "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge on a modern device.";
-    }
-    if (name === "AbortError") {
-      return "Sign-in was interrupted. Please try again.";
-    }
-    if (name === "InvalidStateError") {
-      return "No passkey found for this device. Ask for an invite to set one up.";
-    }
-    return "Sign-in failed. Please try again.";
+  /**
+   * Returns a structured { code, message } for a WebAuthn browser error.
+   * The code is the raw DOMException name (e.g. "NotAllowedError") so the
+   * Elixir side can normalize it. The message is a fallback for logging.
+   */
+  _errorPayload(err) {
+    const code = err?.name || "UnknownError";
+    return { code, message: err?.message || "unknown" };
   },
 
-  _friendlyServerError(code) {
-    const map = {
-      invalid_credentials: "We couldn't verify your passkey. Please try again.",
-      invalid_challenge: "The sign-in session expired. Tap the button to start again.",
-      rate_limited: "Too many attempts. Please wait a moment and try again.",
-      challenge_failed: "Couldn't start sign-in. Please try again.",
-    };
-    return map[code] || "Sign-in failed. Please try again.";
+  /**
+   * Returns a structured { code, message } for a server-side error.
+   */
+  _serverErrorPayload(code) {
+    return { code: code || "server_error", message: code || "server_error" };
   },
 
   // ── Main flow ──────────────────────────────────────────────────────────────
@@ -110,8 +58,8 @@ const PasskeyLoginHook = {
       typeof navigator.credentials.get !== "function"
     ) {
       this.pushEvent("passkey-error", {
-        message:
-          "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge on a modern device.",
+        code: "NotSupportedError",
+        message: "WebAuthn API not available",
       });
       return;
     }
@@ -124,9 +72,7 @@ const PasskeyLoginHook = {
       if (!challengeResponse.ok) {
         const body = await challengeResponse.json().catch(() => ({}));
         const code = body?.error?.code ?? "challenge_failed";
-        this.pushEvent("passkey-error", {
-          message: this._friendlyServerError(code),
-        });
+        this.pushEvent("passkey-error", this._serverErrorPayload(code));
         return;
       }
 
@@ -137,9 +83,7 @@ const PasskeyLoginHook = {
       const challengeHandle = challengeData.challenge_handle;
 
       if (!publicKeyOptions || !challengeHandle) {
-        this.pushEvent("passkey-error", {
-          message: this._friendlyServerError("challenge_failed"),
-        });
+        this.pushEvent("passkey-error", this._serverErrorPayload("challenge_failed"));
         return;
       }
 
@@ -162,17 +106,16 @@ const PasskeyLoginHook = {
       // Step 3: ask the browser / authenticator for a credential assertion
       let credential;
       try {
-        credential = await navigator.credentials.get(getOptions);
+        credential = await withWebAuthnTimeout(navigator.credentials.get(getOptions));
       } catch (err) {
-        this.pushEvent("passkey-error", {
-          message: this._friendlyError(err),
-        });
+        this.pushEvent("passkey-error", this._errorPayload(err));
         return;
       }
 
       if (!credential) {
         this.pushEvent("passkey-error", {
-          message: "Sign-in failed. Please try again.",
+          code: "UnknownError",
+          message: "navigator.credentials.get returned null",
         });
         return;
       }
@@ -202,9 +145,7 @@ const PasskeyLoginHook = {
       if (!assertResponse.ok) {
         const body = await assertResponse.json().catch(() => ({}));
         const code = body?.error?.code ?? "assert_failed";
-        this.pushEvent("passkey-error", {
-          message: this._friendlyServerError(code),
-        });
+        this.pushEvent("passkey-error", this._serverErrorPayload(code));
         return;
       }
 
@@ -212,9 +153,7 @@ const PasskeyLoginHook = {
       const token = sessionData.access_token;
 
       if (!token) {
-        this.pushEvent("passkey-error", {
-          message: "Sign-in failed. Please try again.",
-        });
+        this.pushEvent("passkey-error", this._serverErrorPayload("assert_failed"));
         return;
       }
 
@@ -222,9 +161,7 @@ const PasskeyLoginHook = {
       this.pushEvent("passkey-result", { token });
     } catch (err) {
       DEBUG && console.error("[PasskeyLogin] Error during flow:", err);
-      this.pushEvent("passkey-error", {
-        message: this._friendlyError(err),
-      });
+      this.pushEvent("passkey-error", this._errorPayload(err));
     }
   },
 

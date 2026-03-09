@@ -36,6 +36,7 @@ defmodule Famichat.Chat.ConversationService do
     Chat.Conversation,
     Chat.ConversationParticipant,
     Chat.ConversationQueries,
+    Chat.ConversationSummary,
     Chat.GroupConversationPrivileges
   }
 
@@ -226,6 +227,22 @@ defmodule Famichat.Chat.ConversationService do
             {:error, :participant_creation_failed}
           end
         end)
+        |> Ecto.Multi.run(:summary, fn repo, %{create: conversation, existing: existing} ->
+          if existing do
+            # Conversation already existed, summary should already exist too.
+            {:ok, :skipped}
+          else
+            member_count = [user1_id, user2_id] |> Enum.uniq() |> length()
+
+            repo.insert(%ConversationSummary{
+              conversation_id: conversation.id,
+              conversation_type: Atom.to_string(conversation.conversation_type),
+              member_count: member_count,
+              latest_message_seq: 0,
+              last_message_at: nil
+            })
+          end
+        end)
         |> Ecto.Multi.run(:preload, fn repo, %{participants: conversation} ->
           {:ok, repo.preload(conversation, :explicit_users)}
         end)
@@ -402,6 +419,15 @@ defmodule Famichat.Chat.ConversationService do
             )
           end
         )
+        |> Ecto.Multi.run(:summary, fn repo, %{conversation: conversation} ->
+          repo.insert(%ConversationSummary{
+            conversation_id: conversation.id,
+            conversation_type: Atom.to_string(conversation.conversation_type),
+            member_count: 1,
+            latest_message_seq: 0,
+            last_message_at: nil
+          })
+        end)
         |> Ecto.Multi.run(:preload_users, fn repo,
                                              %{conversation: conversation} ->
           {:ok, repo.preload(conversation, :explicit_users)}

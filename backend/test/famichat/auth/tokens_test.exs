@@ -14,7 +14,7 @@ defmodule Famichat.Auth.TokensTest do
       assert issued.class == :ledgered
       assert issued.record.context == "invite"
       assert issued.record.kind == "invite"
-      assert issued.record.audience == "invitee"
+      assert issued.record.audience == "registrant"
       assert is_binary(issued.raw)
       assert issued.record.subject_id == nil
 
@@ -33,18 +33,18 @@ defmodule Famichat.Auth.TokensTest do
     end
   end
 
-  describe "issue/3 for signed kinds" do
-    test "returns signed Phoenix tokens" do
+  describe "issue/3 for invite_registration (ledgered)" do
+    test "returns ledgered token with registrant audience" do
       payload = %{"invite_token_id" => Ecto.UUID.generate()}
 
       assert {:ok, %IssuedToken{} = issued} =
                Tokens.issue(:invite_registration, payload)
 
-      assert issued.class == :signed
-      assert issued.audience == :invitee
+      assert issued.class == :ledgered
+      assert issued.audience == :registrant
 
-      assert {:ok, ^payload} =
-               Tokens.verify(:invite_registration, issued.raw)
+      assert {:ok, fetched} = Tokens.fetch(:invite_registration, issued.raw)
+      assert fetched.payload["invite_token_id"] == payload["invite_token_id"]
     end
   end
 

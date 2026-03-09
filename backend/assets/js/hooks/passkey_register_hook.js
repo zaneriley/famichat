@@ -35,7 +35,7 @@
  * State is preserved on recoverable errors (NotAllowedError, AbortError, network).
  */
 
-import { bufferToBase64url, base64urlToBuffer, getCsrfToken, friendlyWebAuthnError } from "./webauthn_helpers.js";
+import { bufferToBase64url, base64urlToBuffer, getCsrfToken, friendlyWebAuthnError, withWebAuthnTimeout } from "./webauthn_helpers.js";
 
 // ── Debug configuration ────────────────────────────────────────────────────────
 
@@ -244,9 +244,9 @@ const PasskeyRegisterHook = {
       // -----------------------------------------------------------------------
       let credential;
       try {
-        credential = await navigator.credentials.create({
-          publicKey: publicKeyOptions,
-        });
+        credential = await withWebAuthnTimeout(
+          navigator.credentials.create({ publicKey: publicKeyOptions }),
+        );
       } catch (err) {
         DEBUG && console.error("[PasskeyRegister] navigator.credentials.create failed", err);
         const name = err?.name || "";
@@ -315,15 +315,15 @@ const PasskeyRegisterHook = {
       expired: "This invite has expired. Ask for a new one.",
       used: "This invite has already been used.",
       invalid: "This invite link is not valid.",
-      rate_limited: "Too many attempts. Please wait a moment.",
-      invalid_challenge: "The setup session expired. Please reload the page.",
-      passkey_registration_failed: "Passkey setup failed. Please try again.",
-      missing_registration_token: "Session expired. Please start the invite flow again.",
-      invite_completion_failed: "Registration failed. Please try again.",
-      challenge_failed: "Could not start passkey creation. Please try again.",
+      rate_limited: "Too many attempts. Wait a moment and try again.",
+      invalid_challenge: "The setup session expired. Try reloading the page.",
+      passkey_registration_failed: "Something went wrong with passkey setup. Try again.",
+      missing_registration_token: "Session expired. Try starting the invite flow again.",
+      invite_completion_failed: "Something went wrong with registration. Try again.",
+      challenge_failed: "Something went wrong starting passkey setup. Try again.",
       username_taken: "That name is already taken. Go back and choose a different one.",
     };
-    return map[code] || "Something went wrong. Please try again.";
+    return map[code] || "Something went wrong. Try again.";
   },
 
   /**

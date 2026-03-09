@@ -147,7 +147,7 @@ defmodule Famichat.Chat.MessageService do
     query =
       from m in Message,
         where: m.conversation_id == ^state.conversation_id,
-        order_by: [asc: m.inserted_at, asc: m.id]
+        order_by: [asc: m.message_seq]
 
     Map.put(state, :query, query)
   end
@@ -190,31 +190,10 @@ defmodule Famichat.Chat.MessageService do
   defp apply_after_cursor(%{error: _} = state), do: state
   defp apply_after_cursor(%{after_cursor_id: nil} = state), do: state
 
-  defp apply_after_cursor(
-         %{after_cursor_id: after_cursor_id, query: query, conversation_id: cid} =
-           state
-       ) do
-    case cursor_for_conversation(after_cursor_id, cid) do
-      {:ok, %{id: cursor_id, inserted_at: inserted_at}} ->
-        filtered_query =
-          from m in query,
-            where:
-              m.inserted_at > ^inserted_at or
-                (m.inserted_at == ^inserted_at and m.id > ^cursor_id)
-
-        %{state | query: filtered_query}
-
-      :error ->
-        Map.put(
-          state,
-          :error,
-          {:invalid_pagination,
-           pagination_error_changeset(
-             :after,
-             "does not belong to this conversation"
-           )}
-        )
-    end
+  defp apply_after_cursor(%{after_cursor_id: after_seq, query: query} = state)
+       when is_integer(after_seq) do
+    filtered_query = from m in query, where: m.message_seq > ^after_seq
+    %{state | query: filtered_query}
   end
 
   defp apply_pagination(%{error: _} = state), do: state
@@ -293,7 +272,7 @@ defmodule Famichat.Chat.MessageService do
        when is_list(result) do
     next_cursor =
       case List.last(result) do
-        %Message{id: id} -> id
+        %Message{message_seq: seq} when not is_nil(seq) -> seq
         _ -> nil
       end
 
@@ -318,17 +297,21 @@ defmodule Famichat.Chat.MessageService do
 
   defp normalize_after_cursor(value) when value in [nil, ""], do: {:ok, nil}
 
+  defp normalize_after_cursor(value) when is_integer(value) and value > 0 do
+    {:ok, value}
+  end
+
   defp normalize_after_cursor(value) when is_binary(value) do
     value = String.trim(value)
 
     if value == "" do
       {:ok, nil}
     else
-      case Ecto.UUID.cast(value) do
-        {:ok, uuid} ->
-          {:ok, uuid}
+      case Integer.parse(value) do
+        {int, ""} when int > 0 ->
+          {:ok, int}
 
-        :error ->
+        _ ->
           {:error, pagination_error_changeset(:after, "is invalid")}
       end
     end
@@ -336,18 +319,6 @@ defmodule Famichat.Chat.MessageService do
 
   defp normalize_after_cursor(_value) do
     {:error, pagination_error_changeset(:after, "is invalid")}
-  end
-
-  defp cursor_for_conversation(message_id, conversation_id) do
-    query =
-      from m in Message,
-        where: m.id == ^message_id and m.conversation_id == ^conversation_id,
-        select: %{id: m.id, inserted_at: m.inserted_at}
-
-    case Repo.one(query) do
-      nil -> :error
-      cursor -> {:ok, cursor}
-    end
   end
 
   defp pagination_limit(params) do

@@ -2,8 +2,7 @@
 <html lang="en">
   <head>
     <.live_title>
-      <%= assigns[:page_title] ||
-        "Zane Riley | Product Designer (Tokyo) | 10+ Years Experience" %>
+      <%= assigns[:page_title] || gettext("Invite link expired — Famichat") %>
     </.live_title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -12,7 +11,7 @@
       name="description"
       content={
         assigns[:page_description] ||
-          ~c"Zane Riley: Tokyo Product Designer. 10+ yrs experience. Currently at Google. Worked in e-commerce, healthcare, and finance. Designed and built products for Google, Google Maps, and Google Search."
+          gettext("This invite link has expired or has already been used.")
       }
     />
     <link
@@ -74,7 +73,7 @@
         <br /> <%= gettext("THIS INVITE LINK HAS EXPIRED OR") %>
         <br /> <%= gettext("HAS ALREADY BEEN USED.") %><br />
         <br /> <%= gettext("PLEASE REQUEST A NEW INVITE LINK.") %><br /> <br />
-        ≺system initiating recovery protocol≻<br />
+        <%= gettext("≺system initiating recovery protocol≻") %><br />
         <p class="">
           <a href="/" class="pb-6 block"><%= gettext("RETURN TO HOME") %></a>
         </p>

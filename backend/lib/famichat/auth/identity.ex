@@ -16,7 +16,7 @@ defmodule Famichat.Auth.Identity do
 
   alias Ecto.Changeset
   import Ecto.Query
-  alias Famichat.Accounts.{Passkey, User, UserToken}
+  alias Famichat.Accounts.{HouseholdMembership, Passkey, User, UserToken}
   alias Famichat.Accounts.Username
   alias Famichat.Auth.RateLimit
   alias Famichat.Auth.Tokens
@@ -370,6 +370,47 @@ defmodule Famichat.Auth.Identity do
     user
     |> User.changeset(%{enrollment_required_since: DateTime.utc_now()})
     |> Repo.update()
+  end
+
+  @doc """
+  Sets the user's `last_active_family_id` after verifying that
+  the user is a current member of the target family.
+
+  Returns `{:ok, updated_user}` or `{:error, :not_a_member}`.
+  """
+  @spec set_last_active_family(binary(), binary()) ::
+          {:ok, User.t()} | {:error, :not_a_member | :user_not_found}
+  def set_last_active_family(user_id, family_id)
+      when is_binary(user_id) and is_binary(family_id) do
+    with :ok <- verify_family_membership(user_id, family_id),
+         {:ok, user} <- fetch_user(user_id) do
+      user
+      |> Changeset.change(last_active_family_id: family_id)
+      |> Repo.update()
+    end
+  end
+
+  @doc """
+  Clears the user's `last_active_family_id` (sets to nil).
+  Used when a stale family reference is detected.
+  """
+  @spec clear_last_active_family(binary()) ::
+          {:ok, User.t()} | {:error, :user_not_found}
+  def clear_last_active_family(user_id) when is_binary(user_id) do
+    {count, _} =
+      Repo.update_all(
+        from(u in User, where: u.id == ^user_id),
+        set: [last_active_family_id: nil]
+      )
+
+    if count > 0, do: {:ok, :cleared}, else: {:error, :user_not_found}
+  end
+
+  defp verify_family_membership(user_id, family_id) do
+    case Repo.get_by(HouseholdMembership, user_id: user_id, family_id: family_id) do
+      nil -> {:error, :not_a_member}
+      _m -> :ok
+    end
   end
 
   ## Helpers -----------------------------------------------------------------

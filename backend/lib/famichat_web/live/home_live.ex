@@ -11,59 +11,99 @@ defmodule FamichatWeb.HomeLive do
     ConversationSecurityStateStore
   }
 
-  alias Famichat.Accounts.{HouseholdMembership, User}
+  alias Famichat.Accounts.{FamilyContext, HouseholdMembership, User}
   alias Famichat.Chat
-  alias Famichat.Chat.Family
   alias Famichat.Auth.Onboarding
   alias Famichat.Repo
 
   @impl true
   def mount(params, session, socket) do
     token = session["access_token"] || params["token"]
+    candidate_family_id = params["switch_family"] || session["active_family_id"]
 
     with {:ok, {user_id, device_id}} <- ensure_token_valid(token),
-         {:ok, user} <- Identity.fetch_user(user_id),
-         {:ok, conversations} <- get_user_conversations(user_id) do
-      {family, family_members, is_admin} = load_family_data(user_id)
+         {:ok, user} <- Identity.fetch_user(user_id) do
+      case FamilyContext.resolve(user_id, candidate_family_id) do
+        {:ok, family, source} ->
+          mount_with_family(socket, user, device_id, token, params, family, source)
 
-      base_socket =
-        socket
-        |> assign_socket_state(user, device_id, token, params)
-        |> assign(
-          current_user: user,
-          family: family,
-          family_members: family_members,
-          is_admin: is_admin,
-          conversations: conversations,
-          invite_url: nil
-        )
-
-      case conversations do
-        [conversation | _] ->
-          result_socket =
-            base_socket
-            |> assign(conversation_id: conversation.id)
-            |> load_messages(conversation.id, user.id)
-
-          # Auto-connect the channel when the LiveView is connected (not static render).
-          if connected?(result_socket) do
-            send(self(), :auto_connect)
-          end
-
-          {:ok, result_socket}
-
-        [] ->
-          {:ok,
-           base_socket
-           |> assign(
-             conversation_id: nil,
-             error_message: nil
-           )
-           |> stream(:messages, [], reset: true)}
+        {:error, :no_family} ->
+          mount_without_family(socket, user, device_id, token, params)
       end
     else
       {:error, reason} -> assign_auth_error(socket, reason)
     end
+  end
+
+  defp mount_with_family(socket, user, device_id, token, params, family, source) do
+    family_members = load_family_members(family.id, user.id)
+    is_admin = load_is_admin(user.id, family.id)
+    all_memberships = FamilyContext.all_memberships(user.id)
+    show_family_switcher = length(all_memberships) > 1
+
+    {:ok, conversations} = get_user_conversations(user.id, family.id)
+
+    base_socket =
+      socket
+      |> assign_socket_state(user, device_id, token, params)
+      |> assign(
+        current_user: user,
+        family: family,
+        active_family_id: family.id,
+        family_members: family_members,
+        is_admin: is_admin,
+        all_memberships: all_memberships,
+        show_family_switcher: show_family_switcher,
+        family_source: source,
+        conversations: conversations,
+        invite_url: nil,
+        no_family: false
+      )
+
+    case conversations do
+      [conversation | _] ->
+        result_socket =
+          base_socket
+          |> assign(conversation_id: conversation.id)
+          |> load_messages(conversation.id, user.id)
+
+        if connected?(result_socket) do
+          send(self(), :auto_connect)
+        end
+
+        {:ok, result_socket}
+
+      [] ->
+        {:ok,
+         base_socket
+         |> assign(
+           conversation_id: nil,
+           error_message: nil
+         )
+         |> stream(:messages, [], reset: true)}
+    end
+  end
+
+  defp mount_without_family(socket, user, device_id, token, params) do
+    {:ok,
+     socket
+     |> assign_socket_state(user, device_id, token, params)
+     |> assign(
+       current_user: user,
+       family: nil,
+       active_family_id: nil,
+       family_members: [],
+       is_admin: false,
+       all_memberships: [],
+       show_family_switcher: false,
+       family_source: nil,
+       conversations: [],
+       invite_url: nil,
+       no_family: true,
+       conversation_id: nil,
+       error_message: nil
+     )
+     |> stream(:messages, [], reset: true)}
   end
 
   # Sets all common socket assigns shared across every mount path (success and
@@ -111,17 +151,22 @@ defmodule FamichatWeb.HomeLive do
 
   defp ensure_token_valid(_), do: {:error, :missing_token}
 
-  defp get_user_conversations(user_id) do
+  defp get_user_conversations(user_id, family_id) do
     explicit_ids =
       from p in ConversationParticipant,
-        where: p.user_id == ^user_id,
+        join: c in Conversation,
+        on: c.id == p.conversation_id,
+        where: p.user_id == ^user_id and c.family_id == ^family_id,
         select: p.conversation_id
 
     implicit_ids =
       from c in Conversation,
         join: m in HouseholdMembership,
         on: m.family_id == c.family_id,
-        where: c.conversation_type == :family and m.user_id == ^user_id,
+        where:
+          c.conversation_type == :family and
+            m.user_id == ^user_id and
+            c.family_id == ^family_id,
         select: c.id
 
     query =
@@ -136,23 +181,46 @@ defmodule FamichatWeb.HomeLive do
   rescue
     e in Ecto.QueryError ->
       Logger.error(
-        "Query error loading conversations for user #{user_id}: #{Exception.message(e)}"
+        "Query error loading conversations for user #{user_id} family #{family_id}: #{Exception.message(e)}"
       )
 
       {:error, :db_error}
   end
 
-  defp assign_auth_error(socket, _reason) do
+  defp assign_auth_error(socket, reason) do
     {:ok,
      socket
      |> assign(
        current_user: nil,
+       user_id: nil,
+       device_id: nil,
+       auth_error: reason,
+       error_message: nil,
        family: nil,
+       active_family_id: nil,
        family_members: [],
        is_admin: false,
+       all_memberships: [],
+       show_family_switcher: false,
+       family_source: nil,
        conversations: [],
-       invite_url: nil
+       conversation_id: nil,
+       invite_url: nil,
+       no_family: true,
+       channel_joined: false,
+       conversation_type: "family",
+       current_message: "",
+       topic: nil,
+       security_reason: nil,
+       security_action: nil,
+       revoke_target: "",
+       recovery_ref: nil,
+       recovery_last_status: nil,
+       last_seen_message_id: nil,
+       mls_enforcement_enabled: false,
+       dev_mode: false
      )
+     |> stream(:messages, [], reset: true)
      |> push_navigate(to: locale_path(socket, "/login"))}
   end
 
@@ -195,10 +263,10 @@ defmodule FamichatWeb.HomeLive do
            )
            |> put_system_notice("Connection blocked: #{reason_text}.")}
 
-        {:error, reason} ->
+        {:error, _reason} ->
           {:noreply,
            assign(socket,
-             error_message: "Something went wrong connecting. Try refreshing."
+             error_message: gettext("Something went wrong connecting. Try refreshing.")
            )}
       end
     end
@@ -242,7 +310,7 @@ defmodule FamichatWeb.HomeLive do
       true ->
         {:noreply,
          assign(socket,
-           error_message: "Still connecting. Try again in a moment."
+           error_message: gettext("Still connecting. Try again in a moment.")
          )}
     end
   end
@@ -353,6 +421,11 @@ defmodule FamichatWeb.HomeLive do
   end
 
   @impl true
+  def handle_event("sign-out", _params, socket) do
+    {:noreply, redirect(socket, to: locale_path(socket, "/logout"))}
+  end
+
+  @impl true
   def handle_event("reload-history", _params, socket) do
     {:noreply,
      socket
@@ -369,9 +442,9 @@ defmodule FamichatWeb.HomeLive do
     error_text =
       if reason_text == "connection_error" and
            socket.assigns.security_reason == "revoked" do
-        "This device has been removed. Please sign in again."
+        gettext("This device has been removed. Please sign in again.")
       else
-        "Something went wrong with the connection. Try refreshing."
+        gettext("Something went wrong with the connection. Try refreshing.")
       end
 
     {:noreply,
@@ -410,7 +483,7 @@ defmodule FamichatWeb.HomeLive do
        socket,
        channel_joined: false,
        topic: nil,
-       error_message: "Something went wrong connecting. Try refreshing."
+       error_message: gettext("Something went wrong connecting. Try refreshing.")
      )}
   end
 
@@ -482,6 +555,39 @@ defmodule FamichatWeb.HomeLive do
   end
 
   @impl true
+  def handle_event("generate_invite", _params, socket) do
+    user = socket.assigns[:current_user]
+    family = socket.assigns[:family]
+
+    cond do
+      is_nil(user) or is_nil(family) ->
+        {:noreply,
+         assign(socket,
+           error_message: gettext("You must be in a family to generate an invite.")
+         )}
+
+      true ->
+        case Onboarding.issue_invite(user.id, nil, %{
+               household_id: family.id,
+               role: "member"
+             }) do
+          {:ok, %{invite: invite_token}} ->
+            invite_url =
+              "#{FamichatWeb.Endpoint.url()}/#{socket.assigns[:user_locale] || "en"}/invites/#{invite_token}"
+
+            {:noreply,
+             assign(socket, invite_url: invite_url, error_message: nil)}
+
+          {:error, reason} ->
+            Logger.warning("[HomeLive] issue_invite error: #{inspect(reason)}")
+
+            {:noreply,
+             assign(socket, error_message: gettext("Could not generate invite link."))}
+        end
+    end
+  end
+
+  @impl true
   def handle_info(:auto_connect, socket) do
     # Triggered on connected mount to join the channel without user interaction.
     # Reuses the same logic as handle_event("connect-channel").
@@ -517,10 +623,10 @@ defmodule FamichatWeb.HomeLive do
            )
            |> put_system_notice("Connection blocked: #{reason_text}.")}
 
-        {:error, reason} ->
+        {:error, _reason} ->
           {:noreply,
            assign(socket,
-             error_message: "Something went wrong connecting. Try refreshing."
+             error_message: gettext("Something went wrong connecting. Try refreshing.")
            )}
       end
     end
@@ -538,73 +644,27 @@ defmodule FamichatWeb.HomeLive do
 
   ## -- Family data loading ---------------------------------------------------
 
-  defp load_family_data(user_id) do
-    membership =
-      from(m in HouseholdMembership,
-        where: m.user_id == ^user_id,
-        order_by: [asc: m.inserted_at],
-        limit: 1,
-        preload: [:family]
-      )
-      |> Repo.one()
-
-    case membership do
-      nil ->
-        {nil, [], false}
-
-      %HouseholdMembership{family: family, role: role} ->
-        members =
-          from(u in User,
-            join: m in HouseholdMembership,
-            on: m.user_id == u.id,
-            where: m.family_id == ^family.id and u.id != ^user_id,
-            select: %{id: u.id, username: u.username}
-          )
-          |> Repo.all()
-
-        {family, members, role == :admin}
-    end
+  defp load_family_members(family_id, current_user_id) do
+    from(u in User,
+      join: m in HouseholdMembership,
+      on: m.user_id == u.id,
+      where: m.family_id == ^family_id and u.id != ^current_user_id,
+      select: %{id: u.id, username: u.username}
+    )
+    |> Repo.all()
   rescue
     e ->
       Logger.error(
-        "Failed to load family data for user #{user_id}: #{Exception.message(e)}"
+        "Failed to load family members for family #{family_id}: #{Exception.message(e)}"
       )
 
-      {nil, [], false}
+      []
   end
 
-  ## -- Change 3: Invite generation from home screen --------------------------
-
-  @impl true
-  def handle_event("generate_invite", _params, socket) do
-    user = socket.assigns[:current_user]
-    family = socket.assigns[:family]
-
-    cond do
-      is_nil(user) or is_nil(family) ->
-        {:noreply,
-         assign(socket,
-           error_message: "You must be in a family to generate an invite."
-         )}
-
-      true ->
-        case Onboarding.issue_invite(user.id, nil, %{
-               household_id: family.id,
-               role: "member"
-             }) do
-          {:ok, %{invite: invite_token}} ->
-            invite_url =
-              "#{FamichatWeb.Endpoint.url()}/#{socket.assigns[:user_locale] || "en"}/invites/#{invite_token}"
-
-            {:noreply,
-             assign(socket, invite_url: invite_url, error_message: nil)}
-
-          {:error, reason} ->
-            Logger.warning("[HomeLive] issue_invite error: #{inspect(reason)}")
-
-            {:noreply,
-             assign(socket, error_message: "Could not generate invite link.")}
-        end
+  defp load_is_admin(user_id, family_id) do
+    case Repo.get_by(HouseholdMembership, user_id: user_id, family_id: family_id) do
+      %{role: :admin} -> true
+      _ -> false
     end
   end
 
@@ -754,18 +814,18 @@ defmodule FamichatWeb.HomeLive do
   end
 
   defp message_error_text("recovery_required"),
-    do: "Something went wrong with this session. Try refreshing."
+    do: gettext("Something went wrong with this session. Try refreshing.")
 
   defp message_error_text("device_revoked"),
-    do: "This device has been removed. Please sign in again."
+    do: gettext("This device has been removed. Please sign in again.")
 
   defp message_error_text("revoked"),
-    do: "This device has been removed. Please sign in again."
+    do: gettext("This device has been removed. Please sign in again.")
 
   defp message_error_text("pending_proposals"),
-    do: "Setting things up. This should only take a moment."
+    do: gettext("Setting things up. This should only take a moment.")
 
-  defp message_error_text(_reason), do: "Something went wrong. Try refreshing."
+  defp message_error_text(_reason), do: gettext("Something went wrong. Try refreshing.")
 
   defp security_action_for_reason("recovery_required"),
     do: "recover_conversation_security_state"
@@ -785,25 +845,25 @@ defmodule FamichatWeb.HomeLive do
 
   # Human-friendly labels for security state banners shown to end users.
   defp security_reason_display("recovery_required"),
-    do: "Something needs attention. Try refreshing."
+    do: gettext("Something needs attention. Try refreshing.")
 
   defp security_reason_display("device_revoked"),
-    do: "This device has been removed. Please sign in again."
+    do: gettext("This device has been removed. Please sign in again.")
 
   defp security_reason_display("revoked"),
-    do: "This device has been removed. Please sign in again."
+    do: gettext("This device has been removed. Please sign in again.")
 
   defp security_reason_display("epoch_too_low"),
-    do: "Your session is out of date. Try refreshing."
+    do: gettext("Your session is out of date. Try refreshing.")
 
   defp security_reason_display("epoch_too_high"),
-    do: "Your session is out of date. Try refreshing."
+    do: gettext("Your session is out of date. Try refreshing.")
 
   defp security_reason_display("pending_proposals"),
-    do: "Setting things up. This should only take a moment."
+    do: gettext("Setting things up. This should only take a moment.")
 
   defp security_reason_display(_),
-    do: "Something needs attention. Try refreshing."
+    do: gettext("Something needs attention. Try refreshing.")
 
   defp maybe_put_after(opts, nil), do: opts
   defp maybe_put_after(opts, ""), do: opts

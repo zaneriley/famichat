@@ -4,6 +4,8 @@ defmodule FamichatWeb.AuthController do
 
   alias Famichat.Auth.RateLimit
 
+  alias Famichat.Accounts.FamilyContext
+
   alias Famichat.Auth.{
     Identity,
     Onboarding,
@@ -349,10 +351,22 @@ defmodule FamichatWeb.AuthController do
              device_info,
              remember_device?: remember?
            ) do
-      conn
-      |> put_status(:created)
-      |> ConnHelpers.put_session_from_issued(session)
-      |> json(session)
+      conn =
+        conn
+        |> put_status(:created)
+        |> ConnHelpers.put_session_from_issued(session)
+
+      # Resolve and store the active family in the session for HomeLive.
+      conn =
+        case FamilyContext.resolve(user.id) do
+          {:ok, family, _source} ->
+            put_session(conn, "active_family_id", family.id)
+
+          {:error, :no_family} ->
+            conn
+        end
+
+      json(conn, session)
     else
       {:error, :invalid_credentials} ->
         conn
@@ -648,6 +662,8 @@ defmodule FamichatWeb.AuthController do
     case Onboarding.bootstrap_admin(username, opts) do
       {:ok,
        %{user: user, family: family, passkey_register_token: register_token}} ->
+        Famichat.Accounts.FirstRun.reset_cache()
+
         conn
         |> put_status(:created)
         |> json(%{

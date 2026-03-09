@@ -3,7 +3,6 @@ defmodule FamichatWeb.Layouts do
   use FamichatWeb, :html
   alias FamichatWeb.Router.Helpers, as: Routes
   import FamichatWeb.Gettext
-  import FamichatWeb.Components.Typography
   embed_templates "layouts/*"
 
   @supported_locales Application.compile_env(:famichat, :supported_locales)

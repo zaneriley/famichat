@@ -19,68 +19,420 @@
     </a>
   </div>
 <% else %>
-  <%= if is_nil(@conversation_id) do %>
-    <%!-- No conversation yet — show empty state based on role --%>
+  <%= if @no_family do %>
+    <%!-- No family membership — guide the user --%>
     <div class="flex h-screen flex-col items-center justify-center gap-lg p-2xl">
-      <%!-- Family name heading --%>
-      <.typography tag="h1" size="2xl" color="main">
-        <%= if @family, do: @family.name, else: gettext("Your Space") %>
+      <.typography tag="h1" size="2xl" color="main">Famichat</.typography>
+      <.typography tag="p" size="md" color="deemphasized">
+        <%= gettext("You are not part of any family yet.") %>
       </.typography>
+      <.typography tag="p" size="sm" color="deemphasized">
+        <%= gettext("Getting started? Ask the person who told you about Famichat to send you an invite link.") %>
+      </.typography>
+      <button
+        type="button"
+        phx-click="sign-out"
+        class="ac-secondary-button rounded-full px-md py-2xs"
+      >
+        <.typography tag="span" size="2xs" color="deemphasized">
+          <%= gettext("Sign out") %>
+        </.typography>
+      </button>
+    </div>
+  <% else %>
+    <%= if is_nil(@conversation_id) do %>
+      <%!-- No conversation yet — show empty state based on role --%>
+      <div class="flex h-screen flex-col items-center justify-center gap-lg p-2xl">
+        <%!-- Family name heading --%>
+        <.typography tag="h1" size="2xl" color="main">
+          <%= if @family, do: @family.name, else: gettext("Your family") %>
+        </.typography>
 
-      <%!-- Status message --%>
-      <%= if @is_admin do %>
-        <.typography tag="p" size="md" color="deemphasized">
-          <%= gettext("Your family space is ready.") %>
-        </.typography>
-        <.typography tag="p" size="md" color="deemphasized">
-          <%= gettext("Invite someone to start the conversation.") %>
-        </.typography>
-      <% else %>
-        <%!-- Invited member: show who they are connected with --%>
-        <%= if length(@family_members) > 0 do %>
+        <%!-- Family switcher (multi-family users only) --%>
+        <%= if @show_family_switcher do %>
+          <div class="flex flex-col items-center gap-2xs">
+            <.typography tag="p" size="2xs" color="deemphasized">
+              <%= gettext("Your families") %>
+            </.typography>
+            <div class="flex gap-sm flex-wrap justify-center">
+              <%= for %{family: f, role: _role} <- @all_memberships do %>
+                <%= if f.id == @active_family_id do %>
+                  <span class="rounded-full px-md py-2xs border-2 border-[var(--color-brown-600)] text-sm font-medium text-[var(--color-brown-900)]">
+                    <%= f.name %>
+                  </span>
+                <% else %>
+                  <form method="post" action={"/" <> (@user_locale || "en") <> "/families/switch"}>
+                    <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+                    <input type="hidden" name="family_id" value={f.id} />
+                    <button
+                      type="submit"
+                      class="rounded-full px-md py-2xs border border-[var(--color-brown-200)] text-sm text-[var(--color-brown-600)] hover:border-[var(--color-brown-400)] transition-colors"
+                    >
+                      <%= f.name %>
+                    </button>
+                  </form>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+        <%!-- Status message --%>
+        <%= if @is_admin do %>
           <.typography tag="p" size="md" color="deemphasized">
-            <%= gettext("You're in. Say hello to %{name}.",
-              name: hd(@family_members).username
-            ) %>
+            <%= gettext("Your family space is ready.") %>
+          </.typography>
+          <.typography tag="p" size="md" color="deemphasized">
+            <%= gettext("Invite someone to start the conversation.") %>
           </.typography>
         <% else %>
-          <.typography tag="p" size="md" color="deemphasized">
-            <%= gettext("You're in. Your family space is ready.") %>
-          </.typography>
-        <% end %>
-      <% end %>
-
-      <%!-- Member list --%>
-      <div class="flex flex-col gap-2xs">
-        <.typography tag="p" size="2xs" color="deemphasized">
-          <%= gettext("Members") %>
-        </.typography>
-        <div class="flex gap-sm">
-          <%!-- Current user always first --%>
-          <.typography tag="span" size="sm" color="main">
-            <%= gettext("%{name} (you)", name: @current_user.username) %>
-          </.typography>
-          <%= for member <- @family_members do %>
-            <.typography tag="span" size="sm" color="main">
-              <%= member.username %>
+          <%!-- Invited member: show who they are connected with --%>
+          <%= if length(@family_members) > 0 do %>
+            <.typography tag="p" size="md" color="deemphasized">
+              <%= gettext("You're in. Say hello to %{name}.",
+                name: hd(@family_members).username
+              ) %>
+            </.typography>
+          <% else %>
+            <.typography tag="p" size="md" color="deemphasized">
+              <%= gettext("You're in. Your family space is ready.") %>
             </.typography>
           <% end %>
-        </div>
-      </div>
+        <% end %>
 
-      <%!-- Admin: invite button and invite URL display --%>
-      <%= if @is_admin do %>
+        <%!-- Member list --%>
+        <div class="flex flex-col gap-2xs">
+          <.typography tag="p" size="2xs" color="deemphasized">
+            <%= gettext("Members") %>
+          </.typography>
+          <div class="flex gap-sm">
+            <%!-- Current user always first --%>
+            <.typography tag="span" size="sm" color="main">
+              <%= gettext("%{name} (you)", name: @current_user.username) %>
+            </.typography>
+            <%= for member <- @family_members do %>
+              <.typography tag="span" size="sm" color="main">
+                <%= member.username %>
+              </.typography>
+            <% end %>
+          </div>
+        </div>
+
+        <%!-- Admin: invite button and invite URL display --%>
+        <%= if @is_admin do %>
+          <button
+            phx-click="generate_invite"
+            class="ac-primary-button px-md py-2xs rounded-full"
+          >
+            <.typography tag="span" size="md" color="callout">
+              <%= gettext("Invite a family member") %>
+            </.typography>
+          </button>
+
+          <%= if @invite_url do %>
+            <div class="flex flex-col gap-sm">
+              <.typography tag="p" size="sm" color="deemphasized">
+                <%= gettext(
+                  "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
+                ) %>
+              </.typography>
+              <div class="flex gap-sm items-center">
+                <input
+                  type="text"
+                  readonly
+                  class="ac-text-input grow font-mono"
+                  value={@invite_url}
+                  id="invite-url-display"
+                  aria-label={gettext("Invite link")}
+                />
+                <button
+                  phx-hook="CopyToClipboard"
+                  id="copy-invite-url"
+                  data-copy-value={@invite_url}
+                  class="ac-primary-button shrink-0 px-md py-2xs rounded-full"
+                >
+                  <.typography tag="span" size="sm" color="callout">
+                    <%= gettext("Copy") %>
+                  </.typography>
+                </button>
+              </div>
+            </div>
+          <% end %>
+        <% end %>
+
+        <%= if @error_message do %>
+          <div
+            id="home-empty-error"
+            class="rounded-md border border-[var(--signal-error)] bg-white px-3 py-2"
+          >
+            <.typography tag="p" size="2xs" color="callout">
+              <%= @error_message %>
+            </.typography>
+          </div>
+        <% end %>
+
         <button
-          phx-click="generate_invite"
-          class="ac-primary-button px-md py-2xs rounded-full"
+          type="button"
+          phx-click="sign-out"
+          class="ac-secondary-button rounded-full px-md py-2xs"
         >
-          <.typography tag="span" size="md" color="callout">
-            <%= gettext("Invite a family member") %>
+          <.typography tag="span" size="2xs" color="deemphasized">
+            <%= gettext("Sign out") %>
           </.typography>
         </button>
+      </div>
+    <% else %>
+      <div
+        id="kitchen-table-chat"
+        class="ac-canvas flex h-[100dvh] w-full flex-col overflow-hidden bg-stone-50 md:mx-auto md:max-w-3xl md:border-x-2 md:border-[var(--color-brown-200)] md:shadow-2xl"
+        phx-hook="MessageChannel"
+        data-conversation-type={@conversation_type}
+        data-conversation-id={@conversation_id}
+        data-user-id={@user_id}
+      >
+        <header class="ac-header flex items-center justify-between gap-sm p-md">
+          <div class="flex flex-col gap-2xs">
+            <.typography tag="h1" size="2xl" color="main">
+              <%= case @family_members do
+                [other] ->
+                  other.username
 
+                [] ->
+                  if @family, do: @family.name, else: gettext("Your family")
+
+                _multiple ->
+                  if @family, do: @family.name, else: gettext("Your family")
+              end %>
+            </.typography>
+            <%!-- Compact member list under heading --%>
+            <div class="flex gap-sm">
+              <.typography tag="span" size="sm" color="deemphasized">
+                <%= gettext("%{name} (you)", name: @current_user.username) %>
+              </.typography>
+              <%= if length(@family_members) != 1 do %>
+                <%= for member <- @family_members do %>
+                  <.typography tag="span" size="sm" color="deemphasized">
+                    · <%= member.username %>
+                  </.typography>
+                <% end %>
+              <% end %>
+            </div>
+            <%!-- Family name label when user has multiple families --%>
+            <%= if @show_family_switcher do %>
+              <.typography tag="span" size="2xs" color="deemphasized">
+                <%= @family.name %>
+              </.typography>
+            <% end %>
+          </div>
+
+          <div class="flex items-center gap-sm">
+            <%!-- Family switcher in header --%>
+            <%= if @show_family_switcher do %>
+              <details class="relative">
+                <summary class="cursor-pointer ac-secondary-button rounded-full px-md py-2xs text-sm">
+                  <%= gettext("Your families") %>
+                </summary>
+                <div class="absolute right-0 top-full mt-1 z-10 min-w-[160px] rounded-md border border-[var(--color-brown-200)] bg-white shadow-lg p-2 flex flex-col gap-1">
+                  <%= for %{family: f, role: _role} <- @all_memberships do %>
+                    <%= if f.id == @active_family_id do %>
+                      <span class="block rounded px-3 py-1.5 text-sm font-medium text-[var(--color-brown-900)] bg-[var(--color-brown-100)]">
+                        <%= f.name %>
+                      </span>
+                    <% else %>
+                      <form method="post" action={"/" <> (@user_locale || "en") <> "/families/switch"}>
+                        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+                        <input type="hidden" name="family_id" value={f.id} />
+                        <button
+                          type="submit"
+                          class="block w-full text-left rounded px-3 py-1.5 text-sm text-[var(--color-brown-600)] hover:bg-[var(--color-brown-50)] transition-colors"
+                        >
+                          <%= f.name %>
+                        </button>
+                      </form>
+                    <% end %>
+                  <% end %>
+                </div>
+              </details>
+            <% end %>
+
+            <%!-- Connect/disconnect button is a dev tool only --%>
+            <%= if @dev_mode do %>
+              <button
+                phx-click="connect-channel"
+                class={[
+                  "ac-primary-button rounded-full px-3 py-2xs",
+                  if(@channel_joined,
+                    do: "bg-[var(--signal-error)]",
+                    else: "bg-[var(--signal-success)]"
+                  )
+                ]}
+              >
+                <.typography tag="span" size="2xs" color="callout">
+                  <%= if @channel_joined,
+                    do: gettext("Connected"),
+                    else: gettext("Connect") %>
+                </.typography>
+              </button>
+            <% end %>
+            <%!-- Admin invite button in header when conversation exists --%>
+            <%= if @is_admin do %>
+              <button
+                phx-click="generate_invite"
+                class="ac-primary-button rounded-full px-md py-2xs"
+              >
+                <.typography tag="span" size="2xs" color="callout">
+                  <%= gettext("Invite") %>
+                </.typography>
+              </button>
+            <% end %>
+            <button
+              type="button"
+              phx-click="sign-out"
+              class="ac-secondary-button rounded-full px-md py-2xs"
+            >
+              <.typography tag="span" size="2xs" color="deemphasized">
+                <%= gettext("Sign out") %>
+              </.typography>
+            </button>
+          </div>
+        </header>
+
+        <%= if @dev_mode do %>
+          <details class="mx-md mb-sm rounded-md border border-[var(--color-brown-200)] bg-white/70">
+            <summary class="cursor-pointer p-3 text-xs font-medium text-[var(--color-brown-500)]">
+              <%= gettext("Developer Tools") %>
+            </summary>
+            <section class="px-md pb-sm">
+              <.typography tag="p" size="2xs" color="deemphasized">
+                Use <a href="/admin/spike" class="underline">/admin/spike</a>
+                to open/share actor links.
+                This is a throwaway design-spike harness over real backend paths.
+              </.typography>
+              <.typography tag="p" size="2xs" color="deemphasized">
+                Topic status:
+                <span class="font-mono"><%= @topic || "not_joined" %></span>
+                · MLS enforcement:
+                <span class="font-mono">
+                  <%= if @mls_enforcement_enabled, do: "on", else: "off" %>
+                </span>
+              </.typography>
+              <%= if not @mls_enforcement_enabled do %>
+                <.typography tag="p" size="2xs" color="deemphasized">
+                  MLS is disabled in this runtime. To test MLS paths in the spike, set
+                  <span class="font-mono">FAMICHAT_MLS_ENFORCEMENT=true</span>
+                  and restart the app.
+                </.typography>
+              <% end %>
+              <%= if @recovery_last_status do %>
+                <.typography tag="p" size="2xs" color="deemphasized">
+                  Recovery:
+                  <span class="font-mono"><%= @recovery_last_status %></span>
+                </.typography>
+              <% end %>
+            </section>
+          </details>
+        <% end %>
+
+        <%= if @security_reason not in [nil, ""] do %>
+          <div class="mx-md mb-sm rounded-md border border-[var(--signal-warning)] bg-white px-3 py-2">
+            <.typography tag="p" size="2xs" color="main">
+              <%= security_reason_display(@security_reason) %>
+            </.typography>
+            <%= if @dev_mode do %>
+              <.typography tag="p" size="2xs" color="deemphasized">
+                <span class="font-mono"><%= @security_reason %></span>
+                <%= if @security_action not in [nil, ""] do %>
+                  · <span class="font-mono"><%= @security_action %></span>
+                <% end %>
+              </.typography>
+            <% end %>
+          </div>
+        <% end %>
+
+        <%= if @error_message do %>
+          <div
+            id="home-chat-error"
+            class="mx-md mb-sm rounded-md border border-[var(--signal-error)] bg-white px-3 py-2"
+          >
+            <.typography tag="p" size="2xs" color="callout">
+              <%= @error_message %>
+            </.typography>
+          </div>
+        <% end %>
+
+        <%= if @dev_mode do %>
+          <details class="mx-md mb-sm rounded-md border border-[var(--color-brown-200)] bg-white/70">
+            <summary class="cursor-pointer p-3 text-xs font-medium text-[var(--color-brown-500)]">
+              <%= gettext("Admin Controls") %>
+            </summary>
+            <section class="grid grid-cols-1 gap-2 p-3 pt-0 md:grid-cols-2">
+              <div class="flex items-end gap-2">
+                <div class="min-w-0 grow">
+                  <.typography tag="label" size="2xs" color="deemphasized">
+                    Revoke device id
+                  </.typography>
+                  <input
+                    type="text"
+                    class="ac-text-input w-full"
+                    value={@revoke_target}
+                    phx-keyup="update-revoke-target"
+                    phx-debounce="150"
+                    name="value"
+                    placeholder="spike-zane-device-2"
+                  />
+                </div>
+                <button
+                  class="ac-primary-button whitespace-nowrap px-3 py-2"
+                  phx-click="revoke-target-device"
+                >
+                  Revoke
+                </button>
+              </div>
+
+              <div class="flex items-end gap-2">
+                <div class="min-w-0 grow">
+                  <.typography tag="label" size="2xs" color="deemphasized">
+                    Recovery ref
+                  </.typography>
+                  <input
+                    type="text"
+                    class="ac-text-input w-full"
+                    value={@recovery_ref}
+                    phx-keyup="update-recovery-ref"
+                    phx-debounce="150"
+                    name="value"
+                    placeholder="spike-recovery-..."
+                  />
+                </div>
+                <button
+                  class="ac-primary-button whitespace-nowrap px-3 py-2"
+                  phx-click="recover-conversation-security-state"
+                >
+                  Recover
+                </button>
+              </div>
+
+              <div class="flex gap-2 md:col-span-2">
+                <button
+                  class="ac-primary-button px-3 py-2"
+                  phx-click="reset-conversation-security-state"
+                >
+                  Reset Security State
+                </button>
+                <button
+                  class="ac-primary-button px-3 py-2"
+                  phx-click="reload-history"
+                >
+                  Reload History
+                </button>
+              </div>
+            </section>
+          </details>
+        <% end %>
+
+        <%!-- Invite URL display inside conversation view (if admin just generated one) --%>
         <%= if @invite_url do %>
-          <div class="flex flex-col gap-sm">
+          <div class="mx-md mb-sm flex flex-col gap-sm rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3">
             <.typography tag="p" size="sm" color="deemphasized">
               <%= gettext(
                 "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
@@ -92,12 +444,12 @@
                 readonly
                 class="ac-text-input grow font-mono"
                 value={@invite_url}
-                id="invite-url-display"
+                id="invite-url-display-chat"
                 aria-label={gettext("Invite link")}
               />
               <button
                 phx-hook="CopyToClipboard"
-                id="copy-invite-url"
+                id="copy-invite-url-chat"
                 data-copy-value={@invite_url}
                 class="ac-primary-button shrink-0 px-md py-2xs rounded-full"
               >
@@ -108,360 +460,116 @@
             </div>
           </div>
         <% end %>
-      <% end %>
 
-      <%= if @error_message do %>
         <div
-          id="home-empty-error"
-          class="rounded-md border border-[var(--signal-error)] bg-white px-3 py-2"
+          id="messages-scroll-container"
+          class="flex grow flex-col gap-lg overflow-y-auto p-md pb-xl"
+          phx-update="stream"
         >
-          <.typography tag="p" size="2xs" color="callout">
-            <%= @error_message %>
-          </.typography>
-        </div>
-      <% end %>
-    </div>
-  <% else %>
-    <div
-      id="kitchen-table-chat"
-      class="ac-canvas flex h-[100dvh] w-full flex-col overflow-hidden bg-stone-50 md:mx-auto md:max-w-3xl md:border-x-2 md:border-[var(--color-brown-200)] md:shadow-2xl"
-      phx-hook="MessageChannel"
-      data-conversation-type={@conversation_type}
-      data-conversation-id={@conversation_id}
-      data-user-id={@user_id}
-    >
-      <header class="ac-header flex items-center justify-between gap-sm p-md">
-        <div class="flex flex-col gap-2xs">
-          <.typography tag="h1" size="2xl" color="main">
-            <%= case @family_members do
-              [other] ->
-                other.username
+          <%= if is_nil(@last_seen_message_id) do %>
+            <div
+              id="empty-state"
+              class="mb-auto mt-auto flex flex-col items-center justify-center text-center opacity-70"
+            >
+              <.typography tag="p" size="lg" color="deemphasized">
+                <%= case @family_members do
+                  [other] ->
+                    gettext("Your private space with %{name}. Say hello.",
+                      name: other.username
+                    )
 
-              [] ->
-                if @family, do: @family.name, else: gettext("Your Space")
-
-              _multiple ->
-                if @family, do: @family.name, else: gettext("Your Space")
-            end %>
-          </.typography>
-          <%!-- Compact member list under heading --%>
-          <div class="flex gap-sm">
-            <.typography tag="span" size="sm" color="deemphasized">
-              <%= gettext("%{name} (you)", name: @current_user.username) %>
-            </.typography>
-            <%= if length(@family_members) != 1 do %>
-              <%= for member <- @family_members do %>
-                <.typography tag="span" size="sm" color="deemphasized">
-                  · <%= member.username %>
+                  _ ->
+                    gettext("Your private family space. Say hello.")
+                end %>
+              </.typography>
+            </div>
+          <% end %>
+          <%= for {dom_id, message} <- @streams.messages do %>
+            <div
+              id={dom_id}
+              class={[
+                "flex max-w-[85%] flex-col",
+                cond do
+                  message.system_message -> "self-center items-center"
+                  message.outgoing -> "self-end items-end"
+                  true -> "self-start items-start"
+                end
+              ]}
+            >
+              <div class="mb-1.5 flex items-baseline gap-2 px-1">
+                <%!-- sender_name renders the resolved username; "Family Member" is a fallback when sender record is not preloaded --%>
+                <.typography tag="span" size="sm" color="main">
+                  <%= message.sender_name %>
                 </.typography>
-              <% end %>
-            <% end %>
-          </div>
-        </div>
-        <%!-- Connect/disconnect button is a dev tool only --%>
-        <%= if @dev_mode do %>
-          <button
-            phx-click="connect-channel"
-            class={[
-              "ac-primary-button rounded-full px-3 py-2xs",
-              if(@channel_joined,
-                do: "bg-[var(--signal-error)]",
-                else: "bg-[var(--signal-success)]"
-              )
-            ]}
-          >
-            <.typography tag="span" size="2xs" color="callout">
-              <%= if @channel_joined,
-                do: gettext("Connected"),
-                else: gettext("Connect") %>
-            </.typography>
-          </button>
-        <% end %>
-        <%!-- Admin invite button in header when conversation exists --%>
-        <%= if @is_admin do %>
-          <button
-            phx-click="generate_invite"
-            class="ac-primary-button rounded-full px-md py-2xs"
-          >
-            <.typography tag="span" size="2xs" color="callout">
-              <%= gettext("Invite") %>
-            </.typography>
-          </button>
-        <% end %>
-      </header>
+                <.typography tag="span" size="xs" color="deemphasized">
+                  <%= Calendar.strftime(message.timestamp, "%H:%M") %>
+                </.typography>
+              </div>
+              <div class={[
+                "ac-chat-bubble !p-4 !text-[1.05rem] !leading-relaxed shadow-sm",
+                cond do
+                  message.system_message ->
+                    "rounded-md border border-[var(--color-brown-200)] bg-white/70"
 
-      <%= if @dev_mode do %>
-        <details class="mx-md mb-sm rounded-md border border-[var(--color-brown-200)] bg-white/70">
-          <summary class="cursor-pointer p-3 text-xs font-medium text-[var(--color-brown-500)]">
-            <%= gettext("Developer Tools") %>
-          </summary>
-          <section class="px-md pb-sm">
-            <.typography tag="p" size="2xs" color="deemphasized">
-              Use <a href="/admin/spike" class="underline">/admin/spike</a>
-              to open/share actor links.
-              This is a throwaway design-spike harness over real backend paths.
-            </.typography>
-            <.typography tag="p" size="2xs" color="deemphasized">
-              Topic status:
-              <span class="font-mono"><%= @topic || "not_joined" %></span>
-              · MLS enforcement:
-              <span class="font-mono">
-                <%= if @mls_enforcement_enabled, do: "on", else: "off" %>
-              </span>
-            </.typography>
-            <%= if not @mls_enforcement_enabled do %>
-              <.typography tag="p" size="2xs" color="deemphasized">
-                MLS is disabled in this runtime. To test MLS paths in the spike, set
-                <span class="font-mono">FAMICHAT_MLS_ENFORCEMENT=true</span>
-                and restart the app.
-              </.typography>
-            <% end %>
-            <%= if @recovery_last_status do %>
-              <.typography tag="p" size="2xs" color="deemphasized">
-                Recovery:
-                <span class="font-mono"><%= @recovery_last_status %></span>
-              </.typography>
-            <% end %>
-          </section>
-        </details>
-      <% end %>
+                  message.outgoing ->
+                    "ac-chat-bubble-outgoing !bg-orange-50/80 !border-orange-100/50"
 
-      <%= if @security_reason not in [nil, ""] do %>
-        <div class="mx-md mb-sm rounded-md border border-[var(--signal-warning)] bg-white px-3 py-2">
-          <.typography tag="p" size="2xs" color="main">
-            <%= security_reason_display(@security_reason) %>
-          </.typography>
-          <%= if @dev_mode do %>
-            <.typography tag="p" size="2xs" color="deemphasized">
-              <span class="font-mono"><%= @security_reason %></span>
-              <%= if @security_action not in [nil, ""] do %>
-                · <span class="font-mono"><%= @security_action %></span>
-              <% end %>
-            </.typography>
+                  true ->
+                    "ac-chat-bubble-incoming !bg-white !border-transparent"
+                end
+              ]}>
+                <.typography tag="p" size="md" color="main">
+                  <%= message.body %>
+                </.typography>
+              </div>
+            </div>
           <% end %>
         </div>
-      <% end %>
 
-      <%= if @error_message do %>
-        <div
-          id="home-chat-error"
-          class="mx-md mb-sm rounded-md border border-[var(--signal-error)] bg-white px-3 py-2"
-        >
-          <.typography tag="p" size="2xs" color="callout">
-            <%= @error_message %>
-          </.typography>
-        </div>
-      <% end %>
-
-      <%= if @dev_mode do %>
-        <details class="mx-md mb-sm rounded-md border border-[var(--color-brown-200)] bg-white/70">
-          <summary class="cursor-pointer p-3 text-xs font-medium text-[var(--color-brown-500)]">
-            <%= gettext("Admin Controls") %>
-          </summary>
-          <section class="grid grid-cols-1 gap-2 p-3 pt-0 md:grid-cols-2">
-            <div class="flex items-end gap-2">
-              <div class="min-w-0 grow">
-                <.typography tag="label" size="2xs" color="deemphasized">
-                  Revoke device id
-                </.typography>
-                <input
-                  type="text"
-                  class="ac-text-input w-full"
-                  value={@revoke_target}
-                  phx-keyup="update-revoke-target"
-                  phx-debounce="150"
-                  name="value"
-                  placeholder="spike-zane-device-2"
-                />
-              </div>
-              <button
-                class="ac-primary-button whitespace-nowrap px-3 py-2"
-                phx-click="revoke-target-device"
-              >
-                Revoke
-              </button>
-            </div>
-
-            <div class="flex items-end gap-2">
-              <div class="min-w-0 grow">
-                <.typography tag="label" size="2xs" color="deemphasized">
-                  Recovery ref
-                </.typography>
-                <input
-                  type="text"
-                  class="ac-text-input w-full"
-                  value={@recovery_ref}
-                  phx-keyup="update-recovery-ref"
-                  phx-debounce="150"
-                  name="value"
-                  placeholder="spike-recovery-..."
-                />
-              </div>
-              <button
-                class="ac-primary-button whitespace-nowrap px-3 py-2"
-                phx-click="recover-conversation-security-state"
-              >
-                Recover
-              </button>
-            </div>
-
-            <div class="flex gap-2 md:col-span-2">
-              <button
-                class="ac-primary-button px-3 py-2"
-                phx-click="reset-conversation-security-state"
-              >
-                Reset Security State
-              </button>
-              <button
-                class="ac-primary-button px-3 py-2"
-                phx-click="reload-history"
-              >
-                Reload History
-              </button>
-            </div>
-          </section>
-        </details>
-      <% end %>
-
-      <%!-- Invite URL display inside conversation view (if admin just generated one) --%>
-      <%= if @invite_url do %>
-        <div class="mx-md mb-sm flex flex-col gap-sm rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3">
-          <.typography tag="p" size="sm" color="deemphasized">
-            <%= gettext(
-              "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
-            ) %>
-          </.typography>
-          <div class="flex gap-sm items-center">
+        <div class="ac-input-area shrink-0 p-md pb-xl">
+          <form
+            phx-submit="send-message"
+            class="relative flex items-center gap-sm rounded-full bg-white p-2 shadow-sm border border-[var(--color-brown-200)] focus-within:border-[var(--color-brown-500)] focus-within:ring-1 focus-within:ring-[var(--color-brown-500)] transition-all"
+          >
             <input
               type="text"
-              readonly
-              class="ac-text-input grow font-mono"
-              value={@invite_url}
-              id="invite-url-display-chat"
-              aria-label={gettext("Invite link")}
+              id="message-input"
+              class="grow border-none bg-transparent px-4 py-2 focus:ring-0 text-md placeholder-[var(--color-brown-400)] text-[var(--color-brown-900)]"
+              placeholder={
+                if is_nil(@last_seen_message_id),
+                  do: gettext("Say hello…"),
+                  else: gettext("Type a message…")
+              }
+              value={@current_message}
+              phx-keyup="update-message"
+              phx-debounce="100"
+              name="value"
+              autocomplete="off"
             />
             <button
-              phx-hook="CopyToClipboard"
-              id="copy-invite-url-chat"
-              data-copy-value={@invite_url}
-              class="ac-primary-button shrink-0 px-md py-2xs rounded-full"
+              id="send-message-button"
+              type="submit"
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brown-600)] text-[var(--color-brown-50)] transition-colors disabled:opacity-50 disabled:bg-[var(--color-brown-200)] disabled:text-[var(--color-brown-400)] hover:bg-[var(--color-brown-700)]"
+              disabled={
+                !@channel_joined or String.trim(@current_message || "") == ""
+              }
             >
-              <.typography tag="span" size="sm" color="callout">
-                <%= gettext("Copy") %>
-              </.typography>
+              <Heroicons.paper_airplane solid class="h-5 w-5 -ml-0.5" />
             </button>
-          </div>
+          </form>
         </div>
-      <% end %>
 
-      <div
-        id="messages-scroll-container"
-        class="flex grow flex-col gap-lg overflow-y-auto p-md pb-xl"
-        phx-update="stream"
-      >
-        <%= if is_nil(@last_seen_message_id) do %>
-          <div
-            id="empty-state"
-            class="mb-auto mt-auto flex flex-col items-center justify-center text-center opacity-70"
-          >
-            <.typography tag="p" size="lg" color="deemphasized">
-              <%= case @family_members do
-                [other] ->
-                  gettext("Your private space with %{name}. Say hello.",
-                    name: other.username
-                  )
-
-                _ ->
-                  gettext("Your private family space. Say hello.")
-              end %>
-            </.typography>
-          </div>
-        <% end %>
-        <%= for {dom_id, message} <- @streams.messages do %>
-          <div
-            id={dom_id}
-            class={[
-              "flex max-w-[85%] flex-col",
-              cond do
-                message.system_message -> "self-center items-center"
-                message.outgoing -> "self-end items-end"
-                true -> "self-start items-start"
-              end
-            ]}
-          >
-            <div class="mb-1.5 flex items-baseline gap-2 px-1">
-              <%!-- sender_name renders the resolved username; "Family Member" is a fallback when sender record is not preloaded --%>
-              <.typography tag="span" size="sm" color="main">
-                <%= message.sender_name %>
-              </.typography>
-              <.typography tag="span" size="xs" color="deemphasized">
-                <%= Calendar.strftime(message.timestamp, "%H:%M") %>
-              </.typography>
-            </div>
-            <div class={[
-              "ac-chat-bubble !p-4 !text-[1.05rem] !leading-relaxed shadow-sm",
-              cond do
-                message.system_message ->
-                  "rounded-md border border-[var(--color-brown-200)] bg-white/70"
-
-                message.outgoing ->
-                  "ac-chat-bubble-outgoing !bg-orange-50/80 !border-orange-100/50"
-
-                true ->
-                  "ac-chat-bubble-incoming !bg-white !border-transparent"
-              end
-            ]}>
-              <.typography tag="p" size="md" color="main">
-                <%= message.body %>
-              </.typography>
-            </div>
-          </div>
-        <% end %>
-      </div>
-
-      <div class="ac-input-area shrink-0 p-md pb-xl">
-        <form
-          phx-submit="send-message"
-          class="relative flex items-center gap-sm rounded-full bg-white p-2 shadow-sm border border-[var(--color-brown-200)] focus-within:border-[var(--color-brown-500)] focus-within:ring-1 focus-within:ring-[var(--color-brown-500)] transition-all"
-        >
-          <input
-            type="text"
-            id="message-input"
-            class="grow border-none bg-transparent px-4 py-2 focus:ring-0 text-md placeholder-[var(--color-brown-400)] text-[var(--color-brown-900)]"
-            placeholder={
-              if is_nil(@last_seen_message_id),
-                do: gettext("Say hello…"),
-                else: gettext("Type a message…")
+        <script>
+          const scrollToBottom = () => {
+            const container = document.getElementById('messages-scroll-container');
+            if (container) {
+              container.scrollTop = container.scrollHeight;
             }
-            value={@current_message}
-            phx-keyup="update-message"
-            phx-debounce="100"
-            name="value"
-            autocomplete="off"
-          />
-          <button
-            id="send-message-button"
-            type="submit"
-            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brown-600)] text-[var(--color-brown-50)] transition-colors disabled:opacity-50 disabled:bg-[var(--color-brown-200)] disabled:text-[var(--color-brown-400)] hover:bg-[var(--color-brown-700)]"
-            disabled={
-              !@channel_joined or String.trim(@current_message || "") == ""
-            }
-          >
-            <Heroicons.paper_airplane solid class="h-5 w-5 -ml-0.5" />
-          </button>
-        </form>
+          };
+          window.addEventListener('phx:update', scrollToBottom);
+          document.addEventListener('DOMContentLoaded', scrollToBottom);
+        </script>
       </div>
-
-      <script>
-        const scrollToBottom = () => {
-          const container = document.getElementById('messages-scroll-container');
-          if (container) {
-            container.scrollTop = container.scrollHeight;
-          }
-        };
-        window.addEventListener('phx:update', scrollToBottom);
-        document.addEventListener('DOMContentLoaded', scrollToBottom);
-      </script>
-    </div>
+    <% end %>
   <% end %>
 <% end %>

@@ -33,28 +33,53 @@ defmodule Famichat.Auth.Tokens.Policy do
   or new — reads from a single source of truth. Infrastructure modules
   receive a policy struct instead of redefining TTLs, audiences, or
   storage classes.
+
+  ## TTL conventions
+
+  All TTL values are in **seconds**. Do NOT use `:timer.hours/1` or
+  `:timer.minutes/1` — those return milliseconds. Use the named
+  constants below for readability.
   """
 
   @typedoc "Storage backends supported by token issuance."
   @type storage :: :ledgered | :signed | :device_secret
 
+  @typedoc "Audience scopes for token kinds."
+  @type audience :: :registrant | :user | :device | :admin
+
   alias Famichat.Auth.Tokens.Policy.Definition
+
+  # TTL named constants — all values in seconds.
+  # Using named constants rather than raw arithmetic prevents unit confusion
+  # (e.g. accidentally using :timer.hours/1 which returns milliseconds).
+  @one_minute 60
+  @five_minutes 5 * @one_minute
+  @ten_minutes 10 * @one_minute
+  @fifteen_minutes 15 * @one_minute
+  @thirty_minutes 30 * @one_minute
+  @one_hour 3600
+  @one_day 86_400
+  @three_days 3 * @one_day
+  @seven_days 7 * @one_day
+  @fourteen_days 14 * @one_day
+  @thirty_days 30 * @one_day
+  @ninety_days 90 * @one_day
 
   @policies Macro.escape(%{
               invite: %Definition{
                 kind: :invite,
                 storage: :ledgered,
-                ttl: 7 * 24 * 60 * 60,
-                max_ttl: 14 * 24 * 60 * 60,
-                audience: :invitee,
+                ttl: @seven_days,
+                max_ttl: @fourteen_days,
+                audience: :registrant,
                 legacy_context: "invite",
                 subject_strategy: :none
               },
               pair_qr: %Definition{
                 kind: :pair_qr,
                 storage: :ledgered,
-                ttl: 10 * 60,
-                max_ttl: 30 * 60,
+                ttl: @ten_minutes,
+                max_ttl: @thirty_minutes,
                 audience: :device,
                 legacy_context: "pair",
                 subject_strategy: :none
@@ -62,8 +87,8 @@ defmodule Famichat.Auth.Tokens.Policy do
               pair_admin_code: %Definition{
                 kind: :pair_admin_code,
                 storage: :ledgered,
-                ttl: 10 * 60,
-                max_ttl: 30 * 60,
+                ttl: @ten_minutes,
+                max_ttl: @thirty_minutes,
                 audience: :device,
                 legacy_context: "pair",
                 subject_strategy: :none
@@ -71,17 +96,17 @@ defmodule Famichat.Auth.Tokens.Policy do
               invite_registration: %Definition{
                 kind: :invite_registration,
                 storage: :ledgered,
-                ttl: 10 * 60,
-                max_ttl: 30 * 60,
-                audience: :invitee,
+                ttl: @ten_minutes,
+                max_ttl: @thirty_minutes,
+                audience: :registrant,
                 legacy_context: "invite_registration",
                 subject_strategy: :user_id
               },
               passkey_registration: %Definition{
                 kind: :passkey_registration,
                 storage: :ledgered,
-                ttl: 10 * 60,
-                max_ttl: 30 * 60,
+                ttl: @ten_minutes,
+                max_ttl: @thirty_minutes,
                 audience: :user,
                 legacy_context: "passkey_register",
                 subject_strategy: :user_id
@@ -89,8 +114,8 @@ defmodule Famichat.Auth.Tokens.Policy do
               passkey_assertion: %Definition{
                 kind: :passkey_assertion,
                 storage: :ledgered,
-                ttl: 5 * 60,
-                max_ttl: 15 * 60,
+                ttl: @five_minutes,
+                max_ttl: @fifteen_minutes,
                 audience: :user,
                 legacy_context: "passkey_assert_challenge",
                 subject_strategy: :user_id
@@ -98,8 +123,8 @@ defmodule Famichat.Auth.Tokens.Policy do
               magic_link: %Definition{
                 kind: :magic_link,
                 storage: :ledgered,
-                ttl: 15 * 60,
-                max_ttl: 60 * 60,
+                ttl: @fifteen_minutes,
+                max_ttl: @one_hour,
                 audience: :user,
                 legacy_context: "magic_link",
                 subject_strategy: :user_id
@@ -107,8 +132,8 @@ defmodule Famichat.Auth.Tokens.Policy do
               otp: %Definition{
                 kind: :otp,
                 storage: :ledgered,
-                ttl: 10 * 60,
-                max_ttl: 30 * 60,
+                ttl: @ten_minutes,
+                max_ttl: @thirty_minutes,
                 audience: :user,
                 legacy_context: nil,
                 subject_strategy: :email_sha256
@@ -116,8 +141,8 @@ defmodule Famichat.Auth.Tokens.Policy do
               recovery: %Definition{
                 kind: :recovery,
                 storage: :ledgered,
-                ttl: 24 * 60 * 60,
-                max_ttl: 7 * 24 * 60 * 60,
+                ttl: @one_day,
+                max_ttl: @seven_days,
                 audience: :admin,
                 legacy_context: "recovery",
                 subject_strategy: :user_id
@@ -125,8 +150,8 @@ defmodule Famichat.Auth.Tokens.Policy do
               access: %Definition{
                 kind: :access,
                 storage: :signed,
-                ttl: 15 * 60,
-                max_ttl: 60 * 60,
+                ttl: @fifteen_minutes,
+                max_ttl: @one_hour,
                 audience: :device,
                 signing_salt: "user_access_v1",
                 subject_strategy: :device_id
@@ -134,19 +159,28 @@ defmodule Famichat.Auth.Tokens.Policy do
               session_refresh: %Definition{
                 kind: :session_refresh,
                 storage: :device_secret,
-                ttl: 30 * 24 * 60 * 60,
-                max_ttl: 90 * 24 * 60 * 60,
+                ttl: @thirty_days,
+                max_ttl: @ninety_days,
                 audience: :device,
                 subject_strategy: :device_id
               },
               channel_bootstrap: %Definition{
                 kind: :channel_bootstrap,
                 storage: :signed,
-                ttl: 60,
-                max_ttl: 120,
+                ttl: @one_minute,
+                max_ttl: 2 * @one_minute,
                 audience: :device,
                 signing_salt: "channel_bootstrap_v1",
                 subject_strategy: :device_id
+              },
+              family_setup: %Definition{
+                kind: :family_setup,
+                storage: :ledgered,
+                ttl: @three_days,
+                max_ttl: @seven_days,
+                audience: :registrant,
+                legacy_context: "family_setup",
+                subject_strategy: :none
               }
             })
 
@@ -162,7 +196,8 @@ defmodule Famichat.Auth.Tokens.Policy do
     recovery: "recovery",
     access: nil,
     session_refresh: "device_refresh",
-    channel_bootstrap: nil
+    channel_bootstrap: nil,
+    family_setup: "family_setup"
   }
 
   @doc "Returns the canonical policy for the provided token kind."
@@ -182,7 +217,7 @@ defmodule Famichat.Auth.Tokens.Policy do
   def max_ttl(kind), do: policy!(kind).max_ttl
 
   @doc "Audience associated with the token kind."
-  @spec audience(Famichat.Auth.Tokens.kind()) :: atom()
+  @spec audience(Famichat.Auth.Tokens.kind()) :: audience()
   def audience(kind), do: policy!(kind).audience
 
   @doc "Legacy context string for the token kind, if any."
