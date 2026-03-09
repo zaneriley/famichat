@@ -87,13 +87,12 @@ defmodule Famichat.Chat.Message do
   @spec max_content_bytes() :: pos_integer()
   def max_content_bytes, do: @max_content_bytes
 
+  @media_types [:image, :video, :voice, :file]
+
   defp validate_by_type(changeset) do
     case get_field(changeset, :message_type) do
       :text -> validate_required(changeset, [:content])
-      :image -> validate_required(changeset, [:media_url])
-      :video -> validate_required(changeset, [:media_url])
-      :voice -> validate_required(changeset, [:media_url])
-      :file -> validate_required(changeset, [:media_url])
+      type when type in @media_types -> validate_required(changeset, [:media_url])
       _ -> changeset
     end
   end

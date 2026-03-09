@@ -27,17 +27,17 @@ defmodule Famichat.Schema.Validations do
     min = Keyword.get(opts, :min, nil)
     count = Keyword.get(opts, :count, :graphemes)
 
+    length_opts = [max: max, count: count]
+    length_opts = if min, do: [{:min, min} | length_opts], else: length_opts
+
     changeset
     |> trim_field(field)
-    |> then(fn cs ->
-      if required, do: validate_required(cs, [field]), else: cs
-    end)
-    |> then(fn cs ->
-      length_opts = [max: max, count: count]
-      length_opts = if min, do: [{:min, min} | length_opts], else: length_opts
-      validate_length(cs, field, length_opts)
-    end)
+    |> maybe_validate_required(field, required)
+    |> validate_length(field, length_opts)
   end
+
+  defp maybe_validate_required(changeset, field, true), do: validate_required(changeset, [field])
+  defp maybe_validate_required(changeset, _field, false), do: changeset
 
   defp trim_field(changeset, field) do
     update_change(changeset, field, fn

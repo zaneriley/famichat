@@ -148,20 +148,18 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
     log(:debug, "Checking if route is valid: #{path}")
     log(:debug, "Method: #{conn.method}, Host: #{conn.host}")
 
-    result =
+    route_result =
       Phoenix.Router.route_info(
         FamichatWeb.Router,
         conn.method,
         path,
         conn.host
-      ) != :error
+      )
+
+    result = route_result != :error
 
     log(:debug, "Route #{path} is #{if result, do: "valid", else: "invalid"}")
-
-    log(
-      :debug,
-      "Route info: #{inspect(Phoenix.Router.route_info(FamichatWeb.Router, conn.method, path, conn.host))}"
-    )
+    log(:debug, "Route info: #{inspect(route_result)}")
 
     result
   end
@@ -239,7 +237,7 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
 
   @spec log(atom(), String.t()) :: :ok
   defp log(level, message) do
-    Logger.log(level, fn -> "[#{message}" end)
+    Logger.log(level, fn -> "[LocaleRedirection] #{message}" end)
   end
 
   def supported_locales, do: @supported_locales

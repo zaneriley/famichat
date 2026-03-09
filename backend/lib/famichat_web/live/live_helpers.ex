@@ -37,7 +37,8 @@ defmodule FamichatWeb.LiveHelpers do
 
   @default_title gettext("Famichat")
   @default_description gettext("Private, self-hosted messaging for families.")
-  @supported_locales ~w(en ja)
+  @supported_locales Application.compile_env(:famichat, :supported_locales, ~w(en ja))
+  @default_locale Application.compile_env(:famichat, :default_locale, "en")
 
   def on_mount(:default, params, session, socket) do
     socket = setup_common_assigns(socket, params, session)
@@ -79,7 +80,7 @@ defmodule FamichatWeb.LiveHelpers do
         url_locale in @supported_locales -> url_locale
         existing_locale in @supported_locales -> existing_locale
         session_locale in @supported_locales -> session_locale
-        true -> Application.get_env(:famichat, :default_locale, "en")
+        true -> @default_locale
       end
 
     Gettext.put_locale(FamichatWeb.Gettext, user_locale)
@@ -109,7 +110,7 @@ defmodule FamichatWeb.LiveHelpers do
   end
 
   defp get_user_locale(session) do
-    session["user_locale"] || Application.get_env(:famichat, :default_locale)
+    session["user_locale"] || @default_locale
   end
 
   def handle_locale_and_path(socket, params, uri) do

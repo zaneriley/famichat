@@ -75,9 +75,9 @@ defmodule FamichatWeb.Endpoint do
   end
 
   defp log_request(conn, _opts) do
-    Logger.warning(
+    Logger.debug(fn ->
       "Request received in Endpoint: #{inspect(conn.method)} #{inspect(conn.request_path)}"
-    )
+    end)
 
     conn
   end

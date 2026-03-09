@@ -43,7 +43,7 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
 
   defp mount_connected(raw_token, socket) do
     case Onboarding.validate_family_setup_token(raw_token) do
-      {:ok, %{"family_name" => family_name} = payload} ->
+      {:ok, %{"family_name" => _} = payload} ->
         {:ok, assign_register_step(socket, raw_token, payload)}
 
       {:error, :used} ->

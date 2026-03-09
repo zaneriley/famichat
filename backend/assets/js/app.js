@@ -10,10 +10,10 @@ import PasskeyRegisterHook from "./hooks/passkey_register_hook";
 import PasskeyAdminSetupHook from "./hooks/passkey_admin_setup_hook";
 import CopyToClipboardHook from "./hooks/copy_to_clipboard_hook";
 
-// Dev detection: only enable debug features on localhost or with ?debug=1
+// Dev detection: localhost/127.0.0.1 are dev environments.
+// ?debug=1 enables verbose debug overlay (dev-only, not a production backdoor).
 const isDev = window.location.hostname === "localhost" ||
-              window.location.hostname === "127.0.0.1" ||
-              window.location.search.includes("debug=1");
+              window.location.hostname === "127.0.0.1";
 
 if (isDev && window.location.search.includes("debug=1")) {
   window.debugMode = true;
@@ -98,14 +98,14 @@ window.addEventListener("phx:page-loading-start", (info) => {
   if (info.detail.kind === "redirect") {
     document
       .querySelector("[data-main-view]")
-      .classList.add("phx-page-loading");
+      ?.classList.add("phx-page-loading");
   }
 });
 
 window.addEventListener("phx:page-loading-stop", (info) => {
   document
     .querySelector("[data-main-view]")
-    .classList.remove("phx-page-loading");
+    ?.classList.remove("phx-page-loading");
 });
 
 // Connect to the LiveSocket
