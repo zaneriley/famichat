@@ -1,0 +1,56 @@
+<div class="flex min-h-screen flex-col items-center justify-center p-2xl">
+  <div class="flex w-full max-w-sm flex-col gap-2xl">
+    <.typography tag="span" size="1xl" font="cardinal">Famichat</.typography>
+
+    <div class="flex flex-col gap-md">
+      <.typography tag="h1" size="2xl" color="main">
+        <%= gettext("Set up your family space") %>
+      </.typography>
+      <.typography tag="p" size="md" color="deemphasized">
+        <%= gettext("Pick a name for your family. You can change it later.") %>
+      </.typography>
+    </div>
+
+    <form phx-submit="submit-family-name" class="flex flex-col gap-md">
+      <div class="flex flex-col gap-2xs">
+        <label for="family_name" class="sr-only">
+          <%= gettext("Family name") %>
+        </label>
+        <input
+          id="family_name"
+          type="text"
+          name="family_name"
+          value={@family_name}
+          placeholder={gettext("e.g. The Rileys")}
+          autocomplete="organization"
+          spellcheck="false"
+          maxlength="100"
+          class="ac-text-input w-full"
+        />
+        <.typography tag="p" size="2xs" color="deemphasized">
+          <%= gettext("Leave blank to use \"My Family.\"") %>
+        </.typography>
+        <%= if @error do %>
+          <div role="alert">
+            <.typography tag="p" size="2xs" color="callout">
+              <%= error_message(@error) %>
+            </.typography>
+          </div>
+        <% end %>
+      </div>
+
+      <button type="submit" class="ac-primary-button w-full">
+        <.typography tag="span" size="md" color="main">
+          <%= gettext("Continue") %>
+        </.typography>
+      </button>
+    </form>
+
+    <.typography tag="p" size="2xs" color="deemphasized">
+      <%= gettext("Already have an account?") %>
+      <a href={locale_path(assigns, "/login")} class="underline">
+        <%= gettext("Sign in") %>
+      </a>
+    </.typography>
+  </div>
+</div>

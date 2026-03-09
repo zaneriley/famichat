@@ -1,0 +1,164 @@
+<div class="flex flex-col gap-2xl p-2xl">
+  <%= case @step do %>
+    <% :check -> %>
+      <%!-- SSR placeholder — replaced immediately by connected mount. --%>
+      <div aria-busy="true" class="flex flex-col items-center gap-md">
+        <span
+          class="animate-spin inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full"
+          aria-hidden="true"
+        >
+        </span>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Loading...") %>
+        </.typography>
+      </div>
+    <% :invalid -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("This setup link didn't work") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= error_message(@error) %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext(
+            "It may have expired or already been used. Ask the person who sent it to you to generate a new one."
+          ) %>
+        </.typography>
+        <a
+          href={locale_path(assigns, "/login")}
+          class="ac-secondary-button w-full text-center rounded-full px-md py-2xs"
+        >
+          <.typography tag="span" size="md" color="deemphasized">
+            <%= gettext("Already have an account? Sign in") %>
+          </.typography>
+        </a>
+      </div>
+    <% :register -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("You've been invited to the %{family_name} family.",
+            family_name: @family_name
+          ) %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext(
+            "The person who set this up has made you the first member. Just pick a name your family will see."
+          ) %>
+        </.typography>
+      </div>
+
+      <form phx-submit="submit-username" class="flex flex-col gap-md">
+        <div class="flex flex-col gap-2xs">
+          <label for="username" class="sr-only">
+            <%= gettext("Your name") %>
+          </label>
+          <input
+            id="username"
+            type="text"
+            name="username"
+            value={@username}
+            placeholder={gettext("e.g. Mum, Dad, Grandma Rose")}
+            autocomplete="nickname"
+            autocapitalize="words"
+            spellcheck="false"
+            maxlength="50"
+            class="ac-text-input w-full"
+          />
+          <.typography tag="p" size="2xs" color="deemphasized">
+            <%= gettext(
+              "Just a name your family will see. We don't ask for your real name, phone number, or email."
+            ) %>
+          </.typography>
+          <%= if @error do %>
+            <div role="alert">
+              <.typography tag="p" size="2xs" color="callout">
+                <%= error_message(@error) %>
+              </.typography>
+            </div>
+          <% end %>
+        </div>
+
+        <button type="submit" class="ac-primary-button w-full">
+          <.typography tag="span" size="md" color="main">
+            <%= gettext("Continue — set up your passkey next") %>
+          </.typography>
+        </button>
+      </form>
+    <% :passkey -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("Secure your account, %{username}.", username: @username) %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext(
+            "A passkey is like a fingerprint for your account — it uses your device to confirm it's you."
+          ) %>
+        </.typography>
+      </div>
+
+      <%= case @error do %>
+        <% {:fatal, _msg} -> %>
+          <div role="alert" class="flex flex-col gap-2xs">
+            <.typography tag="p" size="1xs" color="callout">
+              <%= error_message(@error) %>
+            </.typography>
+          </div>
+        <% _ -> %>
+          <%= if @error do %>
+            <div role="alert" class="flex flex-col gap-2xs">
+              <.typography tag="p" size="1xs" color="callout">
+                <%= error_message(@error) %>
+              </.typography>
+            </div>
+          <% end %>
+          <div class="flex flex-col gap-md">
+            <.typography tag="p" size="2xs" color="deemphasized">
+              <%= gettext(
+                "Your device will ask to confirm it's you — it takes about 2 seconds."
+              ) %>
+            </.typography>
+            <button
+              id="passkey-register-btn"
+              phx-hook="PasskeyRegister"
+              data-passkey-register-token={@passkey_register_token}
+              data-username={@username}
+              type="button"
+              class="ac-primary-button w-full"
+            >
+              <.typography tag="span" size="md" color="main">
+                <%= gettext("Set up passkey") %>
+              </.typography>
+            </button>
+            <.typography tag="p" size="2xs" color="deemphasized">
+              <%= gettext(
+                "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
+              ) %>
+            </.typography>
+          </div>
+      <% end %>
+    <% :success -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= if @family_name do %>
+            <%= gettext("You're part of the %{family_name} family.",
+              family_name: @family_name
+            ) %>
+          <% else %>
+            <%= gettext("Your account is ready.") %>
+          <% end %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Your passkey is set up. Sign in to get started.") %>
+        </.typography>
+        <a
+          href={locale_path(assigns, "/login")}
+          class="ac-secondary-button w-full text-center rounded-full px-md py-2xs"
+        >
+          <.typography tag="span" size="md" color="deemphasized">
+            <%= gettext("Sign in") %>
+          </.typography>
+        </a>
+      </div>
+  <% end %>
+</div>

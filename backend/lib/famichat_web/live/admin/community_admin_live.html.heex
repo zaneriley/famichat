@@ -1,0 +1,194 @@
+<div class="flex flex-col gap-2xl p-2xl">
+  <%= case @step do %>
+    <% :loading -> %>
+      <div aria-busy="true" class="flex flex-col items-center gap-md">
+        <span
+          class="animate-spin inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full"
+          aria-hidden="true"
+        >
+        </span>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext("Loading...") %>
+        </.typography>
+      </div>
+    <% :unauthorized -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("Not authorized") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= error_message(@error) %>
+        </.typography>
+        <a
+          href={locale_path(assigns, "/login")}
+          class="ac-secondary-button w-full text-center rounded-full px-md py-2xs"
+        >
+          <.typography tag="span" size="md" color="deemphasized">
+            <%= gettext("Sign in") %>
+          </.typography>
+        </a>
+      </div>
+    <% :dashboard -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("Your families") %>
+        </.typography>
+      </div>
+
+      <%= if @error do %>
+        <div role="alert">
+          <.typography tag="p" size="2xs" color="callout">
+            <%= error_message(@error) %>
+          </.typography>
+        </div>
+      <% end %>
+
+      <div class="flex flex-col gap-md">
+        <%= if Enum.empty?(@families) do %>
+          <.typography tag="p" size="md" color="deemphasized">
+            <%= gettext("No families yet.") %>
+          </.typography>
+        <% else %>
+          <div class="flex flex-col gap-sm">
+            <%= for family <- @families do %>
+              <div class="flex items-center justify-between p-md border border-current/10 rounded-lg">
+                <div class="flex flex-col gap-2xs">
+                  <.typography tag="p" size="md" color="main">
+                    <%= family.name %>
+                  </.typography>
+                  <.typography tag="p" size="2xs" color="deemphasized">
+                    <%= ngettext(
+                      "%{count} member",
+                      "%{count} members",
+                      family.member_count,
+                      count: family.member_count
+                    ) %>
+                  </.typography>
+                </div>
+                <%= if family.member_count == 0 do %>
+                  <button
+                    type="button"
+                    phx-click="reissue_setup_link"
+                    phx-value-family_id={family.id}
+                    class="ac-secondary-button px-md py-2xs rounded-full"
+                  >
+                    <.typography tag="span" size="2xs" color="deemphasized">
+                      <%= gettext("Resend setup link") %>
+                    </.typography>
+                  </button>
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+
+        <button
+          type="button"
+          phx-click="show_create_form"
+          class="ac-primary-button w-full"
+        >
+          <.typography tag="span" size="md" color="main">
+            <%= gettext("Add a family") %>
+          </.typography>
+        </button>
+      </div>
+    <% :create_family -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("Set up a new family space") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext(
+            "Give this space a name. You'll get a setup link to share with the person who will run it."
+          ) %>
+        </.typography>
+      </div>
+
+      <form phx-submit="generate_setup_link" class="flex flex-col gap-md">
+        <div class="flex flex-col gap-2xs">
+          <label for="family_name" class="sr-only">
+            <%= gettext("Family name") %>
+          </label>
+          <input
+            id="family_name"
+            type="text"
+            name="family_name"
+            value={@family_name}
+            placeholder={gettext("e.g. The Rileys, Smith Family")}
+            autocomplete="off"
+            autocapitalize="words"
+            spellcheck="false"
+            maxlength="100"
+            class="ac-text-input w-full"
+          />
+          <%= if @error do %>
+            <div role="alert">
+              <.typography tag="p" size="2xs" color="callout">
+                <%= error_message(@error) %>
+              </.typography>
+            </div>
+          <% end %>
+        </div>
+
+        <button type="submit" class="ac-primary-button w-full">
+          <.typography tag="span" size="md" color="main">
+            <%= gettext("Generate setup link") %>
+          </.typography>
+        </button>
+
+        <button
+          type="button"
+          phx-click="cancel_create"
+          class="ac-secondary-button w-full"
+        >
+          <.typography tag="span" size="md" color="deemphasized">
+            <%= gettext("Cancel") %>
+          </.typography>
+        </button>
+      </form>
+    <% :show_setup_link -> %>
+      <div class="flex flex-col gap-md">
+        <.typography tag="h1" size="2xl" color="main">
+          <%= gettext("Setup link ready") %>
+        </.typography>
+        <.typography tag="p" size="md" color="deemphasized">
+          <%= gettext(
+            "Share this link with the person who will manage the %{family_name} space. It expires in 3 days.",
+            family_name: @created_family.name
+          ) %>
+        </.typography>
+
+        <div class="flex flex-col gap-2xs">
+          <input
+            id="setup-url"
+            type="text"
+            value={@setup_url}
+            readonly
+            class="ac-text-input w-full font-mono text-sm"
+            aria-label={gettext("Setup link")}
+          />
+          <button
+            type="button"
+            id="copy-setup-url"
+            phx-hook="Clipboard"
+            data-clipboard-target="#setup-url"
+            class="ac-secondary-button w-full"
+          >
+            <.typography tag="span" size="md" color="deemphasized">
+              <%= gettext("Copy link") %>
+            </.typography>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          phx-click="back_to_dashboard"
+          class="ac-secondary-button w-full"
+        >
+          <.typography tag="span" size="md" color="deemphasized">
+            <%= gettext("Back to families") %>
+          </.typography>
+        </button>
+      </div>
+  <% end %>
+</div>

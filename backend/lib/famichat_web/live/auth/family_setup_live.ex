@@ -47,34 +47,36 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
         {:ok, assign_register_step(socket, raw_token, payload)}
 
       {:error, :used} ->
-        # Reconnect after the token was consumed by complete_family_setup/2.
-        # Recover state without re-consuming, mirroring InviteLive's peek pattern.
-        case Onboarding.peek_family_setup(raw_token) do
-          {:ok, %{user: user, passkey_register_token: passkey_token} = result} ->
-            # User was created — resume at passkey step
-            {:ok,
-             socket
-             |> assign(:step, :passkey)
-             |> assign(:token, raw_token)
-             |> assign(:family_name, result.payload["family_name"])
-             |> assign(:error, nil)
-             |> assign(:username, user.username || "")
-             |> assign(:passkey_register_token, passkey_token)
-             |> assign(:user_id, user.id)
-             |> assign_page_metadata(gettext("Complete your setup"))}
-
-          {:ok, %{payload: payload}} ->
-            # Token consumed but no user yet — show register step
-            {:ok, assign_register_step(socket, raw_token, payload)}
-
-          {:error, :already_completed} ->
-            {:ok, assign_invalid_step(socket, :already_completed)}
-
-          {:error, reason} ->
-            {:ok, assign_invalid_step(socket, reason)}
-        end
+        recover_from_used_token(raw_token, socket)
 
       {:error, reason} when reason in [:expired, :invalid] ->
+        {:ok, assign_invalid_step(socket, reason)}
+    end
+  end
+
+  # Reconnect after the token was consumed by complete_family_setup/2.
+  # Recover state without re-consuming, mirroring InviteLive's peek pattern.
+  defp recover_from_used_token(raw_token, socket) do
+    case Onboarding.peek_family_setup(raw_token) do
+      {:ok, %{user: user, passkey_register_token: passkey_token} = result} ->
+        {:ok,
+         socket
+         |> assign(:step, :passkey)
+         |> assign(:token, raw_token)
+         |> assign(:family_name, result.payload["family_name"])
+         |> assign(:error, nil)
+         |> assign(:username, user.username || "")
+         |> assign(:passkey_register_token, passkey_token)
+         |> assign(:user_id, user.id)
+         |> assign_page_metadata(gettext("Complete your setup"))}
+
+      {:ok, %{payload: payload}} ->
+        {:ok, assign_register_step(socket, raw_token, payload)}
+
+      {:error, :already_completed} ->
+        {:ok, assign_invalid_step(socket, :already_completed)}
+
+      {:error, reason} ->
         {:ok, assign_invalid_step(socket, reason)}
     end
   end
