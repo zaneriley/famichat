@@ -1,6 +1,6 @@
 # IA/DDD Boundary Guardrails
 
-**Last Updated**: 2026-02-26
+**Last Updated**: 2026-03-08
 **Authority Inputs**: [ia-lexicon.md](ia-lexicon.md), [ENCRYPTION.md](ENCRYPTION.md), [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Goal
@@ -19,6 +19,9 @@ Keep naming and ownership boundaries stable so implementation work does not drif
 1. `Famichat.Chat` owns durable state and policy decisions.
 2. `Famichat.Crypto.MLS` and `backend/infra/mls_nif` are adapters only.
 3. Protocol (`mls`) is data, not a boundary prefix for Chat-owned modules/tables.
+
+4. `Famichat.Accounts.FamilyContext` owns active-family resolution. It depends on Accounts schemas and Repo only; it does NOT depend on `Famichat.Auth` (to avoid circular dependencies). It is not part of `Famichat.Chat` or `Famichat.Auth`.
+5. "Set up your family space" is shown on the public front door as a secondary action (below the sign-in button) when the instance is bootstrapped and `self_service_enabled` is `true`. Self-service family creation is rate-limited (3 per IP per hour) and creates isolated family spaces; it does not grant access to existing families. The URL itself is the admission gate -- the operator chose to share the server address, and that is a trust decision. An operator toggle (`self_service_enabled`, default `true`) controls whether this CTA appears; when `false`, the front door reverts to invite-only. This toggle is planned as a boolean at MLP, evolving to a tri-state (`:open`, `:approval_required`, `:closed`) at L3.
 
 ## Naming Guardrails
 
@@ -48,12 +51,20 @@ cd backend && ./run docs:boundary-check
 This check is also wired into `./run ci:lint` and `./run lint:all`.
 
 Current check scope (active docs):
-1. `docs/ENCRYPTION.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/NOW.md`
-4. `docs/sprints/CURRENT-SPRINT.md`
-5. `docs/sprints/ROADMAP.md`
-6. `docs/sprints/STATUS.md`
+1. `docs/SPEC.md`
+2. `docs/ia-lexicon.md`
+3. `docs/ia-boundary-guardrails.md`
+
+## Deferred Terms (do not introduce in code or product copy)
+
+These terms are tracked here so the drift check can flag premature introduction.
+They are not canonical product terms. See `ia-lexicon.md` § "Research Concepts
+Under Consideration" for definitions and provenance.
+
+1. `neighborhood` — Deferred product framing per `ia-lexicon.md`. Do not introduce
+   in new product, engineering, or boundary docs until dogfood proves it is understood
+   by users. The word is ambiguous (geographic vs trust-based) and its governance
+   implications are unresolved. (Phase 1 peer review, Review 4, recommendation #5.)
 
 ## Review Rule
 

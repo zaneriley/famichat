@@ -59,7 +59,64 @@ These rules exist because agents repeatedly committed broken code that was never
 
 - Read `docs/NOW.md` before starting any task — it contains the current known bugs and what's been built
 - Read `docs/SPEC.md` for product intent — don't build features marked as deferred or L3+
+- Read `docs/BACKLOG.md` for tracked issues — check if your work is already tracked before starting
 - Throwaway LiveViews (auth, onboarding) must stay tightly coupled — no abstractions, no shared components beyond what already exists
+
+### Bounded Context Discipline
+
+- **Never cross context boundaries with direct `Repo` calls.** If you need to create a `Chat.Family` from `Auth.Onboarding`, call `Chat.create_family/1` — do not call `Repo.insert(Family.changeset(...))` directly.
+- The ownership map is in `docs/ia-boundary-guardrails.md`. When in doubt, check it.
+- Run `cd backend && ./run docs:boundary-check` after any change that touches schemas or context modules. Zero violations is the gate.
+- Naming must match `docs/ia-lexicon.md`. Use `family` not `household`, `passkey` not `credential`, `community` not `server`. The lexicon is the canonical source.
+
+### LiveView State Survival
+
+- **Assign-only state is lost on WebSocket reconnect.** Any state that must survive a network interruption (mobile sleep, tab backgrounding, flaky connection) must be stored in one of: session (via `put_session`), URL params (via `push_patch`), or the database.
+- This applies to multi-step flows especially — tokens, step progress, form data.
+
+### Copy and Brand Voice
+
+- **Read `docs/brand-positioning.md` before writing any user-facing copy.** Headings, button labels, helper text, error messages — everything.
+- Use "Sign in" not "Log in", "Set up" not "Create", "name" not "username".
+- No corporate speak. Warm and familial. No E2EE claims in user-facing copy (server is trust anchor at MLP).
+
+---
+
+## Canonical Docs
+
+These docs form the project's constraint system. Agents must read them before making decisions that touch their domains.
+
+| Doc | What it governs | When to read it |
+|-----|----------------|-----------------|
+| `docs/SPEC.md` | Product intent, scope, layers, entry points | Before building any feature |
+| `docs/NOW.md` | Current state, active bugs, what's shipped | Before starting any task |
+| `docs/BACKLOG.md` | Tracked issues, priorities, what's deferred/cut | Before flagging new issues |
+| `docs/ia-lexicon.md` | Canonical naming | Before naming anything |
+| `docs/ia-boundary-guardrails.md` | Module ownership, context boundaries | Before writing cross-module code |
+| `docs/E2EE_INTEGRATION.md` | Encryption architecture, trust model | Before touching crypto, MLS, or security |
+| `docs/brand-positioning.md` | Copy, tone, user-facing language | Before writing any UI text |
+
+---
+
+## Research and Documentation Workflow
+
+### Ephemeral vs durable artifacts
+
+- **`.tmp/`** is for research, agent outputs, review findings, and working state. These are disposable.
+- **`docs/`** is for canonical, evergreen project docs. These are the source of truth.
+- Findings move from `.tmp/` to `docs/` via the `/promote` skill or manual triage. They never move the other way.
+- `docs/BACKLOG.md` items may **point to** `.tmp/` files for detail. Do not delete `.tmp/` files that are pointed to.
+
+### Skills available
+
+| Skill | When to use |
+|-------|------------|
+| `/orient` | Ground yourself in the project before starting work |
+| `/research <slug>` | Explore a topic from multiple angles with parallel agents |
+| `/synthesize <slug>` | Converge research into a single consensus document |
+| `/promote` | Move consensus findings into canonical docs |
+| `/implement` | Execute a plan with review gates |
+| `/harness` | After reviews, identify recurring mistakes and improve tooling |
 
 ---
 

@@ -8,7 +8,7 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-The browser front door is walkable for first-family dogfood: setup, invite acceptance, passkey registration, passkey login, self-service family creation, and community admin family management all exist and are committed. All P0-dogfood items are closed. The message plane data model substrate is in place (message_seq, conversation_summaries, user_read_cursors) but unread count math and HomeLive family context wiring are not yet connected. Zero of five MLP dogfood gates have been browser-verified.
+The browser front door is NOT walkable. A real-browser QA pass (2026-03-09) found that admin bootstrap crashes on form submit: `@legacy_kind_map` in `tokens/policy.ex` maps `:passkey_registration` → `"passkey_reg"` but the DB CHECK constraint (from migration 20260308200000) only allows `"passkey_registration"`. This blocks ALL authenticated flows. Two new P0 items opened. The message plane data model substrate is in place (message_seq, conversation_summaries, user_read_cursors) but unread count math and HomeLive family context wiring are not yet connected. Zero of five MLP dogfood gates have been browser-verified.
 
 ---
 
@@ -56,6 +56,14 @@ The browser front door is walkable for first-family dogfood: setup, invite accep
 
 ## Current blockers
 
+### P0 — Token kind constraint mismatch (browser-walkthrough 2026-03-09)
+
+`@legacy_kind_map` in `backend/lib/famichat/auth/tokens/policy.ex:192` maps `:passkey_registration` → `"passkey_reg"`, but migration `20260308200000` renamed all `passkey_reg` rows to `passkey_registration` and the CHECK constraint only allows the long-form name. Same issue affects `:passkey_assertion` → `"passkey_assert"` and `:session_refresh` → `"device_refresh"`. Every token issuance for these kinds crashes with `Ecto.ConstraintError`, blocking admin bootstrap, passkey login, and session refresh.
+
+Additionally, user creation is not wrapped in a transaction with token issuance. When the token INSERT fails, the user exists but has no passkey and no way to register one — the app enters an unrecoverable state.
+
+**Fix**: Update `@legacy_kind_map` entries to match DB constraint values; wrap user+token creation in `Ecto.Multi`.
+
 ### ~~P0 — Self-service family creation~~ RESOLVED (95eb458)
 
 PutRemoteIp committed with compile-time CIDR caching and IPv4-mapped IPv6 normalization. FamilyNewLive reconnect fixed via architecture split (FamilyNewLive → redirect → FamilySetupLive with token in URL params, survives WebSocket disconnect). Both `/families/new` and `/families/start/:token` are committed and functional.
@@ -77,9 +85,9 @@ The following are absent from the database and service layer, all required for P
 - Unread count math — both prerequisite inputs are absent.
 - `Idempotency-Key` header — not read by any mutation endpoint. Reconnect retries produce duplicate messages.
 
-### P2 — Browser-walkable front door still needs a real browser pass
+### ~~P2 — Browser-walkable front door still needs a real browser pass~~ DONE (browser-walkthrough 2026-03-09)
 
-Route QA and LiveView tests now cover the root/login/setup recovery contract, but a fresh-browser manual walkthrough of bootstrap → passkey → signed-in home was not rerun in this update window.
+Real-browser walkthrough completed via Playwright MCP with virtual authenticator. Found 2 new P0 blockers (token kind constraint mismatch + non-transactional user creation). CUJs 2-7 blocked by CUJ 1 failure. Results: `.tmp/2026-03-09-browser-walkthrough/results.md`
 
 ---
 

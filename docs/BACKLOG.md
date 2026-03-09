@@ -95,6 +95,8 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 
 ## Blocks dogfooding (P0)
 <!-- Items here prevent handing the URL to family members -->
+- [ ] Fix @legacy_kind_map to match DB constraint — `"passkey_reg"` rejected by `user_tokens_kind_check`; ALL auth flows crash → backend/lib/famichat/auth/tokens/policy.ex:192 | P0-dogfood | browser-walkthrough
+- [ ] Wrap user+token creation in Ecto.Multi transaction — partial user creation leaves app unrecoverable without DB intervention → backend/lib/famichat/auth/onboarding.ex | P0-dogfood | browser-walkthrough
 - [x] Fix PutRemoteIp to parse X-Forwarded-For — all visitors share one rate-limit bucket behind any proxy → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P0-dogfood | agent:consensus (95eb458)
 - [x] Fix setup_token lost on FamilyNewLive WebSocket reconnect — mobile users lose family setup mid-flow → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P0-dogfood | agent:consensus (95eb458 — architecture split: FamilyNewLive → redirect → FamilySetupLive with token in URL)
 - [x] Add validate_length(:name, max: 100) to Family.changeset — unbounded input reaches DB without constraint → backend/lib/famichat/chat/family.ex:33 | P0-dogfood | agent:consensus (76776e4)
