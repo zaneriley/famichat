@@ -10,8 +10,12 @@ import PasskeyRegisterHook from "./hooks/passkey_register_hook";
 import PasskeyAdminSetupHook from "./hooks/passkey_admin_setup_hook";
 import CopyToClipboardHook from "./hooks/copy_to_clipboard_hook";
 
-// More advanced debugging
-if (window.location.search.includes("debug=1")) {
+// Dev detection: only enable debug features on localhost or with ?debug=1
+const isDev = window.location.hostname === "localhost" ||
+              window.location.hostname === "127.0.0.1" ||
+              window.location.search.includes("debug=1");
+
+if (isDev && window.location.search.includes("debug=1")) {
   window.debugMode = true;
   console.log("[App] Debug mode enabled");
 }
@@ -61,13 +65,15 @@ const liveSocket = new LiveSocket("/live", Socket, {
   params: { _csrf_token: csrfToken },
 });
 
-// Log LiveSocket state for debugging
-console.log("[App] LiveSocket initialized", {
-  host: window.location.host,
-  hasCsrfToken: !!csrfToken,
-  socketPath: "/live",
-  hooksCount: Object.keys(Hooks).length,
-});
+// Log LiveSocket state for debugging (dev only)
+if (isDev) {
+  console.log("[App] LiveSocket initialized", {
+    host: window.location.host,
+    hasCsrfToken: !!csrfToken,
+    socketPath: "/live",
+    hooksCount: Object.keys(Hooks).length,
+  });
+}
 
 // Topbar loader during page loading
 topbar.config({
@@ -105,14 +111,11 @@ window.addEventListener("phx:page-loading-stop", (info) => {
 // Connect to the LiveSocket
 liveSocket.connect();
 
-// Enable debug
-liveSocket.enableDebug();
-
-// Uncomment to enable latency simulation
-// liveSocket.enableLatencySim(1000);
-
-// Expose liveSocket to window for debugging
-window.liveSocket = liveSocket;
+// Enable debug and expose liveSocket (dev only)
+if (isDev) {
+  liveSocket.enableDebug();
+  window.liveSocket = liveSocket;
+}
 
 window.addEventListener("phx:live_reload:attached", ({ detail: reloader }) => {
   // Enable server log streaming to client.
@@ -121,10 +124,11 @@ window.addEventListener("phx:live_reload:attached", ({ detail: reloader }) => {
   window.liveReloader = reloader;
 });
 
-// REMOVE FOR PRODUCTION
-// This logs the time to first contentful paint (FCP) to the console.
-new PerformanceObserver((entryList) => {
-  for (const entry of entryList.getEntriesByName("first-contentful-paint")) {
-    console.log("FCP candidate:", entry.startTime, entry);
-  }
-}).observe({ type: "paint", buffered: true });
+// FCP timing (dev only)
+if (isDev) {
+  new PerformanceObserver((entryList) => {
+    for (const entry of entryList.getEntriesByName("first-contentful-paint")) {
+      console.log("FCP candidate:", entry.startTime, entry);
+    }
+  }).observe({ type: "paint", buffered: true });
+}

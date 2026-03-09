@@ -48,7 +48,7 @@
 
         <div class="flex flex-col gap-2xs">
           <label for="family_name" class="sr-only">
-            <%= gettext("Name your space") %>
+            <%= gettext("Family name") %>
           </label>
           <input
             id="family_name"
@@ -56,7 +56,7 @@
             name="family_name"
             value={@family_name}
             placeholder={
-              gettext("Name your space (e.g. The Rileys) \u2014 optional")
+              gettext("Family name (e.g. The Rileys) \u2014 optional")
             }
             autocomplete="organization"
             spellcheck="false"
@@ -64,7 +64,7 @@
           />
           <.typography tag="p" size="2xs" color="deemphasized">
             <%= gettext(
-              "This is what your shared space will be called. You can change it later."
+              "This is the name for your family. You can change it later."
             ) %>
           </.typography>
         </div>
@@ -114,11 +114,11 @@
               class="ac-secondary-button w-full"
             >
               <.typography tag="span" size="md" color="deemphasized">
-                <%= gettext("Reload page") %>
+                <%= gettext("Try again") %>
               </.typography>
             </button>
           </div>
-        <% {:retryable, _msg} -> %>
+        <% {:recoverable, _msg} -> %>
           <div role="alert" class="flex flex-col gap-2xs">
             <.typography tag="p" size="1xs" color="callout">
               <%= error_message(@error) %>
@@ -277,7 +277,7 @@
           class="ac-secondary-button w-full text-center"
         >
           <.typography tag="span" size="md" color="deemphasized">
-            <%= gettext("Sign in to your family space") %>
+            <%= gettext("Sign in to get started") %>
           </.typography>
         </a>
       </div>

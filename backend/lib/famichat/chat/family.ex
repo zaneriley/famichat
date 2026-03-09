@@ -4,6 +4,7 @@ defmodule Famichat.Chat.Family do
   """
   use Ecto.Schema
   import Ecto.Changeset
+  import Famichat.Schema.Validations
 
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
@@ -32,8 +33,9 @@ defmodule Famichat.Chat.Family do
   @doc false
   def changeset(family, attrs) do
     family
-    |> cast(attrs, [:name, :settings])
-    |> validate_required([:name])
+    |> cast(attrs, [:name, :settings, :community_id])
+    |> validate_string_field(:name, max: 100)
     |> unique_constraint(:name)
+    |> foreign_key_constraint(:community_id)
   end
 end

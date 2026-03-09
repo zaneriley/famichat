@@ -6,6 +6,7 @@ defmodule Famichat.Accounts.UserDevice do
   """
   use Ecto.Schema
   import Ecto.Changeset
+  import Famichat.Schema.Validations
 
   alias Famichat.Accounts.User
 
@@ -53,6 +54,8 @@ defmodule Famichat.Accounts.UserDevice do
       :revoked_at
     ])
     |> validate_required([:user_id, :device_id])
+    |> validate_string_field(:user_agent, required: false, max: 512)
+    |> validate_string_field(:ip, required: false, max: 45)
     |> unique_constraint(:device_id)
   end
 end

@@ -64,7 +64,15 @@ defmodule FamichatWeb.Endpoint do
     origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
     methods: ["GET", "POST"]
 
+  plug :strip_server_header
+
   plug FamichatWeb.Router
+
+  defp strip_server_header(conn, _opts) do
+    register_before_send(conn, fn conn ->
+      delete_resp_header(conn, "server")
+    end)
+  end
 
   defp log_request(conn, _opts) do
     Logger.warning(

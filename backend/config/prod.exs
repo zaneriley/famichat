@@ -21,3 +21,5 @@ config :famichat, environment: :prod
 config :famichat, :cache, disabled: true
 
 config :famichat, :csp, report_only: false
+
+config :phoenix_live_view, :debug_heex_annotations, false

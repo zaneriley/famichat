@@ -139,7 +139,6 @@ defmodule FamichatWeb.Plugs.LocaleRedirection do
   defp do_redirect(conn, path, redirect_count) do
     conn
     |> put_session(SessionKeys.redirect_count(), redirect_count)
-    |> put_status(:moved_permanently)
     |> redirect(to: path)
     |> halt()
   end

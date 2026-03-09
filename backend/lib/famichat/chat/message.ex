@@ -7,6 +7,7 @@ defmodule Famichat.Chat.Message do
   """
   use Ecto.Schema
   import Ecto.Changeset
+  import Famichat.Schema.Validations
 
   @type message_type ::
           :text | :voice | :video | :image | :file | :poke | :reaction | :gif
@@ -26,6 +27,7 @@ defmodule Famichat.Chat.Message do
           conversation_id: Ecto.UUID.t() | nil,
           sender: Famichat.Accounts.User.t() | nil,
           conversation: Famichat.Chat.Conversation.t() | nil,
+          message_seq: integer() | nil,
           inserted_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
         }
@@ -47,6 +49,7 @@ defmodule Famichat.Chat.Message do
     # Message delivery status
     field :status, Ecto.Enum, values: [:sent, :delivered, :read], default: :sent
     field :timestamp, :utc_datetime_usec
+    field :message_seq, :integer, read_after_writes: true
 
     # Sender of the message
     belongs_to :sender, Famichat.Accounts.User,
@@ -77,7 +80,7 @@ defmodule Famichat.Chat.Message do
       :timestamp
     ])
     |> validate_required([:sender_id, :conversation_id, :message_type, :status])
-    |> validate_length(:content, max: @max_content_bytes, count: :bytes)
+    |> validate_string_field(:content, required: false, max: @max_content_bytes, count: :bytes)
     |> validate_by_type()
   end
 

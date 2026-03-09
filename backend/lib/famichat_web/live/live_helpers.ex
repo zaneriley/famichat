@@ -52,13 +52,35 @@ defmodule FamichatWeb.LiveHelpers do
     {:cont, assign(socket, :admin, true)}
   end
 
+  def on_mount(:require_authenticated, params, session, socket) do
+    socket = setup_common_assigns(socket, params, session)
+    token = session["access_token"]
+
+    case Famichat.Auth.Sessions.verify_access_token(token) do
+      {:ok, %{user_id: user_id, device_id: device_id}} ->
+        {:cont,
+         socket
+         |> assign(:current_user_id, user_id)
+         |> assign(:current_device_id, device_id)}
+
+      _ ->
+        locale = socket.assigns[:user_locale] || "en"
+        {:halt, Phoenix.LiveView.push_navigate(socket, to: "/#{locale}/login")}
+    end
+  end
+
   defp setup_common_assigns(socket, params, session) do
     url_locale = params["locale"]
+    existing_locale = socket.assigns[:user_locale]
+    session_locale = session["user_locale"]
 
     user_locale =
-      if url_locale in @supported_locales,
-        do: url_locale,
-        else: get_user_locale(session)
+      cond do
+        url_locale in @supported_locales -> url_locale
+        existing_locale in @supported_locales -> existing_locale
+        session_locale in @supported_locales -> session_locale
+        true -> Application.get_env(:famichat, :default_locale, "en")
+      end
 
     Gettext.put_locale(FamichatWeb.Gettext, user_locale)
 

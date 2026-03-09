@@ -7,6 +7,13 @@ defmodule FamichatWeb.FallbackController do
     |> json(%{error: %{code: "not_found"}})
   end
 
+  def not_found_html(conn, _params) do
+    conn
+    |> put_status(:not_found)
+    |> put_view(FamichatWeb.ErrorHTML)
+    |> render("404.html")
+  end
+
   def call(conn, :not_found) do
     conn
     |> put_status(:not_found)

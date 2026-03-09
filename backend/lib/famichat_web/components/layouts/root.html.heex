@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html
-  lang={@user_locale || @conn.assigns[:user_locale] || "en"}
+  lang={assigns[:user_locale] || "en"}
   data-theme={Application.get_env(:famichat, :default_theme, "dark")}
 >
   <head>

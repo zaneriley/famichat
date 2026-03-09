@@ -3,6 +3,9 @@ defmodule FamichatWeb.Plugs.CSPHeader.Dev do
   Development environment specific CSP functions.
   """
 
+  @spec script_src(String.t()) :: String.t()
+  def script_src(all_hosts), do: "'self' #{all_hosts} 'unsafe-inline' 'unsafe-eval'"
+
   @spec frame_src() :: String.t()
   def frame_src, do: "'self'"
 

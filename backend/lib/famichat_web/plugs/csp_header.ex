@@ -84,7 +84,7 @@ defmodule FamichatWeb.Plugs.CSPHeader do
 
     [
       default_src: "'self' #{all_hosts}",
-      script_src: "'self' #{all_hosts} 'unsafe-inline' 'unsafe-eval'",
+      script_src: @env_module.script_src(all_hosts),
       style_src: "'self' #{all_hosts} 'unsafe-inline'",
       img_src: "'self' #{all_hosts} data:",
       font_src: "'self' #{all_hosts} data:",

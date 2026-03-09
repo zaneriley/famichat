@@ -31,6 +31,48 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     * Fatal — `"unsupported"`, `"already_registered"`,
       `"missing_registration_token"` — the button is hidden and a message
       with a Go back option is shown instead.
+
+  ## Pattern: Token-Gated LiveView with Reconnect Recovery
+
+  If you are building a new token-gated LiveView (a page gated by a URL token
+  that gets consumed mid-flow), you MUST implement the following three-part
+  contract. FamilySetupLive, SetupLive, and any future token-gated page must
+  follow this same pattern.
+
+  ### The contract
+
+    1. **Plug validates** the token at the HTTP layer. Return 404 for
+       structurally invalid tokens. Pass through expired/used tokens so the
+       LiveView can show friendly error UI.
+
+    2. **`mount_connected` tries the primary path** -- validate or consume
+       the token.
+
+    3. **On `{:error, :used}`, fall back to a `peek_*` function** that
+       recovers the token payload without re-consuming. This handles
+       WebSocket reconnect after the token was consumed mid-flow (e.g.,
+       after username submission but before passkey completion). See
+       `mount_connected/2` below for this module's implementation.
+
+  ### Why this matters
+
+  Mobile users on cellular will hit WebSocket reconnects within the first
+  session. Without the peek recovery, a reconnect after token consumption
+  shows "This link has already been used" to a user who is actively using
+  it. This was a P0 bug in FamilySetupLive (2026-03-09 bug bash).
+
+  ### Test requirement
+
+  Every token-gated LiveView must have a test that:
+
+    1. Issues the token
+    2. Consumes it (simulating mid-flow)
+    3. Mounts the LiveView with the consumed token
+    4. Asserts the user sees a recovery state, not an error
+
+  See `FamilySetupLiveTest` for the template. The test IS the enforcement
+  mechanism -- if a future agent creates a new token-gated LiveView and
+  copies this test template, the test itself catches the bug.
   """
 
   use FamichatWeb, :live_view
@@ -43,7 +85,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
   @recoverable_codes ~w(cancelled aborted network passkey_registration_failed
                         challenge_failed invalid_challenge expired used)
 
-  @fatal_codes ~w(unsupported already_registered missing_registration_token)
+  @fatal_codes ~w(unsupported already_registered missing_registration_token used_registration_token)
 
   @impl true
   def mount(%{"token" => token}, _session, socket) do
@@ -76,6 +118,9 @@ defmodule FamichatWeb.AuthLive.InviteLive do
         case Onboarding.peek_invite(token) do
           {:ok, payload, registration_token} ->
             {:ok, assign_accept_step(socket, payload, registration_token)}
+
+          {:error, :already_completed} ->
+            {:ok, mount_invalid(socket, :already_completed)}
 
           {:error, reason} ->
             {:ok, mount_invalid(socket, reason)}
@@ -161,6 +206,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     {:noreply,
      socket
      |> assign(:step, :accept)
+     |> assign(:passkey_register_token, nil)
      |> assign(:error, nil)}
   end
 
@@ -240,6 +286,9 @@ defmodule FamichatWeb.AuthLive.InviteLive do
 
   defp error_message(:used),
     do: gettext("This invite link has already been used.")
+
+  defp error_message(:already_completed),
+    do: gettext("This invite has already been used to create an account. Try signing in instead.")
 
   defp error_message(:invalid), do: gettext("This invite link is not valid.")
 

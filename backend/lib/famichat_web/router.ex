@@ -4,6 +4,7 @@ defmodule FamichatWeb.Router do
   alias FamichatWeb.Plugs.LocaleRedirection
   alias FamichatWeb.Plugs.CommonMetadata
   alias FamichatWeb.Plugs.CSPHeader
+  alias FamichatWeb.Plugs.PutRemoteIp
   alias FamichatWeb.Plugs.SessionRefresh
   import Phoenix.LiveView.Router
   import Phoenix.LiveDashboard.Router
@@ -21,9 +22,13 @@ defmodule FamichatWeb.Router do
     plug :fetch_live_flash
     plug :put_root_layout, {FamichatWeb.Layouts, :root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers
+    plug :put_secure_browser_headers, %{
+      "strict-transport-security" => "max-age=63072000; includeSubDomains"
+    }
+
     plug CSPHeader
     plug CommonMetadata
+    plug PutRemoteIp
   end
 
   pipeline :browser_authenticated do
@@ -158,12 +163,34 @@ defmodule FamichatWeb.Router do
     plug FamichatWeb.Plugs.ValidateInviteToken
   end
 
+  pipeline :validate_family_setup do
+    plug FamichatWeb.Plugs.ValidateFamilySetupToken
+  end
+
   # Invite route — validated at HTTP layer before LiveView mounts.
   scope "/:locale", FamichatWeb do
     pipe_through [:browser, :locale, :validate_invite]
 
     live_session :invite_session, on_mount: FamichatWeb.LiveHelpers do
       live "/invites/:token", AuthLive.InviteLive, :index
+    end
+  end
+
+  # Family setup link — validated at HTTP layer before LiveView mounts.
+  scope "/:locale", FamichatWeb do
+    pipe_through [:browser, :locale, :validate_family_setup]
+
+    live_session :family_setup_session, on_mount: FamichatWeb.LiveHelpers do
+      live "/families/start/:token", AuthLive.FamilySetupLive, :index
+    end
+  end
+
+  # Self-service family creation — public, no auth, no token validation.
+  scope "/:locale", FamichatWeb do
+    pipe_through [:browser, :locale]
+
+    live_session :family_new_session, on_mount: FamichatWeb.LiveHelpers do
+      live "/families/new", AuthLive.FamilyNewLive, :index
     end
   end
 
@@ -177,9 +204,22 @@ defmodule FamichatWeb.Router do
     end
   end
 
+  # Community admin panel — requires authentication.
+  scope "/:locale", FamichatWeb do
+    pipe_through [:browser, :browser_authenticated, :locale]
+
+    live_session :admin_panel_session,
+      on_mount: {FamichatWeb.LiveHelpers, :require_authenticated} do
+      live "/admin", AdminLive.CommunityAdminLive, :index
+    end
+  end
+
   # All other locale-scoped routes.
   scope "/:locale", FamichatWeb do
     pipe_through [:browser, :browser_authenticated, :locale]
+
+    # Family context switch — form POST from LiveView to update session cookie.
+    post "/families/switch", FamilyContextController, :switch
 
     # HomeLive is the only browser route that needs silent session refresh.
     live_session :home_session, on_mount: FamichatWeb.LiveHelpers do
@@ -195,10 +235,8 @@ defmodule FamichatWeb.Router do
       live "/login", AuthLive.LoginLive, :index
     end
 
-    # Redirect any unknown locale-scoped GET path to login rather than showing
-    # the debug page (dev) or a 500 (prod). Only GET is handled because
-    # POST/PUT/DELETE to unknown paths are not reachable via browser navigation.
-    get "/*path", LocaleCatchAllController, :redirect_to_login
+    # Logout: clears the Plug session and redirects to login.
+    get "/logout", SessionController, :delete
   end
 
   # API catch-all must be last so it does not shadow any /api/v1 routes defined
@@ -206,5 +244,12 @@ defmodule FamichatWeb.Router do
   scope "/api", FamichatWeb do
     pipe_through :api
     match :*, "/*path", FallbackController, :not_found
+  end
+
+  # Browser catch-all: any path not matched above gets a proper 404 page.
+  # This replaces the old LocaleCatchAllController that returned 200 redirects.
+  scope "/", FamichatWeb do
+    pipe_through :browser
+    get "/*path", FallbackController, :not_found_html
   end
 end

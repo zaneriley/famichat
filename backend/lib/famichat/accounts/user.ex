@@ -6,6 +6,7 @@ defmodule Famichat.Accounts.User do
   """
   use Ecto.Schema
   import Ecto.Changeset
+  import Famichat.Schema.Validations
 
   alias Famichat.Accounts.HouseholdMembership
   alias Famichat.Accounts.Passkey
@@ -49,6 +50,8 @@ defmodule Famichat.Accounts.User do
     field :last_login_at, :utc_datetime_usec
     field :enrollment_required_since, :utc_datetime_usec
 
+    field :last_active_family_id, :binary_id
+
     has_many :memberships, HouseholdMembership
     has_many :families, through: [:memberships, :family]
     has_many :passkeys, Passkey
@@ -72,8 +75,7 @@ defmodule Famichat.Accounts.User do
       :registration_token_id
     ])
     |> sanitize_username()
-    |> validate_required([:username])
-    |> validate_length(:username, max: 50)
+    |> validate_string_field(:username, min: 2, max: 50)
     |> normalize_email()
     |> put_email_fingerprint()
     |> put_username_fingerprint()

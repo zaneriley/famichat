@@ -53,27 +53,44 @@ defmodule FamichatWeb.Plugs.SetLocale do
     normalized_path = normalize_path(conn.request_path)
     conn = %{conn | request_path: normalized_path}
 
-    result =
-      if static_asset?(normalized_path) do
-        log(:debug, "Static asset detected, skipping locale setting",
-          path: normalized_path
-        )
+    # Early 404 for invalid locale path params: if the URL has a :locale segment
+    # that is not a supported locale, halt immediately with 404 instead of letting
+    # downstream plugs try to redirect or process it.
+    url_locale = conn.path_params["locale"]
 
-        conn
-      else
-        locale_data = extract_locale(conn)
-        set_locale(conn, locale_data)
-      end
+    if url_locale != nil and url_locale not in @supported_locales do
+      conn
+      |> Plug.Conn.put_status(:not_found)
+      |> Phoenix.Controller.put_view(FamichatWeb.ErrorHTML)
+      |> Phoenix.Controller.render("404.html")
+      |> halt()
+    else
+      result = call_inner(conn, normalized_path)
 
-    duration = System.monotonic_time() - start_time
+      duration = System.monotonic_time() - start_time
 
-    :telemetry.execute(
-      @telemetry_prefix ++ [:call],
-      %{duration: duration},
-      %{conn: conn}
-    )
+      :telemetry.execute(
+        @telemetry_prefix ++ [:call],
+        %{duration: duration},
+        %{conn: conn}
+      )
 
-    result
+      result
+    end
+  end
+
+  @spec call_inner(Plug.Conn.t(), String.t()) :: Plug.Conn.t()
+  defp call_inner(conn, normalized_path) do
+    if static_asset?(normalized_path) do
+      log(:debug, "Static asset detected, skipping locale setting",
+        path: normalized_path
+      )
+
+      conn
+    else
+      locale_data = extract_locale(conn)
+      set_locale(conn, locale_data)
+    end
   end
 
   @doc """
@@ -129,6 +146,25 @@ defmodule FamichatWeb.Plugs.SetLocale do
     )
 
     {user_locale, remaining_path}
+  end
+
+  @doc """
+  Extracts the preferred locale from a connection without URL path consideration.
+
+  Checks session, then Accept-Language header, then falls back to default locale.
+  Useful for controllers like RootRedirectController that need to determine
+  the user's preferred locale before any locale-scoped route is matched.
+  """
+  @spec extract_preferred_locale(Plug.Conn.t()) :: locale()
+  def extract_preferred_locale(conn) do
+    session_locale = Plug.Conn.get_session(conn, FamichatWeb.SessionKeys.user_locale())
+    accept_language = get_preferred_language(conn)
+
+    cond do
+      session_locale in @supported_locales -> session_locale
+      accept_language in @supported_locales -> accept_language
+      true -> @default_locale
+    end
   end
 
   # Sets the locale for the connection.

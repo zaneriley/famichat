@@ -6,6 +6,7 @@ defmodule Famichat.Accounts.Passkey do
   """
   use Ecto.Schema
   import Ecto.Changeset
+  import Famichat.Schema.Validations
 
   alias Famichat.Accounts.User
 
@@ -50,6 +51,7 @@ defmodule Famichat.Accounts.Passkey do
       :disabled_at
     ])
     |> validate_required([:user_id, :credential_id, :public_key])
+    |> validate_string_field(:label, required: false, max: 100)
     |> unique_constraint(:credential_id)
   end
 end

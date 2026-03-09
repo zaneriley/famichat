@@ -6,7 +6,7 @@ defmodule FamichatWeb.RouterTest do
       conn: conn
     } do
       conn = get(conn, "/")
-      assert redirected_to(conn, 301) =~ "/en"
+      assert redirected_to(conn, 302) =~ "/en"
     end
 
     test "accepts valid locale", %{conn: conn} do

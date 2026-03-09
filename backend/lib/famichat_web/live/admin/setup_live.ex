@@ -188,7 +188,7 @@ defmodule FamichatWeb.AdminLive.SetupLive do
         {:noreply,
          socket
          |> assign(:passkey_register_token, new_token)
-         |> assign(:error, {:retryable, message})}
+         |> assign(:error, {:recoverable, message})}
 
       {:error, :already_registered} ->
         # The passkey actually enrolled even though the hook reported failure.
@@ -223,18 +223,18 @@ defmodule FamichatWeb.AdminLive.SetupLive do
     {:noreply, assign(socket, :error, {:fatal, message})}
   end
 
-  # Legacy / no-code fallback — treat as retryable.
+  # Legacy / no-code fallback — treat as recoverable.
   def handle_event("register-error", %{"message" => message}, socket) do
     Logger.warning(
       "[SetupLive] Passkey registration error (no code): #{message}"
     )
 
-    {:noreply, assign(socket, :error, {:retryable, message})}
+    {:noreply, assign(socket, :error, {:recoverable, message})}
   end
 
   # Bare catch-all.
   def handle_event("register-error", _params, socket) do
-    {:noreply, assign(socket, :error, {:retryable, gettext("Unknown error")})}
+    {:noreply, assign(socket, :error, {:recoverable, gettext("Unknown error")})}
   end
 
   @impl true
@@ -324,7 +324,7 @@ defmodule FamichatWeb.AdminLive.SetupLive do
   defp error_message(:not_logged_in),
     do: gettext("Complete setup first, then you can generate an invite.")
 
-  defp error_message({:retryable, msg}) when is_binary(msg), do: msg
+  defp error_message({:recoverable, msg}) when is_binary(msg), do: msg
   defp error_message({:fatal, msg}) when is_binary(msg), do: msg
   defp error_message(_), do: gettext("Something went wrong.")
 end

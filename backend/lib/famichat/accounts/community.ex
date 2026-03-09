@@ -8,6 +8,7 @@ defmodule Famichat.Accounts.Community do
 
   use Ecto.Schema
   import Ecto.Changeset
+  import Famichat.Schema.Validations
 
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
@@ -31,6 +32,7 @@ defmodule Famichat.Accounts.Community do
   def changeset(community, attrs) do
     community
     |> cast(attrs, [:id, :name, :settings])
-    |> validate_required([:id, :name])
+    |> validate_required([:id])
+    |> validate_string_field(:name, max: 100)
   end
 end

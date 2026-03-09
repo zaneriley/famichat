@@ -93,6 +93,7 @@ Conflicts are flagged inline with `[CONFLICT]`. Unresolved decisions are flagged
 - `instance` / `deployment` are operational terms, not social terms
 - Avoid `tenant` in product and architecture language; it implies a SaaS model Famichat is explicitly not pursuing
 - If a cluster no longer wants the same operator trust anchor, prefer spinning it out to a separate deployment before introducing shared-instance multitenancy
+- Community admin role check for L1: any user with at least one `:admin` household membership can create families. A formal `community_admin` column on `users` is a hardening step for L3.
 - Cross-deployment migration and federation are deferred runways, not current product commitments
 
 ### Delivery and Operations Model
@@ -185,6 +186,10 @@ Conflicts are flagged inline with `[CONFLICT]`. Unresolved decisions are flagged
 - Passkey registration with UV flag (`flag_user_verified`) enforced
 - `user_verification: "required"` in both register and assert flows
 - COSE key stored as portable JSON (not `term_to_binary`)
+
+### Family Setup Flow (fourth and fifth public entry points)
+- `/:locale/families/start/:token` is the token-gated fourth public entry point for MLP (alongside `/`, `/:locale/login`, and `/:locale/invites/:token`). Community admin creates a family and generates a `:family_setup` token (72-hour TTL). The first person to redeem the setup link becomes the family's household admin. The setup link is shared privately by the community admin.
+- `/:locale/families/new` is the self-service fifth public entry point. Shown as a secondary CTA ("Set up your family space") on the login page when `self_service_enabled` is `true`. Rate-limited (3 per IP per hour). Creates an isolated family and a `:family_setup` token internally (`"initiated_by" => "self"`). The first person through becomes the family's household admin.
 
 ### Invite Flow
 - Household admin issues invite → invitee accepts (one-time, 10-min JWT) → passkey registration
@@ -366,8 +371,11 @@ These are either things we tried and rejected, known security anti-patterns in M
 | **Persisting MLS state on every message send** | 20MB+/conversation/day of TOAST writes; snapshot thrash | Write only on epoch-advancing operations (merge_pending_commit, mls_remove) |
 | **Decrypting messages before broadcast auth check** | Wasteful + exposes plaintext to revoked socket path | `ensure_socket_device_active` before any broadcast |
 | **`atom_to_binary` / `binary_to_term` on NIF snapshots without validation** | Silent load failure or malicious state injection | Required key + type validation before NIF call |
+| **`last_message_preview` in the server API** | Server cannot produce plaintext previews under E2EE; any server-side preview field is an active spec violation and a migration trap | Permanently prohibited from the server API; SPA maintains its own local decrypted preview cache keyed on `(conversation_id, message_seq)` |
 | **Building UI before dogfooding tells you what's needed** | Wasted investment; throwaway code that becomes load-bearing | Keep Phoenix views coupled and deletable; no design system investment until L2+ |
 | **Federation before L3 validation** | Premature complexity; adds attack surface before product is even validated | Defer entirely; evaluate after L5 |
+| **Promoting household admin → community admin via boolean escalation** | These are structurally different axes: household admin is a family-scoped care role; community admin is a deployment-scoped ceremony/trust authority. Collapsing them into a single privilege ladder creates confused authorization and makes coercion easier (one compromised family admin escalates to community power). Phase 1 peer review flagged this explicitly. | Keep the two role axes independent. Name the community-level check `community_admin?/1` with a clear docstring about the predicate swap planned at L3. |
+| **Routing all community-level rights through one household admin** | The home environment should not be assumed trustworthy for all credentialing. If neighborhood/community participation requires household admin approval, a coercive household admin can deny community agency to other adults. Relevant to L4 teen autonomy but also to adult members. | Separate household administration from adult community agency. Credentialing for community-level rights should have an independent path. |
 
 ### What Is Implemented
 - MLS (OpenMLS 0.8.1): forward secrecy and post-compromise security
@@ -411,6 +419,11 @@ These are either things we tried and rejected, known security anti-patterns in M
 - Refresh tokens rotate on every use; old token invalidated immediately
 - Theft detection: reused rotated token → entire token family invalidated; user must re-authenticate
 - [OPEN] Should `trusted_until` roll forward on refresh or stay fixed at 30 days?
+
+### Unread / Ack Model
+- Ack model is per-user watermark: "If you read it anywhere, it's read everywhere." Read cursors are keyed on `(user_id, conversation_id)`, not per-device.
+- Read cursors are persisted to DB (not ETS or process state) so acks survive reconnect.
+- Ack cursor must only advance forward: use `GREATEST(stored_seq, incoming_seq)` in the upsert SQL.
 
 ### WebAuthn (Passkeys)
 - Real ECDSA signature verification via Wax library (`Wax.register/3` + `Wax.authenticate/5`)
@@ -465,6 +478,7 @@ These are either things we tried and rejected, known security anti-patterns in M
 - `passkeys` — WebAuthn credentials via Wax
 - `user_tokens` — context-scoped, hashed
 - `conversation_security_client_inventories` — per-conversation one-time crypto intro objects
+- `conversation_summaries` — canonical inbox read model (`conversation_id PK, latest_message_seq, last_message_at, member_count`); maintained by a PostgreSQL trigger on message insert; not a materialized view
 - `auth_audit_logs` — PII-free audit trail for recovery events
 
 ### MLS Lifecycle
@@ -488,6 +502,11 @@ These are either things we tried and rejected, known security anti-patterns in M
 - **Performance**: warm-path P95 = 1.90ms (gate 50ms); bundle 481.8 kB gzip (gate 500 kB)
 - Full architecture, security non-negotiables, build pipeline: `docs/decisions/012-spa-wasm-client-architecture.md`
 
+### Active Family Context
+- Active family uses hybrid persistence: session cookie (per-session tab isolation) + `last_active_family_id` nullable FK on `users` (cross-device persistence, `on_delete: :nilify_all`).
+- Resolution order: (1) explicit candidate from session, (2) `last_active_family_id` from DB, (3) first membership by `inserted_at`. Single-family users always resolve silently via path 3.
+- `FamilyContext.resolve/2` is the single source of truth; membership is verified at every call. The module lives under `Famichat.Accounts`.
+
 ### Ash Framework
 - Optional application layer; not a full-stack replacement
 - Do NOT use Ash for high-risk correctness-sensitive paths (sessions/tokens/passkeys/recovery/chat auth)
@@ -504,7 +523,7 @@ These are either things we tried and rejected, known security anti-patterns in M
 - Error envelope: `{"error": {"code": "...", "message": "...", "action": "...", "details": {}}}`
 - `error.code` required and stable; never leak `inspect(reason)` or internal exception payloads
 - HTTP status codes: 200/201 (success), 204 (idempotent delete/revoke), 400 (invalid params), 401 (auth failed), 403 (forbidden), 404 (not found), 409 (security lifecycle blocked), 413 (payload too large), 422 (semantically invalid), 429 (rate-limited with `retry-after`)
-- Message pagination via cursor: `GET /api/v1/conversations/:id/messages?after=<message_id>`; returns `meta.has_more` + `meta.next_cursor`
+- Message pagination via cursor: `GET /api/v1/conversations/:id/messages?after=<message_seq>`; cursor is `message_seq` (per-conversation monotonic integer), not `(inserted_at, id)` composite. Returns `meta.has_more` + `meta.next_cursor`.
 - Future mutation endpoints should accept `Idempotency-Key` header for safe retries
 - JSON keys: snake_case; spec blobs (e.g., WebAuthn `publicKey`) nested under snake_case wrapper (`public_key_options`)
 - Timestamps: RFC 3339 UTC; `created_at`, `updated_at`
@@ -527,6 +546,10 @@ These are either things we tried and rejected, known security anti-patterns in M
 - Error atoms: `:invalid | :expired | :used | :revoked | :trust_required | :trust_expired | :reuse_detected`
 - Avoid protocol-coupled store names, new `key_package`-based Chat module names, crypto-centric policy names, and `session_snapshot` as a primary term
 - Telemetry root: `[:famichat, :auth, <context>, <action>]`
+
+### String field validation convention
+
+Every user-facing `:string` field in an Ecto schema must have `validate_length` with an explicit `:max` and a corresponding `CHECK (char_length(col) <= N)` constraint at the DB level. System-generated string fields (token hashes, protocol identifiers, snapshot MACs) are exempt from application-level validation if the DB constraint is present. Guideline defaults: 255 for general text, 100 for names/labels, 2048 for URLs.
 
 ---
 
@@ -576,16 +599,32 @@ These are either things we tried and rejected, known security anti-patterns in M
 ## Open Questions
 
 ### Security & Data
-- [OPEN] Server-side LiveView decryption vs full E2EE goal — must be resolved before public launch; current architecture is a known gap, not a final decision
 - [OPEN] Memory lane / media archival: storing media at rest conflicts with data-minimization principle; how do we let people preserve memories without us holding their data?
 - [OPEN] Key recovery UX: no backup vs cloud backup with passphrase vs social key recovery (Shamir's)
 - [OPEN] Key lifecycle revocation: device/user removal semantics incomplete
+- [OPEN] Coercion resistance at the household boundary: household admin currently gates all family-level participation. For L4 (teen autonomy) and beyond, adult community agency should not require household admin approval. The home environment is not always a trustworthy credentialing context. Research references: Merino et al. (TRIP/Votegral) on in-person credentialing under coercion; Ford on separating personhood from identity.
 
 ### Product Scope
 - [OPEN] Inter-family/community model inside one trusted deployment: what kinds of cross-family coordination belong here (bounded family-to-family invites, shared channels, shared spaces) without turning it into a public or semi-public local network?
 - [OPEN] Family tools scope: which household logistics (calendar, tasks, etc.) do we build vs integrate with existing tools (Google Calendar, Gmail, etc.)? Needs dogfooding
 - [OPEN] Ambient/cozy features: which (if any) actually matter to users? Don't build until dogfooding reveals demand
 - [OPEN] Design direction: what aesthetic does dogfooding tell us people actually want? No visual direction committed until then
+- [OPEN] Identity scope across families: is a user's identity global across all families in a deployment, or scoped per family? The research literature on service-scoped pseudonyms (Ford & Strauss) suggests per-space pseudonyms enable abuse resistance without a global real-name layer. This matters once multi-family participation is real. No current design addresses it.
+
+### Governance & Admission (L5+ — not current scope)
+
+> These questions surfaced from the Phase 1 peer review (Review 4: Governance Model
+> Fit) and subsequent research into decentralized governance (Ford, Borge, Ostrom,
+> Adler, Merino). None are blocking L1–L3. They are recorded here so design decisions
+> at those layers do not accidentally foreclose the governance options described in
+> `ia-lexicon.md` § "Research Concepts Under Consideration."
+
+- [OPEN] Governance procedures: how are community-level decisions made? Current model is admin unilateral action only. Research suggests bicameral approaches (one-household-one-vote for participation, one-adult-one-vote or random jury for moderation/appeals, double majority for constitutional changes). No governance procedures exist today beyond "community admin decides."
+- [OPEN] Admission model: should membership require sponsor endorsement from existing members, and if so, how many sponsors? Current model is admin-issued invites with no sponsorship chain. Peer review recommends `joined_via` + `sponsored_by_user_id` on membership records as cheap L5 scaffolding. Related: should there be a per-household cap on invites per cycle to prevent one large family from dominating admission?
+- [OPEN] Personhood vs identity: the system currently conflates "has an account" with "is a unique person." For anti-Sybil protection at the multi-family/neighborhood boundary (L5+), these are distinct claims. Personhood ceremonies (Ford, Borge et al.) prove "one real human, counted once, recently" without requiring legal identity. Residency, trustworthiness, and personhood should not collapse into a single credential.
+- [OPEN] Federation topology: the current trust hierarchy is single-deployment only. If deployments ever interoperate (L5+), what is the federation unit? Research describes a graduated model (household → block → neighborhood → broader community) with an anytrust assumption (at least one ceremony organizer per event is honest). See anti-pattern: "Federation before L3 validation."
+- [OPEN] Ceremony credentialing: should community membership be renewable on a cycle (ceremony epoch), or permanent once granted? Renewable credentials provide freshness and anti-Sybil protection but add friction. Peer review suggests nullable `communities.ceremony_epoch` + `communities.signing_public_key` columns as zero-cost scaffolding.
+- [OPEN] Domain ownership and trust anchoring: SPEC says "operator owns the account, domain, and secrets" but does not address DNS verification as a trust signal, whether families within a community can have distinct domain identities, or what happens to trust relationships when a domain changes hands.
 
 ### Technical
 - [OPEN] Should `trusted_until` roll forward on each refresh or stay fixed at 30 days?
