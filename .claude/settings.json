@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(iex:*)",
+      "Bash(/tmp/analyze_race.txt:*)",
+      "Bash(/tmp/check_issues.txt:*)",
+      "Bash(MIX_ENV=dev ./run iex:*)",
+      "Bash(/usr/local/google/home/zaneriley/repos/famichat/backend/.tmp/_handoff-docs/phase4-prewalks/VERIFICATION-SUMMARY.txt:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker port:*)",
+      "mcp__playwright__browser_tabs",
+      "Bash(mix eval:*)",
+      "mcp__playwright__browser_snapshot",
+      "Bash(/usr/local/google/home/zaneriley/repos/famichat/backend/run mix compile)",
+      "Skill(orient)",
+      "Skill(orient:*)",
+      "Bash(git diff-tree:*)",
+      "Bash(/tmp/dependency_analysis.txt:*)",
+      "Bash(git log:*)",
+      "Bash(find:*)",
+      "mcp__playwright__browser_fill_form"
+    ],
+    "additionalDirectories": [
+      "/usr/local/google/home/zaneriley/repos/famichat/.tmp",
+      "/usr/local/google/home/zaneriley/repos/famichat/.agents/skills",
+      "/usr/local/google/home/zaneriley/repos/famichat/.tmp/2026-03-09-browser-walkthrough",
+      "/usr/local/google/home/zaneriley/repos/famichat/.claude/prompts"
+    ]
+  }
+}
