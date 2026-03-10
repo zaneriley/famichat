@@ -123,13 +123,13 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 
 ## Blocks confidence (P1)
 <!-- Can dogfood, but these make us nervous -->
-- [ ] Add OrphanFamilyReaper — memberless families accumulate after abandoned setup attempts → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P1-confidence | agent:consensus
-- [ ] Add TokenReaper for expired/consumed tokens — token table grows unbounded → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P1-confidence | agent:consensus
+- [x] Add OrphanFamilyReaper — memberless families accumulate after abandoned setup attempts → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P1-confidence | agent:consensus (1b02ab3)
+- [x] Add TokenReaper for expired/consumed tokens — token table grows unbounded → .tmp/2026-03-08-new-accounts/07-robustness-error-paths.md | P1-confidence | agent:consensus (1b02ab3)
 - [x] Normalize error tags (:retryable → :recoverable) — inconsistent atoms across auth LiveViews → .tmp/2026-03-08-new-accounts/acceptance/consensus.md | P1-confidence | agent:consensus (76776e4)
-- [ ] Add rate limit to reissue_passkey_token/1 — unlimited token reissue is a brute-force vector → backend/lib/famichat/auth/onboarding.ex:586 | P1-confidence | agent:consensus
+- [x] Add rate limit to reissue_passkey_token/1 — unlimited token reissue is a brute-force vector → backend/lib/famichat/auth/onboarding.ex:586 | P1-confidence | agent:consensus (1b02ab3)
 - [-] Add copy alignment: privacy line, empty-state forward path — privacy line already exists in both templates (peer-reviewed); empty-state tracked at P0 → .tmp/2026-03-10-ideation/consensus.md | agent:consensus
 - [x] Fix green CTA button contrast ratio (2.38:1 → 4.5:1) — primary buttons unreadable for vision-impaired users → .tmp/2026-03-09-bug-bash/03-grandparent-user.md A11Y-01 | P1-confidence | bug-bash
-- [ ] Add visible error feedback when passkey auth fails — button silently reverts with no message → .tmp/2026-03-09-bug-bash/01-community-admin.md BUG-04 | P1-confidence | bug-bash
+- [x] Add visible error feedback when passkey auth fails — button silently reverts with no message → .tmp/2026-03-09-bug-bash/01-community-admin.md BUG-04 | P1-confidence | bug-bash (1b02ab3 — confirmed already working: full hook→LiveView→template error chain wired in auth security fixes)
 - [x] Increase "Getting started?" text from 12.5px to ≥16px — critical guidance invisible to older users → .tmp/2026-03-09-bug-bash/03-grandparent-user.md A11Y-02 | P1-confidence | bug-bash
 - [x] Fix skip-to-content target — #main-content ID missing from main tag → backend/lib/famichat_web/components/layouts/app.html.heex | P1-confidence | bug-bash
 - [x] Rewrite 410 error page to match brand voice — ALL-CAPS terminal aesthetic terrifies non-tech users → backend/lib/famichat_web/controllers/error_html/410.html.heex | P1-confidence | bug-bash
@@ -141,13 +141,13 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [-] Fix duplicate "Skip to main content" links on 404 error page — merged into "Fix 404/410 templates to content-only" | P1-confidence | browser-walkthrough
 - [x] Prompt operator to leave welcome message after invite generation — invitee lands in empty room instead of warm handoff → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
 - [x] Auto-navigate operator to conversation when invitee completes registration — operator has no feedback loop after sending invite → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
-- [ ] Show one-time "no read receipts" contextual note on first message — Japanese users interpret missing kidoku as bug, not feature → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
+- [x] Show one-time "no read receipts" contextual note on first message — Japanese users interpret missing kidoku as bug, not feature → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus (1b02ab3)
 - [-] Reduce name input minimum to 1 char for CJK scripts — UPGRADED to P0-dogfood; done in P0 section → .tmp/2026-03-10-ideation/04-i18n-cjk.md | agent:consensus
 - [x] Fix 2 Japanese brand voice violations (管理者 in community_admin_live.ex) — role labels alienate the non-technical Japanese spouse → .tmp/2026-03-10-ideation/04-i18n-cjk.md | P1-confidence | agent:consensus
-- [ ] Escalate passkey error copy after 3+ repeated failures — repeated "try again" trains users to give up → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
+- [x] Escalate passkey error copy after 3+ repeated failures — repeated "try again" trains users to give up → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus (1b02ab3)
 - [x] Demote "Set up your own family space" button to text link on login page — non-technical users tap wrong button and enter orphan flow → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
-- [ ] Show social recovery guidance after 2-3 failed passkey attempts — user with lost credential has no forward path → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
-- [ ] Set browser tab title to partner name or family name — brand name in tab misses chance to reinforce "our space" → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
+- [x] Show social recovery guidance after 2-3 failed passkey attempts — user with lost credential has no forward path → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus (1b02ab3 — shows after 3+ failures via error_count in LoginLive)
+- [x] Set browser tab title to partner name or family name — brand name in tab misses chance to reinforce "our space" → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus (1b02ab3 — already working for conversations; added family.name for empty-state branch)
 - [x] Fix `Mix.env()` in application.ex — release builds crash on boot → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P1-confidence | agent:consensus
 - [x] Add prod guard for POSTGRES_PASSWORD in runtime.exs — default "password" gives no error if forgotten in prod → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P1-confidence | agent:consensus (dfd6091)
 - [x] Fix 404/410 templates to content-only — 3-for-1: resolves duplicate LiveSocket, duplicate skip links, and locale-awareness → .tmp/2026-03-10-ideation/07-routing-locale.md | P1-confidence | agent:consensus
@@ -184,7 +184,8 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Decide: extend invite link TTL beyond 10 minutes for L1 dogfood? — RESOLVED: 72 hours; user decision; SPEC.md updated → .tmp/2026-03-09-mlp-ux/consensus.md | agent:consensus
 - [x] Decide: is photo sharing required for 2-week dogfood? — RESOLVED: no; punt to next cycle; tracked as P2-debt → .tmp/2026-03-09-mlp-ux/consensus.md | agent:consensus
 - [x] Decide: add "thinking of you" one-tap message? — RESOLVED: no; user decision: that's just a poke/like → .tmp/2026-03-09-mlp-ux/consensus.md | agent:consensus
-- [ ] Decide: reduce refresh token TTL from 30 to 7 days? — affects re-auth frequency for infrequent users vs stolen-token window → .tmp/2026-03-10-ideation/09-rate-limiting-nat.md | agent:consensus
+- [x] Decide: reduce refresh token TTL from 30 to 7 days? — DEFERRED to L2: 30 days correct for dogfood; 7-day TTL adds auth friction with no security gain (revocation is device-level, not TTL-level) → .tmp/2026-03-10-ideation/09-rate-limiting-nat.md | agent:consensus
+- [x] Decide: deployment strategy for L1 dogfood — RESOLVED: homelab + Docker Compose + Cloudflare Tunnel; dogfoods operator self-hosting experience; captures friction for future documentation | agent:consensus
 
 ## Cut / Won't do
 <!-- Explicitly rejected — reason noted inline on each item -->

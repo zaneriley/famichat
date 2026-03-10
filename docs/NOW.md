@@ -8,12 +8,14 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-All P0 dogfood blockers closed. L1 is deployable for 2-person dogfood. Next step: deployment strategy (where and how to make it available).
+All P0 dogfood blockers closed. P1 confidence items resolved (1b02ab3). Deploying to homelab via Docker Compose + Cloudflare Tunnel. Dogfooding the operator experience — every friction point we hit becomes documentation for future self-hosters.
 
 ---
 
 ## What just happened (2026-03-10)
 
+- **7 P1 confidence items resolved** (1b02ab3) — TokenReaper (expired token cleanup every 30min), OrphanFamilyReaper (memberless family cleanup every 30min, 1hr buffer, guards for missing conversations FK), rate limit on `reissue_passkey_token/1` (5/5min per user_id, closes last unprotected token-issuing function), passkey error count escalation in LoginLive (3+ failures shows device hint + social recovery guidance), "no read receipts" contextual note in empty conversation state, browser tab title set to family name in no-conversation branch. Japanese translations for all new strings. P1-4 (passkey error feedback) confirmed already working — full hook→LiveView→template error chain wired in auth security fixes. Refresh token TTL decision deferred to L2 (30 days correct for dogfood).
+- **Deployment strategy decided** — homelab + Cloudflare Tunnel. Dogfoods the self-hosted operator experience. Captures friction for future operator documentation.
 - **All P0 dogfood blockers closed** (dfd6091) — Final 5 P0s implemented + 3-reviewer code review gate: warm empty-state copy (role-differentiated admin vs invitee), consumed-invite recovery (clear copy, conditional sign-in link hidden), locale persistence (on_mount DB load, SessionRefresh restore, RootRedirectController DB check), .env.production.example (ungitignored, WebAuthn moved to runtime.exs with prod raise guards), Japanese translations (22 errors.po entries, 7 fuzzy flags removed, orphaned 404.po deleted). Invite TTL aligned to SPEC: code changed from 7 days to 72 hours, all EN+JA copy updated. P1/P2 hardening: POSTGRES_PASSWORD prod guard, GitHub webhook plug removed (dead code), dead content_* config removed, CSP reads from Application.get_env, CSP port consistency fix, locale CHECK constraint migration, abandoned invite telemetry. Code subtraction: 3 unused functions deleted from live_helpers.ex, unreachable branch deleted from invite_live.ex, rescue added to root redirect locale resolution.
 - **P0 next-four implemented + review-gated** — Auto-auth after passkey, browser notifications, HomeLive opens to conversation, conversation_type fix, push_navigate removal, sender_name forwarding, UNIQUE_CONVERSATION_KEY_SALT config. 6 review findings fixed.
 - **L1 dogfood ideation implemented** — 12 fixes from 10-agent ideation round. Security: logout revokes device, rate limits tuned. Validation: name minimum 1 char (CJK). Templates: 404/410 content-only. A11y: contrast, text size, skip-to-content. UX: welcome prompt, auto-navigate, self-service demoted. I18n: brand voice fixes, 11 JA translations.
@@ -86,6 +88,8 @@ L1 target: 2-person dogfood (operator + spouse), single family, text messaging o
 | Both users can exchange messages | PASS | Channel join, send, receive, browser notifications |
 | Japanese locale works end-to-end | PASS | Locale persisted to DB, 22 errors.po translated, 0 fuzzy flags |
 | Instance deploys with env vars only | PASS | .env.production.example, runtime.exs guards raise on missing secrets |
+| P1 confidence items resolved | PASS | Reapers, rate limits, passkey UX escalation, receipts note, tab title (1b02ab3) |
+| Deployment target chosen | PASS | Homelab + Docker Compose + Cloudflare Tunnel |
 
 Multi-family gates (MLP scope, not L1):
 
@@ -110,11 +114,49 @@ Multi-family gates (MLP scope, not L1):
 
 ## Immediate next steps
 
-### 1. Deployment strategy
-Decide where and how to make the L1 dogfood instance available. Options to evaluate: VPS (Fly.io, Railway, bare metal), Docker Compose, Coolify, etc. Key constraints: PostgreSQL, env var configuration, HTTPS with valid cert (WebAuthn requires secure context), DNS.
+### 1. Homelab deployment
+Deploy to homelab via Docker Compose + Cloudflare Tunnel. This IS the product experience — we're the first operator.
+
+**Infrastructure**: Homelab machine + Cloudflare Tunnel → `https://chat.<domain>` → `localhost:8001`. TLS terminated at Cloudflare (satisfies WebAuthn secure-context requirement). PostgreSQL in Docker with persistent named volume.
+
+**Steps**:
+1. Clone repo to homelab machine
+2. Copy `.env.production.example` → `.env`, generate all secrets (`openssl rand -base64 64` for SECRET_KEY_BASE, `openssl rand -base64 32` for the others)
+3. Set `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `URL_HOST` to the Cloudflare Tunnel domain
+4. `docker compose -f docker-compose.production.yml up -d`
+5. Verify health: `curl localhost:8001/up` and `curl localhost:8001/up/databases`
+6. Configure Cloudflare Tunnel to point to `localhost:8001`
+7. Hit the public URL, complete `/setup` bootstrap
+
+**Critical gotcha**: WebAuthn vars are compile-time in `config.exs`. They must be set in the environment BEFORE `docker compose build` (the Dockerfile runs `mix release` during build). If the image was built with localhost defaults, passkeys will silently fail with origin mismatch.
 
 ### 2. Post-deploy browser walkthrough
-Run the full CUJ against the deployed instance to catch any deploy-specific issues (env var misconfiguration, CORS, WebSocket upgrade behind reverse proxy, passkey RP ID matching).
+Run the full CUJ against the deployed instance: operator bootstrap → invite generation → spouse onboarding → message exchange. Catch deploy-specific issues: env var misconfiguration, WebSocket upgrade behind Cloudflare, passkey RP ID matching, CORS.
+
+### 3. Capture operator experience for documentation
+Every friction point we hit during deployment becomes documentation for future self-hosters. Track:
+
+**What to capture (write it down as you go)**:
+- **Setup friction log** — every moment of confusion, missing documentation, unclear error, or "I had to look at the code to figure this out." This becomes the self-hosting guide.
+- **Env var pain points** — which vars were confusing? Which defaults were wrong? Which error messages helped vs. which were cryptic?
+- **Cloudflare Tunnel specifics** — any WebSocket issues? Header forwarding? IP resolution behind tunnel?
+- **Update workflow** — when we push a code change, what does `git pull && docker compose build && docker compose up -d` actually feel like? How long? Any downtime?
+- **Backup/restore** — does `pg_dump` work from inside the container? What's the actual command sequence?
+- **What broke** — anything that works in dev but fails in prod (compile-time vs runtime config, missing assets, NIF loading, etc.)
+
+**What this produces**:
+- A `docs/self-hosting.md` guide written from real experience, not hypothetical
+- Fixes to `.env.production.example` for anything that was unclear
+- Fixes to `runtime.exs` error messages for anything that was unhelpful
+- Confidence that the Docker Compose path actually works end-to-end
+
+### 4. Dogfood observation period
+Use the app daily for real couple messaging. Track:
+- Does the app feel like "our space" or like "a product"?
+- What's the first thing you wish it did differently?
+- Does your spouse ask any questions that reveal missing UX?
+- Do browser notifications work reliably? Do they feel intrusive or insufficient?
+- Any WebSocket disconnects or session expiry surprises?
 
 ---
 
@@ -181,6 +223,12 @@ Run the full CUJ against the deployed instance to catch any deploy-specific issu
 - ✓ Dead content_* config removed from runtime.exs
 - ✓ CSP plug reads from Application.get_env, port consistency fixed
 - ✓ Abandoned invite telemetry — `[:famichat, :invite, :abandoned]` event + Logger.warning
+- ✓ TokenReaper — GenServer sweeping expired tokens every 30 min
+- ✓ OrphanFamilyReaper — GenServer sweeping memberless families every 30 min (1hr buffer, guards for missing conversations FK)
+- ✓ Rate limit on `reissue_passkey_token/1` — 5 attempts / 5 minutes per user_id; closes last unprotected token-issuing function
+- ✓ Passkey error escalation — `error_count` in LoginLive; 3+ failures shows device hint + social recovery guidance; JA translated
+- ✓ "No read receipts" note — shown in empty conversation state before first message; JA translated
+- ✓ Browser tab title — already working for conversations; added `assign_page_metadata(family.name)` for empty-state branch
 
 ---
 
@@ -212,6 +260,8 @@ Run the full CUJ against the deployed instance to catch any deploy-specific issu
 | No server-side previews | `last_message_preview` must be removed; SPA maintains local decrypted preview cache |
 | Invite TTL | 72 hours per SPEC; code, EN copy, JA copy all aligned |
 | Photo sharing | Punted to next cycle; not required for L1 dogfood |
+| Deployment | Homelab + Docker Compose + Cloudflare Tunnel; dogfoods operator self-hosting experience |
+| Refresh token TTL | 30 days (deferred to L2; 7-day TTL adds friction, no security gain at L1) |
 
 ---
 
