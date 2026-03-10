@@ -99,16 +99,16 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Reduce name input minimum to 1 char for CJK scripts — ゆき (2 chars) rejected by 3-char minimum; blocks Japanese onboarding → .tmp/2026-03-10-ideation/04-i18n-cjk.md | P0-dogfood | agent:consensus
 - [x] Auto-authenticate after passkey registration — double biometric makes new users think registration failed → .tmp/2026-03-09-mlp-ux/consensus.md, .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus
 - [x] Add browser Notification API integration on incoming Channel messages — recipient never knows a message arrived without tab open → .tmp/2026-03-09-mlp-ux/consensus.md, .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus
-- [ ] Add .env.production.example with all required env vars documented — server crashes on first passkey without WebAuthn vars → .tmp/2026-03-09-mlp-ux/consensus.md, .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus
+- [x] Add .env.production.example with all required env vars documented — server crashes on first passkey without WebAuthn vars → .tmp/2026-03-09-mlp-ux/consensus.md, .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus (dfd6091)
 - [x] Make HomeLive open directly to 1:1 conversation for L1 — conversation list of one item signals "product," not "our space" → .tmp/2026-03-09-mlp-ux/consensus.md, .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus
-- [ ] Add warm empty-state copy when conversation has zero messages — blank void causes both users to hesitate on first message → .tmp/2026-03-09-mlp-ux/consensus.md | P0-dogfood | agent:consensus
-- [ ] Show clear forward path for consumed-but-incomplete invites — spouse who cancelled passkey mid-flow hits dead end → .tmp/2026-03-09-mlp-ux/consensus.md | P0-dogfood | agent:consensus
-- [ ] Persist user_locale to users table, resolve on mount — bilingual spouse loses language setting on every reconnect → .tmp/2026-03-09-mlp-ux/consensus.md | P0-dogfood | agent:consensus
+- [x] Add warm empty-state copy when conversation has zero messages — blank void causes both users to hesitate on first message → .tmp/2026-03-09-mlp-ux/consensus.md | P0-dogfood | agent:consensus (dfd6091)
+- [x] Show clear forward path for consumed-but-incomplete invites — spouse who cancelled passkey mid-flow hits dead end → .tmp/2026-03-09-mlp-ux/consensus.md | P0-dogfood | agent:consensus (dfd6091)
+- [x] Persist user_locale to users table, resolve on mount — bilingual spouse loses language setting on every reconnect → .tmp/2026-03-09-mlp-ux/consensus.md | P0-dogfood | agent:consensus (dfd6091)
 - [x] Fix `conversation_type` hardcode to `"family"` in HomeLive — all L1 messaging broken; channel join fails for `:direct` conversations → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus
 - [x] Remove `push_navigate` from HomeLive `member_joined` handler — member join causes full page flash and discards socket state → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus
 - [x] Forward `sender_name` through hook pushEvent to LiveView — chat bubbles show "Family Member" instead of partner's name → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus
 - [x] Move `UNIQUE_CONVERSATION_KEY_SALT` to runtime.exs for fail-fast — server starts but crashes on first conversation creation → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P0-dogfood | agent:consensus
-- [ ] Complete ~30 missing Japanese gettext translations — half-translated screens block Japanese-speaking spouse adoption → .tmp/2026-03-09-mlp-ux/consensus.md, .tmp/2026-03-09-bug-bash/05-japanese-user.md | P0-dogfood | agent:consensus
+- [x] Complete ~30 missing Japanese gettext translations — half-translated screens block Japanese-speaking spouse adoption → .tmp/2026-03-09-mlp-ux/consensus.md, .tmp/2026-03-09-bug-bash/05-japanese-user.md | P0-dogfood | agent:consensus (dfd6091)
 - [x] Fix @legacy_kind_map to match DB constraint — `"passkey_reg"` rejected by `user_tokens_kind_check`; ALL auth flows crash → backend/lib/famichat/auth/tokens/policy.ex:192 | P0-dogfood | browser-walkthrough (90b0d5b)
 - [x] Wrap user+token creation in Ecto.Multi transaction — partial user creation leaves app unrecoverable without DB intervention → backend/lib/famichat/auth/onboarding.ex | P0-dogfood | browser-walkthrough (90b0d5b)
 - [x] Add :not_found_html clause to FallbackController.call/2 — valid-locale 404s return 500 with stacktrace in dev, bare 500 in prod → backend/lib/famichat_web/controllers/fallback_controller.ex | P0-dogfood | browser-walkthrough (90b0d5b)
@@ -149,7 +149,7 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [ ] Show social recovery guidance after 2-3 failed passkey attempts — user with lost credential has no forward path → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
 - [ ] Set browser tab title to partner name or family name — brand name in tab misses chance to reinforce "our space" → .tmp/2026-03-09-mlp-ux/consensus.md | P1-confidence | agent:consensus
 - [x] Fix `Mix.env()` in application.ex — release builds crash on boot → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P1-confidence | agent:consensus
-- [ ] Add prod guard for POSTGRES_PASSWORD in runtime.exs — default "password" gives no error if forgotten in prod → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P1-confidence | agent:consensus
+- [x] Add prod guard for POSTGRES_PASSWORD in runtime.exs — default "password" gives no error if forgotten in prod → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P1-confidence | agent:consensus (dfd6091)
 - [x] Fix 404/410 templates to content-only — 3-for-1: resolves duplicate LiveSocket, duplicate skip links, and locale-awareness → .tmp/2026-03-10-ideation/07-routing-locale.md | P1-confidence | agent:consensus
 - [x] Add rate limiting to discoverable passkey assert/challenge endpoint — unauthenticated endpoint has no DoS protection → .tmp/2026-03-10-ideation/08-test-infrastructure.md | P1-confidence | agent:consensus
 - [x] Raise family creation rate limit from 3 to 10/IP/hour — same-household devices collide at 3/hr behind NAT → .tmp/2026-03-10-ideation/09-rate-limiting-nat.md | P1-confidence | agent:consensus
@@ -162,14 +162,14 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Add HSTS header for production HTTPS deployments | P2-debt | bug-bash (76776e4)
 - [x] Gate console.log output behind dev flag — LiveSocket config leaks to browser console | P2-debt | bug-bash (76776e4)
 - [x] Fix 410 page hardcoded lang="en" — CJK font overrides won't apply → backend/lib/famichat_web/controllers/error_html/410.html.heex | P2-debt | bug-bash (90b0d5b)
-- [ ] Root / should respect Accept-Language header for locale redirect | P2-debt | bug-bash
+- [x] Root / should respect Accept-Language header for locale redirect | P2-debt | bug-bash (dfd6091 — RootRedirectController now checks session locale → DB locale → Accept-Language)
 - [x] Make 404 page locale-aware and fix hardcoded /en/ in RETURN TO HOME link — Japanese users see English-only 404 | P2-debt | browser-walkthrough (90b0d5b)
 - [-] Fix duplicate LiveSocket initialization on 404 page — merged into "Fix 404/410 templates to content-only" | P2-debt | browser-walkthrough
 - [ ] Render time gaps as human-readable labels instead of date separators — cold separators make silence feel like neglect → .tmp/2026-03-09-mlp-ux/consensus.md | P2-debt | agent:consensus
 - [ ] Replace technical session-expired copy with warm brand-aligned version — "re-authenticate" breaks the family-space feeling → .tmp/2026-03-09-mlp-ux/consensus.md | P2-debt | agent:consensus
 - [-] Make locale-aware placeholder examples consistent across all inputs — already localized correctly (鈴木家, お母さん); verified by ideation agent 04 → .tmp/2026-03-10-ideation/04-i18n-cjk.md | agent:consensus
 - [-] Make invite error copy available in all supported locales — all error_message/1 strings already have Japanese translations; verified by ideation agent 04 → .tmp/2026-03-10-ideation/04-i18n-cjk.md | agent:consensus
-- [ ] Move CSP plug env var reads to Application.get_env — per-request System.get_env diverges from runtime.exs values → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P2-debt | agent:consensus
+- [x] Move CSP plug env var reads to Application.get_env — per-request System.get_env diverges from runtime.exs values → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P2-debt | agent:consensus (dfd6091)
 - [ ] Add photo sharing for 1:1 conversations — half of couple communication is visual; punted to next cycle → .tmp/2026-03-09-mlp-ux/consensus.md | P2-debt | agent:consensus
 
 ## Decisions needed

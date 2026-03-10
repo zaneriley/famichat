@@ -8,15 +8,15 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-7 more P0s closed in this round: auto-auth after passkey, browser notifications, home-opens-to-conversation, conversation_type fix, push_navigate removal, sender_name forwarding, UNIQUE_CONVERSATION_KEY_SALT config. 1 P1 closed (Mix.env fix). 6 review findings fixed (runtime.exs config, verify_otp session parity, seenMessageIds leak, notification prompt guard, FamilyContext error catch-all, gettext wrappers). Remaining P0s: warm empty states, consumed-invite recovery, locale persistence, .env.production.example, Japanese translations.
+All P0 dogfood blockers closed. L1 is deployable for 2-person dogfood. Next step: deployment strategy (where and how to make it available).
 
 ---
 
 ## What just happened (2026-03-10)
 
-- **P0 next-four implemented + review-gated** — 4 P0 items from MLP UX consensus researched (2 rounds, 8 agents), synthesized, peer-reviewed, then implemented by 3 parallel agents with 3-reviewer code review gate. Auto-auth: extracted `enrich_session/2` in AuthController, wired into `passkey_register`, `passkey_assert`, and `verify_otp`; `remember_device?: true` for registration. Browser notifications: permission prompt on channel join (once per lifecycle), `Notification` on `new_msg` when tab hidden, sender name + truncated body. HomeLive conversation: `conversation_type` derived from actual conversation (was hardcoded `"family"`), `push_navigate` replaced with in-place assigns + `send(self(), :auto_connect)`, `sender_name` forwarded through JS hook. Config: `UNIQUE_CONVERSATION_KEY_SALT` moved to `runtime.exs` with prod raise guard, `Application.fetch_env!` in `conversation.ex`, `Mix.env()` replaced with `Application.get_env(:famichat, :environment)` in `application.ex`. Review findings fixed: missing `unique_conversation_key_salt` config (would crash at runtime), `verify_otp` missing `enrich_session` call (OTP users lacked family context), `seenMessageIds` not cleared on conversation switch (dedup leak), notification prompt re-firing on every join, `FamilyContext.resolve` missing catch-all (silent 500), 4 device-revoke error messages unwrapped in gettext.
-- **L1 dogfood ideation implemented** — 12 fixes from 10-agent ideation round shipped in 5 parallel groups. Security: logout now revokes device via `Sessions.revoke_device/2`, family creation rate limit raised 3→10/IP/hr, discoverable passkey assert rate-limited (20/IP/min). Validation: name minimum reduced to 1 char across 5 files (CJK unblocked). Templates: 404/410 stripped to content-only (fixes duplicate LiveSocket, duplicate skip links, hardcoded lang); 410 copy rewritten to brand voice. A11y: `--color-mint-500` contrast fixed (#45bd7f→#2d8f5f, 4.5:1), "Getting started?" text bumped 2xs→1xs, `id="main-content"` added. UX: welcome message prompt after invite generation, PubSub auto-navigate on `member_joined`, self-service button demoted to text link. I18n: 2 Japanese brand voice violations fixed (権限/管理者), 11 new JA translations added. All compile clean; 88 auth tests pass (5 pre-existing failures).
-- **L1 dogfood ideation round** — 10 agents explored ~35 open backlog items across security, UX, i18n, infrastructure, and accessibility. Consensus: `.tmp/2026-03-10-ideation/consensus.md`. Key outcomes: logout must revoke device (new P0), name minimum must drop to 1 char (P1→P0 upgrade), 404/410 template fix is a 3-for-1, 4 open decisions resolved, 3 backlog items closed as already done. Peer-reviewed by 3 agents against codebase; 2 corrections applied (privacy line already exists in both templates; logout gap was known in NOW.md, not truly new).
+- **All P0 dogfood blockers closed** (dfd6091) — Final 5 P0s implemented + 3-reviewer code review gate: warm empty-state copy (role-differentiated admin vs invitee), consumed-invite recovery (clear copy, conditional sign-in link hidden), locale persistence (on_mount DB load, SessionRefresh restore, RootRedirectController DB check), .env.production.example (ungitignored, WebAuthn moved to runtime.exs with prod raise guards), Japanese translations (22 errors.po entries, 7 fuzzy flags removed, orphaned 404.po deleted). Invite TTL aligned to SPEC: code changed from 7 days to 72 hours, all EN+JA copy updated. P1/P2 hardening: POSTGRES_PASSWORD prod guard, GitHub webhook plug removed (dead code), dead content_* config removed, CSP reads from Application.get_env, CSP port consistency fix, locale CHECK constraint migration, abandoned invite telemetry. Code subtraction: 3 unused functions deleted from live_helpers.ex, unreachable branch deleted from invite_live.ex, rescue added to root redirect locale resolution.
+- **P0 next-four implemented + review-gated** — Auto-auth after passkey, browser notifications, HomeLive opens to conversation, conversation_type fix, push_navigate removal, sender_name forwarding, UNIQUE_CONVERSATION_KEY_SALT config. 6 review findings fixed.
+- **L1 dogfood ideation implemented** — 12 fixes from 10-agent ideation round. Security: logout revokes device, rate limits tuned. Validation: name minimum 1 char (CJK). Templates: 404/410 content-only. A11y: contrast, text size, skip-to-content. UX: welcome prompt, auto-navigate, self-service demoted. I18n: brand voice fixes, 11 JA translations.
 
 ## What just happened (2026-03-09)
 
@@ -62,52 +62,37 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## Current blockers
 
-### ~~P0 — Token kind constraint mismatch~~ RESOLVED (90b0d5b)
-
-`@legacy_kind_map` entries fixed to match DB CHECK constraint values (`passkey_registration`, `passkey_assertion`, `session_refresh`). User+token creation wrapped in `Ecto.Multi` for atomicity. All auth flows verified in browser.
-
-### ~~P0 — FallbackController missing :not_found_html clause~~ RESOLVED (90b0d5b)
-
-`call(conn, :not_found_html)` clause added with locale inference and `put_layout(false)`. SetLocale plug 404 path also wired with locale and layout suppression. Both paths verified in browser.
-
-### ~~P0 — Self-service family creation~~ RESOLVED (95eb458)
-
-PutRemoteIp committed with compile-time CIDR caching and IPv4-mapped IPv6 normalization. FamilyNewLive reconnect fixed via architecture split (FamilyNewLive → redirect → FamilySetupLive with token in URL params, survives WebSocket disconnect). Both `/families/new` and `/families/start/:token` are committed and functional.
-
-### ~~P0 — `last_message_preview`~~ RESOLVED
-
-`last_message_preview` has been removed from `chat_read_controller.ex`. Grep confirms zero matches. No longer in the API contract.
+No P0 blockers remain. The following P1 items are tracked in BACKLOG.md but do not block L1 2-person dogfood:
 
 ### P1 — Signed-in app is still first-membership-wins
 
-`HomeLive.load_family_data/1` still picks the first membership and collapses the user into one family context. Even if the DB model can represent multi-family membership, the signed-in browser surface cannot yet.
+`HomeLive.load_family_data/1` picks the first membership. Irrelevant for L1 (one family) but blocks multi-family use.
 
-### P1 — Message plane is critically incomplete
+### P1 — Message plane gaps
 
-The following are absent from the database and service layer, all required for Phase 1:
-- `message_seq` — no column, no migration, no index. Cursor pagination and unread math have no substrate.
-- `device_read_cursors` — no table. Acks are ephemeral (logged only, not persisted). Unread counts cannot be computed.
-- `conversation_summaries` — no table. Inbox API runs live joins on every request.
-- Unread count math — both prerequisite inputs are absent.
-- `Idempotency-Key` header — not read by any mutation endpoint. Reconnect retries produce duplicate messages.
-
-### ~~P2 — Browser-walkable front door still needs a real browser pass~~ DONE (browser-walkthrough 2026-03-09)
-
-Real-browser walkthrough completed via Playwright MCP with virtual authenticator. Found 3 P0 blockers — all resolved in 90b0d5b. Post-fix verification confirmed: admin bootstrap, passkey registration, sign-in, invite generation (from home), invite acceptance all pass. Results: `.tmp/2026-03-09-browser-walkthrough/agent-1-bootstrap.md`
+Substrate exists (message_seq, user_read_cursors, conversation_summaries committed). Still missing: unread count math, `Idempotency-Key` header, `pending_welcomes` table. Not blocking L1 text messaging.
 
 ---
 
-## MLP dogfood gate status
+## L1 dogfood gate status
 
-From `.tmp/2026-03-07-mlp/05-mlp-rollout-and-success-signals.md`. All five gates are currently blocked.
+L1 target: 2-person dogfood (operator + spouse), single family, text messaging only.
 
-| Gate | Status | What is needed |
+| Gate | Status | Notes |
 |---|---|---|
-| Operator bootstraps, then creates second family | PARTIAL | Code committed (95eb458); needs browser walkthrough to confirm |
-| Second-family first adult completes setup link | PARTIAL | Code committed (95eb458); needs browser walkthrough to confirm |
-| Household admin invites member into new family | PARTIAL | Invite flow works for first family; multi-family not tested |
-| Multi-family context switch works cleanly | BLOCKED | `HomeLive.load_family_data/1` uses first-membership-wins |
-| Abandoned family setup is recoverable | BLOCKED | No post-bootstrap family setup flow exists to recover from |
+| Operator bootstraps instance | PASS | `/setup` → passkey → auto-auth → home (verified in browser) |
+| Operator invites spouse | PASS | Invite generation from home, 72h TTL, warm copy |
+| Spouse completes onboarding | PASS | Invite → username → passkey → auto-auth → conversation |
+| Both users can exchange messages | PASS | Channel join, send, receive, browser notifications |
+| Japanese locale works end-to-end | PASS | Locale persisted to DB, 22 errors.po translated, 0 fuzzy flags |
+| Instance deploys with env vars only | PASS | .env.production.example, runtime.exs guards raise on missing secrets |
+
+Multi-family gates (MLP scope, not L1):
+
+| Gate | Status | Notes |
+|---|---|---|
+| Multi-family context switch | NOT STARTED | `HomeLive` is first-membership-wins; not needed for L1 |
+| Abandoned family setup recovery | NOT STARTED | Edge case; not the primary CUJ |
 
 ---
 
@@ -123,30 +108,13 @@ From `.tmp/2026-03-07-mlp/05-mlp-rollout-and-success-signals.md`. All five gates
 
 ---
 
-## Immediate next steps (in order)
+## Immediate next steps
 
-### 1. ~~Remove `last_message_preview`~~ DONE
-Already removed from `chat_read_controller.ex`.
+### 1. Deployment strategy
+Decide where and how to make the L1 dogfood instance available. Options to evaluate: VPS (Fly.io, Railway, bare metal), Docker Compose, Coolify, etc. Key constraints: PostgreSQL, env var configuration, HTTPS with valid cert (WebAuthn requires secure context), DNS.
 
-### 2. ~~Community-admin family creation~~ DONE (95eb458)
-CommunityAdminLive committed. FamilyNewLive committed for self-service path.
-
-### 3. Wire FamilyContext into HomeLive
-`FamilyContext.resolve/2` and the family switching controller are committed (95eb458). HomeLive still uses `load_family_data/1` with first-membership-wins. Next step: wire the context switcher into HomeLive so multi-family users can switch.
-
-### ~~4. Run a real browser walkthrough~~ DONE (90b0d5b)
-Browser walkthrough completed. Bootstrap, passkey, sign-in, invite generation, invite acceptance all verified. Three P0 blockers found and fixed. Pre-existing issues documented (setup_live invite crash, MessageChannel join failure).
-
-### ~~5. MLP UX consensus P0s (first batch)~~ DONE
-Auto-authenticate after passkey, browser notifications, HomeLive opens to conversation, conversation_type fix, push_navigate removal, sender_name forwarding, UNIQUE_CONVERSATION_KEY_SALT config — all implemented and review-gated.
-
-### 6. MLP UX consensus P0s (remaining)
-These block handing the URL to family. Full detail and rationale in the consensus doc.
-- Add warm empty-state copy when conversation has zero messages — blank void causes hesitation
-- Show clear forward path for consumed-but-incomplete invites — cancelled passkey mid-flow is a dead end
-- Persist user_locale to users table — bilingual spouse loses language on every reconnect
-- Add .env.production.example with all required env vars — server crashes on first passkey without WebAuthn vars
-- Complete ~30 missing Japanese gettext translations — half-translated screens block Japanese-speaking spouse (P0 per user decision)
+### 2. Post-deploy browser walkthrough
+Run the full CUJ against the deployed instance to catch any deploy-specific issues (env var misconfiguration, CORS, WebSocket upgrade behind reverse proxy, passkey RP ID matching).
 
 ---
 
@@ -202,18 +170,32 @@ These block handing the URL to family. Full detail and rationale in the consensu
 - ✓ `verify_otp` wired with `enrich_session/2` (review fix: OTP session parity)
 - ✓ `FamilyContext.resolve` catch-all with Logger.warning (review fix: silent 500 prevention)
 - ✓ Device revoke error messages wrapped in `gettext()` (review fix: i18n compliance)
+- ✓ Warm empty-state copy — role-differentiated (admin anticipatory, invitee action-prompting with partner name)
+- ✓ Consumed-invite recovery — clear copy ("ask for a new one"), conditional sign-in link hidden for `:used`
+- ✓ Locale persistence — on_mount DB load, SessionRefresh restore, RootRedirectController DB fallback, locale CHECK constraint
+- ✓ .env.production.example — ungitignored, WebAuthn moved to runtime.exs with prod raise guards
+- ✓ Japanese translations completed — 22 errors.po, 7 fuzzy flags removed, orphaned 404.po deleted
+- ✓ Invite TTL aligned to SPEC — code 7d→72h, all EN+JA copy updated
+- ✓ POSTGRES_PASSWORD prod guard — raises on missing or default "password" value
+- ✓ GitHub webhook plug removed — dead code (controller doesn't exist, hardcoded secret)
+- ✓ Dead content_* config removed from runtime.exs
+- ✓ CSP plug reads from Application.get_env, port consistency fixed
+- ✓ Abandoned invite telemetry — `[:famichat, :invite, :abandoned]` event + Logger.warning
 
 ---
 
 ## What NOT to build now
 
-- **OTP email delivery** — infra not configured; skip for L1. Note: the OTP and magic link routes (`/auth/otp/request`, `/auth/otp/verify`, `/auth/magic-link/*`) are declared in the router and reachable in production but deliver no email. They return HTTP 202 for both existing and nonexistent addresses (intentional enumeration prevention). The `x-test-token` header works only in `:test` env.
-- **Full WASM E2EE (Path C)** — L3 work
+- **OTP email delivery** — infra not configured; skip for L1. Routes exist but deliver no email.
+- **Full WASM E2EE (Path C)** — L3 work. WASM spike passed GO; architecture decided (ADR 012).
 - **Key package endpoints, Welcome routing, multi-device join** — L3 gate items
-- **Photo sharing, message threads, reactions** — deferrable per SPEC; photo sharing punted to next cycle
+- **Photo sharing, message threads, reactions** — photo sharing punted to next cycle; rest is L2+
 - **Design system, LiveView abstractions** — throwaway views, don't invest
-- **QR pairing UI** — invite link is sufficient for 2-person L1
-- **Letters** — deferred entirely for L1 per consensus; validate daily text use first
+- **QR pairing UI** — invite link sufficient for 2-person L1
+- **Letters** — deferred entirely for L1; validate daily text use first
+- **Multi-family context switching** — code exists (FamilyContext), not wired into HomeLive; irrelevant for L1
+- **Unread counts** — substrate exists (message_seq, user_read_cursors, conversation_summaries); math not wired; L2 work
+- **Browser notifications beyond basic** — current implementation: permission on join, Notification on new_msg when tab hidden. No push notifications, no service worker. Sufficient for L1.
 
 ---
 
@@ -228,6 +210,8 @@ These block handing the URL to family. Full detail and rationale in the consensu
 | Mobile | Capacitor 7 at L3; `ASWebAuthenticationSession` for passkeys |
 | Security stance | Server decrypts during L0/L1 — **this is a known gap, not target architecture**; Path C (client-side only) required before L3. Do not build on top of server-side decrypt. |
 | No server-side previews | `last_message_preview` must be removed; SPA maintains local decrypted preview cache |
+| Invite TTL | 72 hours per SPEC; code, EN copy, JA copy all aligned |
+| Photo sharing | Punted to next cycle; not required for L1 dogfood |
 
 ---
 
@@ -252,13 +236,9 @@ These block handing the URL to family. Full detail and rationale in the consensu
 
 ## Known gaps — pre-existing, not blocking L1
 
-- 66 pre-existing test failures in lifecycle, channel, MLS modules. Root causes: stale `household_id` field name in 41 test locations; hardcoded UUIDs in channel tests that conflict with `community_id` non-null constraint added in recent migration; snapshot payload shape drift after N4/N5 hardening.
-- No CI workflow runs `mix test` or `rust:test` as a standalone step — tests only run through `./run qa:messaging:*`.
-- `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME` not configured for production. Note: these values are baked at compile time in releases, not read at runtime — setting them as deploy-time env vars alone does not work.
-- `GET /api/v1/devices` endpoint not built
-- ~~Logout does not revoke refresh token~~ Fixed: `SessionController.delete/2` now calls `Sessions.revoke_device/2` before clearing the session.
-- `excludeCredentials` and `allowCredentials` in passkey challenge options use standard `Base.encode64` instead of `Base.url_encode64` (base64url). This may silently fail credential matching on strictly conformant browsers.
-- ~~301 Permanent Redirect in `LocaleRedirection`~~ — Fixed: now 302 (76776e4).
-- Hardcoded GitHub webhook secret in `backend/lib/famichat_web/endpoint.ex` line 18, and `FamichatWeb.ContentWebhookController` referenced there does not exist — will crash on first webhook delivery.
-- `HomeLive` currently performs server-side decryption for LiveView rendering (`resolve_display_body/2`, `fetch_decrypted_body/4`) — **transitional gap, not target architecture**. Acceptable at L0/L1 only. Must be removed before L3. Do not extend or optimize this path.
-- Device pending-state enforcement (Path A) is not implemented — all authenticated sessions start as active regardless of role.
+- 66 pre-existing test failures in lifecycle, channel, MLS modules. Root causes: stale `household_id` field name in 41 test locations; hardcoded UUIDs in channel tests; snapshot payload shape drift. Separate workstream per decision.
+- No CI workflow runs `mix test` as a standalone step.
+- `excludeCredentials` and `allowCredentials` in passkey challenge options use `Base.encode64` instead of `Base.url_encode64` (base64url). May silently fail on strictly conformant browsers.
+- `GET /api/v1/devices` endpoint not built.
+- `HomeLive` performs server-side decryption for LiveView rendering — **transitional gap, not target architecture**. Acceptable at L0/L1 only. Must be removed before L3.
+- Device pending-state enforcement not implemented — all authenticated sessions start as active regardless of role.
