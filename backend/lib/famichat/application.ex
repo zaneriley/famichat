@@ -9,7 +9,7 @@ defmodule Famichat.Application do
   @impl true
   def start(_type, _args) do
     # Always attach telemetry handler
-    unless Mix.env() == :test do
+    unless Application.get_env(:famichat, :environment) == :test do
       Famichat.TelemetryHandler.attach()
     end
 

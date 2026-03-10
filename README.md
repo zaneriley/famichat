@@ -63,10 +63,10 @@ docker compose up -d --remove-orphans
 
 Local manual spike routes:
 
-1. `http://localhost:9000/admin/spike` (actor-link launcher)
-2. `http://localhost:9000/en` (throwaway chat harness over real backend paths)
+1. `http://localhost:8002/admin/spike` (actor-link launcher)
+2. `http://localhost:8002/en` (throwaway chat harness over real backend paths)
 
-Note: Port can differ if you changed `backend/.env` (`DOCKER_WEB_PORT_FORWARD` / `PORT`).
+Note: Port can differ if you changed `backend/.env` (`URL_PORT`, `DOCKER_WEB_PORT_FORWARD`, or `PORT`).
 
 ## Crypto Stack
 

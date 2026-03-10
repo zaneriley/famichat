@@ -11,8 +11,8 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
     2. :invalid — expired/used/missing token
     3. :register — username form; calls complete_family_setup/2
     4. :passkey — WebAuthn ceremony (PasskeyRegister hook)
-    5. :success — 1.5s then push_navigate to /login (passkey ceremony
-       does not auto-create a session at MLP; user must sign in)
+    5. :success — 1.5s then redirect to / (session cookie is set by the
+       passkey_register fetch() call; redirect picks it up)
   """
   use FamichatWeb, :live_view
 
@@ -113,7 +113,7 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
       username == "" ->
         {:noreply, assign(socket, :error, :username_required)}
 
-      String.length(username) < 2 ->
+      String.length(username) < 1 ->
         {:noreply,
          socket
          |> assign(:error, :username_too_short)
@@ -211,7 +211,9 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
 
   @impl true
   def handle_info(:redirect_home, socket) do
-    {:noreply, push_navigate(socket, to: locale_path(socket, "/login"))}
+    # Destination changes from /login to / — user now has a session from
+    # passkey_register, so they should go home, not to login.
+    {:noreply, redirect(socket, to: locale_path(socket, "/"))}
   end
 
   defp error_message(:expired),
@@ -230,7 +232,7 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
     do: gettext("Please enter a name.")
 
   defp error_message(:username_too_short),
-    do: gettext("Name must be at least 2 characters.")
+    do: gettext("Name must be at least 1 character.")
 
   defp error_message(:username_too_long),
     do: gettext("Name must be 50 characters or fewer.")

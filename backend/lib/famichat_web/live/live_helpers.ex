@@ -75,11 +75,21 @@ defmodule FamichatWeb.LiveHelpers do
     existing_locale = socket.assigns[:user_locale]
     session_locale = session["user_locale"]
 
+    # User's DB-persisted locale is a fallback between session and default.
+    # It's restored into the session on sign-in (auth_controller.ex) and
+    # persisted to DB when the user navigates to a locale-prefixed URL.
+    db_locale =
+      case socket.assigns[:current_user] do
+        %{locale: l} when is_binary(l) and l != "" -> l
+        _ -> nil
+      end
+
     user_locale =
       cond do
         url_locale in @supported_locales -> url_locale
         existing_locale in @supported_locales -> existing_locale
         session_locale in @supported_locales -> session_locale
+        db_locale in @supported_locales -> db_locale
         true -> @default_locale
       end
 
@@ -92,6 +102,7 @@ defmodule FamichatWeb.LiveHelpers do
       params["request_path"] || socket.assigns[:current_path] || "/"
     )
     |> assign_default_page_metadata()
+    |> maybe_persist_locale_change(user_locale)
   end
 
   def assign_page_metadata(socket, title \\ nil, description \\ nil) do
@@ -131,6 +142,56 @@ defmodule FamichatWeb.LiveHelpers do
     user_locale = get_user_locale(session)
     Gettext.put_locale(FamichatWeb.Gettext, user_locale)
     assign(socket, user_locale: user_locale)
+  end
+
+  defp maybe_persist_locale_change(socket, resolved_locale) do
+    user = socket.assigns[:current_user]
+
+    cond do
+      is_nil(user) ->
+        socket
+
+      user.locale == resolved_locale ->
+        socket
+
+      # Don't persist the default locale if user has no preference yet.
+      # This avoids a needless DB write on every first mount.
+      is_nil(user.locale) and resolved_locale == @default_locale ->
+        socket
+
+      true ->
+        user_id = user.id
+
+        Task.start(fn ->
+          try do
+            case Famichat.Repo.get(Famichat.Accounts.User, user_id) do
+              nil ->
+                :ok
+
+              user ->
+                result =
+                  user
+                  |> Ecto.Changeset.change(locale: resolved_locale)
+                  |> Famichat.Repo.update()
+
+                :telemetry.execute(
+                  [:famichat, :locale, :persist],
+                  %{success: match?({:ok, _}, result)},
+                  %{user_id: user_id, locale: resolved_locale}
+                )
+            end
+          rescue
+            e ->
+              :telemetry.execute(
+                [:famichat, :locale, :persist],
+                %{success: false},
+                %{user_id: user_id, error: Exception.message(e)}
+              )
+          end
+        end)
+
+        socket
+    end
   end
 
   @doc """

@@ -45,20 +45,20 @@
         </div>
       <% end %>
 
-      <.typography tag="p" size="2xs" color="deemphasized">
+      <.typography tag="p" size="1xs" color="deemphasized">
         <%= gettext(
           "Getting started? Ask the person who told you about Famichat to send you an invite link."
         ) %>
       </.typography>
 
-      <a
-        href={locale_path(assigns, "/families/new")}
-        class="ac-secondary-button w-full text-center rounded-full px-md py-2xs"
-      >
-        <.typography tag="span" size="md" color="deemphasized">
-          <%= gettext("Set up your own family space") %>
-        </.typography>
-      </a>
+      <.typography tag="p" size="2xs" color="deemphasized">
+        <a
+          href={locale_path(assigns, "/families/new")}
+          class="hover:underline hover:text-main transition-colors"
+        >
+          <%= gettext("Want to set up your own family space?") %>
+        </a>
+      </.typography>
     </div>
   </div>
 </div>

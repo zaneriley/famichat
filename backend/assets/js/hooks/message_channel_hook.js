@@ -25,6 +25,7 @@ const MessageChannelHook = {
       this.channel = null;
       this.connected = false;
       this.seenMessageIds = new Set();
+      this.notificationPromptRequested = false;
 
       // Auto-connect without a server-issued channel token is no longer
       // supported. The LiveView must push connect_channel with the token.
@@ -91,6 +92,18 @@ const MessageChannelHook = {
           console.log("[MessageChannel] Joined successfully", response);
           this.connected = true;
 
+          // Request notification permission once per hook lifecycle (requires prior user gesture).
+          // Placed here so the prompt only appears after authentication,
+          // not on login/setup pages where a "Block" tap is permanent.
+          if (
+            "Notification" in window &&
+            Notification.permission === "default" &&
+            !this.notificationPromptRequested
+          ) {
+            Notification.requestPermission();
+            this.notificationPromptRequested = true;
+          }
+
           // Notify the LiveView that we've connected
           this.pushEvent("channel_joined", {
             topic: topic,
@@ -135,7 +148,35 @@ const MessageChannelHook = {
           device_id: payload.device_id || null,
           encrypted: payload.encryption_flag || false,
           message_id: messageId,
+          sender_name: payload.sender_name || null,
         });
+
+        // Browser notification when tab is not focused.
+        // TODO: At L3 (E2EE), replace body with generic "New message" to prevent
+        // plaintext exposure in OS notifications. Currently acceptable at L1 because
+        // server decrypts for LiveView anyway.
+        if (document.hidden && Notification.permission === "granted") {
+          try {
+            const senderName = payload.sender_name || "Someone sent you a message";
+            const body = payload.body || "";
+            const truncated =
+              body.length > 100 ? body.slice(0, 100) + "\u2026" : body;
+
+            const notification = new Notification(senderName, {
+              body: truncated,
+              tag: "famichat-" + messageId,
+            });
+
+            notification.onclick = () => {
+              window.focus();
+              notification.close();
+              const container = document.getElementById("messages-scroll-container");
+              if (container) container.scrollTop = container.scrollHeight;
+            };
+          } catch (e) {
+            console.warn("[MessageChannel] Notification failed:", e);
+          }
+        }
 
         // Send acknowledgment to the server
         // This implements the client ACK mechanism required by Story 7.5.2.3
@@ -219,6 +260,7 @@ const MessageChannelHook = {
     if (this.connected && nextTopic !== previousTopic) {
       console.log("[MessageChannel] Conversation changed, reconnecting");
       this.disconnect();
+      this.seenMessageIds.clear();
       this.pushEvent("connect-channel", {});
     }
   },

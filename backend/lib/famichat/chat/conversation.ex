@@ -280,7 +280,7 @@ defmodule Famichat.Chat.Conversation do
       "a3c4ef..."
   """
   def compute_direct_key(user1_id, user2_id, family_id) do
-    salt = System.fetch_env!("UNIQUE_CONVERSATION_KEY_SALT")
+    salt = Application.fetch_env!(:famichat, :unique_conversation_key_salt)
     sorted_ids = Enum.sort([user1_id, user2_id])
     raw_key = Enum.join(sorted_ids, "-") <> "-" <> family_id
     :crypto.hash(:sha256, raw_key <> salt) |> Base.encode16(case: :lower)

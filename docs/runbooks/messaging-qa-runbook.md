@@ -147,7 +147,7 @@ Runner determinism hardening:
 ### 7.1 HTTP send probe (`curl`)
 
 ```bash
-BASE_URL="${QA_BASE_URL:-http://localhost:9000}"
+BASE_URL="${QA_BASE_URL:-http://localhost:8002}"
 A_TOKEN="$(jq -r '.actors.a_tab1.access_token' "$ROOT/seed_matrix.json")"
 CONV_ID="$(jq -r '.conversations.direct.id' "$ROOT/seed_matrix.json")"
 
@@ -161,7 +161,7 @@ curl -sS -X POST "$BASE_URL/api/v1/conversations/$CONV_ID/messages" \
 ### 7.2 WS subscribe/observe probe (`websocat`)
 
 ```bash
-WS_URL="${QA_WS_URL:-ws://localhost:9000/socket/websocket?vsn=2.0.0}"
+WS_URL="${QA_WS_URL:-ws://localhost:8002/socket/websocket?vsn=2.0.0}"
 B_TOKEN="$(jq -r '.actors.b.access_token' "$ROOT/seed_matrix.json")"
 TOPIC="message:direct:${CONV_ID}"
 
@@ -175,7 +175,7 @@ TOPIC="message:direct:${CONV_ID}"
 
 ```bash
 NPM_CONFIG_USERCONFIG=/dev/null npx -y wscat --no-color \
-  -c "${QA_WS_URL:-ws://localhost:9000/socket/websocket?vsn=2.0.0}&token=$B_TOKEN" \
+  -c "${QA_WS_URL:-ws://localhost:8002/socket/websocket?vsn=2.0.0}&token=$B_TOKEN" \
   -x "[\"1\",\"1\",\"$TOPIC\",\"phx_join\",{}]" \
   -w 4
 # send join/new_msg envelopes in phoenix format for the scenario under test

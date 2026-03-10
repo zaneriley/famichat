@@ -271,10 +271,11 @@ defmodule FamichatWeb.AuthController do
     with {:ok, passkey} <- Passkeys.register_passkey(params),
          {:ok, user} <- Identity.fetch_user(passkey.user_id),
          {:ok, session} <-
-           Sessions.start_session(user, device_info, remember_device?: false) do
+           Sessions.start_session(user, device_info, remember_device?: true) do
       conn
       |> put_status(:created)
       |> ConnHelpers.put_session_from_issued(session)
+      |> enrich_session(user)
       |> json(%{
         passkey_id: passkey.id,
         user_id: passkey.user_id,
@@ -304,7 +305,10 @@ defmodule FamichatWeb.AuthController do
   end
 
   def passkey_assert_challenge(conn, params) do
-    case Passkeys.issue_assertion_challenge(params) do
+    with :ok <- maybe_rate_limit_assert(conn, params) do
+      Passkeys.issue_assertion_challenge(params)
+    end
+    |> case do
       {:ok, data} ->
         json(conn, data)
 
@@ -351,22 +355,11 @@ defmodule FamichatWeb.AuthController do
              device_info,
              remember_device?: remember?
            ) do
-      conn =
-        conn
-        |> put_status(:created)
-        |> ConnHelpers.put_session_from_issued(session)
-
-      # Resolve and store the active family in the session for HomeLive.
-      conn =
-        case FamilyContext.resolve(user.id) do
-          {:ok, family, _source} ->
-            put_session(conn, "active_family_id", family.id)
-
-          {:error, :no_family} ->
-            conn
-        end
-
-      json(conn, session)
+      conn
+      |> put_status(:created)
+      |> ConnHelpers.put_session_from_issued(session)
+      |> enrich_session(user)
+      |> json(session)
     else
       {:error, :invalid_credentials} ->
         conn
@@ -568,6 +561,7 @@ defmodule FamichatWeb.AuthController do
             conn
             |> put_status(:created)
             |> ConnHelpers.put_session_from_issued(session)
+            |> enrich_session(user)
             |> json(%{
               user_id: user.id,
               username: user.username,
@@ -712,6 +706,39 @@ defmodule FamichatWeb.AuthController do
     end
   end
 
+  defp enrich_session(conn, %Famichat.Accounts.User{} = user) do
+    conn
+    |> maybe_put_family_context(user)
+    |> maybe_put_locale(user)
+  end
+
+  defp maybe_put_family_context(conn, user) do
+    case FamilyContext.resolve(user.id) do
+      {:ok, family, _source} ->
+        put_session(conn, "active_family_id", family.id)
+
+      {:error, :no_family} ->
+        conn
+
+      {:error, reason} ->
+        Logger.warning(
+          "[AuthController] FamilyContext.resolve failed for user #{user.id}: #{inspect(reason)}"
+        )
+
+        conn
+    end
+  end
+
+  defp maybe_put_locale(conn, user) do
+    case user.locale do
+      locale when is_binary(locale) and locale != "" ->
+        put_session(conn, "user_locale", locale)
+
+      _ ->
+        conn
+    end
+  end
+
   defp respond_with_passkey_challenge(conn, user_id) do
     with {:ok, user} <- Identity.fetch_user(user_id),
          {:ok, data} <- Passkeys.issue_registration_challenge(user) do
@@ -773,6 +800,22 @@ defmodule FamichatWeb.AuthController do
   end
 
   defp rate_limit_user!(_conn, _bucket, _user_id), do: :ok
+
+  defp maybe_rate_limit_assert(conn, params) do
+    discoverable? =
+      not (Map.has_key?(params, "username") or
+             Map.has_key?(params, "email") or
+             Map.has_key?(params, "identifier"))
+
+    if discoverable? do
+      RateLimit.check(:"passkey.assert.discoverable", maybe_ip(conn),
+        limit: 20,
+        interval: 60
+      )
+    else
+      :ok
+    end
+  end
 
   defp maybe_put_test_token(conn, token) do
     if test_env?() && token do

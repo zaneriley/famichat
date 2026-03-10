@@ -19,13 +19,17 @@
       "Bash(/tmp/dependency_analysis.txt:*)",
       "Bash(git log:*)",
       "Bash(find:*)",
-      "mcp__playwright__browser_fill_form"
+      "mcp__playwright__browser_fill_form",
+      "Bash(mix compile:*)",
+      "Bash(/usr/local/google/home/zaneriley/repos/famichat/.tmp/2026-03-09-browser-walkthrough/state.json:*)",
+      "mcp__playwright__browser_type"
     ],
     "additionalDirectories": [
       "/usr/local/google/home/zaneriley/repos/famichat/.tmp",
       "/usr/local/google/home/zaneriley/repos/famichat/.agents/skills",
       "/usr/local/google/home/zaneriley/repos/famichat/.tmp/2026-03-09-browser-walkthrough",
-      "/usr/local/google/home/zaneriley/repos/famichat/.claude/prompts"
+      "/usr/local/google/home/zaneriley/repos/famichat/.claude/prompts",
+      "/usr/local/google/home/zaneriley/repos/famichat/.tmp/2026-03-09-mlp-ux"
     ]
   }
 }

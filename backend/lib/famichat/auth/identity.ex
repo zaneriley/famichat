@@ -29,7 +29,8 @@ defmodule Famichat.Auth.Identity do
     :status,
     :password_hash,
     :confirmed_at,
-    :last_login_at
+    :last_login_at,
+    :locale
   ]
 
   @allowed_user_key_map Map.new(@allowed_user_keys, fn key ->

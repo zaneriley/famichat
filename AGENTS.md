@@ -29,7 +29,7 @@ Rules every agent must follow when writing or modifying frontend code.
 These rules exist because agents repeatedly committed broken code that was never tested.
 
 ### Before committing any backend or routing change
-- `curl -sv http://localhost:9000/AFFECTED_ROUTE` — check the HTTP status and response body
+- `curl -sv http://localhost:8002/AFFECTED_ROUTE` — check the HTTP status and response body
 - If you deleted a function, `grep -r "function_name" lib/` before committing — check for other callers
 - If you modified a Plug or router, curl every route that pipeline touches
 

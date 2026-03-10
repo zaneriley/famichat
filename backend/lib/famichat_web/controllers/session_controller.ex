@@ -8,14 +8,39 @@ defmodule FamichatWeb.SessionController do
   """
 
   use FamichatWeb, :controller
+  require Logger
+
+  alias Famichat.Auth.Sessions
+  alias FamichatWeb.SessionKeys
 
   @doc """
-  Clears all session data and redirects to the login page.
+  Revokes the current device and clears all session data, then redirects to
+  the login page.
 
   Called via GET /:locale/logout from a LiveView redirect. GET is used
   because Phoenix.LiveView.redirect/2 only generates GET navigations.
   """
   def delete(conn, %{"locale" => locale}) do
+    device_id = get_session(conn, SessionKeys.device_id())
+    access_token = get_session(conn, SessionKeys.access_token())
+
+    with true <- is_binary(device_id) and is_binary(access_token),
+         {:ok, %{user_id: user_id}} <- Sessions.verify_access_token(access_token) do
+      case Sessions.revoke_device(user_id, device_id) do
+        {:ok, :revoked} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning(
+            "[SessionController.delete] Failed to revoke device: #{inspect(reason)}",
+            user_id: user_id,
+            device_id: device_id
+          )
+      end
+    else
+      _ -> :ok
+    end
+
     conn
     |> clear_session()
     |> redirect(to: "/#{locale}/login")

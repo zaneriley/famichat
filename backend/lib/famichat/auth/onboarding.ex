@@ -212,7 +212,7 @@ defmodule Famichat.Auth.Onboarding do
     with {:ok, normalized_name} <- validate_family_name(name),
          :ok <-
            RateLimit.check(@self_service_bucket, rate_key,
-             limit: 3,
+             limit: 10,
              interval: 3600
            ) do
       community_id = Famichat.Accounts.CommunityScope.default_id()
@@ -263,7 +263,7 @@ defmodule Famichat.Auth.Onboarding do
       is_nil(normalized) or String.trim(normalized) == "" ->
         {:error, :username_required}
 
-      String.length(normalized) < 3 ->
+      String.length(normalized) < 1 ->
         {:error, :invalid_input}
 
       true ->

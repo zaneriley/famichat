@@ -174,7 +174,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
       username == "" ->
         {:noreply, assign(socket, :error, :username_required)}
 
-      String.length(username) < 2 ->
+      String.length(username) < 1 ->
         {:noreply,
          socket
          |> assign(:error, :username_too_short)
@@ -212,6 +212,16 @@ defmodule FamichatWeb.AuthLive.InviteLive do
 
   @impl true
   def handle_event("register-success", _params, socket) do
+    family_id = get_in(socket.assigns, [:payload, "household_id"])
+
+    if family_id do
+      Phoenix.PubSub.broadcast(
+        Famichat.PubSub,
+        "family:#{family_id}:member_joined",
+        %{event: "member_joined"}
+      )
+    end
+
     Process.send_after(self(), :redirect_home, 1500)
     {:noreply, assign(socket, :step, :success)}
   end
@@ -271,7 +281,10 @@ defmodule FamichatWeb.AuthLive.InviteLive do
 
   @impl true
   def handle_info(:redirect_home, socket) do
-    {:noreply, push_navigate(socket, to: locale_path(socket, "/"))}
+    # The 1.5s success animation delay before this handler fires is load-bearing:
+    # it ensures the session cookie from the passkey_register fetch() call is
+    # fully written before the redirect reads it.
+    {:noreply, redirect(socket, to: locale_path(socket, "/"))}
   end
 
   defp username_taken?(username) do
@@ -285,7 +298,10 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     do: gettext("This invite link has expired. Ask for a new one.")
 
   defp error_message(:used),
-    do: gettext("This invite link has already been used.")
+    do:
+      gettext(
+        "You started setting up with this link but didn't finish. Try signing in, or ask for a new invite."
+      )
 
   defp error_message(:already_completed),
     do: gettext("This invite has already been used to create an account. Try signing in instead.")
@@ -302,7 +318,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     do: gettext("Please enter a username.")
 
   defp error_message(:username_too_short),
-    do: gettext("Username must be at least 2 characters.")
+    do: gettext("Username must be at least 1 character.")
 
   defp error_message(:username_too_long),
     do: gettext("Username must be 50 characters or fewer.")

@@ -54,6 +54,21 @@ if config_env() == :test do
   config :famichat, Famichat.Repo, pool: Ecto.Adapters.SQL.Sandbox
 end
 
+unique_conversation_key_salt =
+  case {config_env(), System.get_env("UNIQUE_CONVERSATION_KEY_SALT")} do
+    {:prod, nil} ->
+      raise "environment variable UNIQUE_CONVERSATION_KEY_SALT is required in production"
+
+    {_, nil} ->
+      # Deterministic salt for dev/test only. DO NOT use in production.
+      "famichat-dev-conversation-key-salt!!"
+
+    {_, value} ->
+      value
+  end
+
+config :famichat, :unique_conversation_key_salt, unique_conversation_key_salt
+
 config :famichat, :github_token, System.get_env("GITHUB_TOKEN")
 
 config :famichat,

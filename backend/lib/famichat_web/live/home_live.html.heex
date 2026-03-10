@@ -158,6 +158,44 @@
               </div>
             </div>
           <% end %>
+
+          <%= if @show_welcome_prompt do %>
+            <div id="welcome-prompt-modal" class="mt-md rounded-lg border border-[var(--border-tactile)] bg-[var(--surface-primary)] p-md">
+              <.typography tag="h2" size="md" color="main">
+                <%= gettext("Welcome them!") %>
+              </.typography>
+              <.typography tag="p" size="2xs" color="deemphasized" class="mt-sm">
+                <%= gettext("Add a message so they see you're waiting.") %>
+              </.typography>
+
+              <form phx-submit="submit-welcome-message" class="mt-sm flex flex-col gap-sm">
+                <textarea
+                  name="message"
+                  placeholder={gettext("e.g., Hi! So glad you're here. Talk soon?")}
+                  class="ac-text-input min-h-[80px] resize-none"
+                  autocomplete="off"
+                  maxlength="500"
+                ></textarea>
+
+                <div class="flex gap-sm">
+                  <button type="submit" class="ac-primary-button flex-1 rounded-full py-2xs">
+                    <.typography tag="span" size="sm" color="callout">
+                      <%= gettext("Save message") %>
+                    </.typography>
+                  </button>
+                  <button
+                    type="button"
+                    phx-click="skip-welcome-prompt"
+                    class="flex-1 rounded-full py-2xs"
+                  >
+                    <.typography tag="span" size="sm" color="deemphasized">
+                      <%= gettext("Skip") %>
+                    </.typography>
+                  </button>
+                </div>
+              </form>
+            </div>
+          <% end %>
         <% end %>
 
         <%= if @error_message do %>
@@ -191,70 +229,53 @@
         data-user-id={@user_id}
       >
         <header class="ac-header flex items-center justify-between gap-sm p-md">
-          <div class="flex flex-col gap-2xs">
-            <.typography tag="h1" size="2xl" color="main">
-              <%= case @family_members do
-                [other] ->
-                  other.username
+          <.typography tag="h1" size="2xl" color="main">
+            <%= case @family_members do
+              [other] ->
+                other.username
 
-                [] ->
-                  if @family, do: @family.name, else: gettext("Your family")
+              [] ->
+                if @family, do: @family.name, else: gettext("Your family")
 
-                _multiple ->
-                  if @family, do: @family.name, else: gettext("Your family")
-              end %>
-            </.typography>
-            <%!-- Compact member list under heading --%>
-            <div class="flex gap-sm">
-              <.typography tag="span" size="sm" color="deemphasized">
-                <%= gettext("%{name} (you)", name: @current_user.username) %>
-              </.typography>
-              <%= if length(@family_members) != 1 do %>
-                <%= for member <- @family_members do %>
-                  <.typography tag="span" size="sm" color="deemphasized">
-                    · <%= member.username %>
-                  </.typography>
-                <% end %>
-              <% end %>
-            </div>
-            <%!-- Family name label when user has multiple families --%>
-            <%= if @show_family_switcher do %>
-              <.typography tag="span" size="2xs" color="deemphasized">
-                <%= @family.name %>
-              </.typography>
-            <% end %>
-          </div>
+              _multiple ->
+                if @family, do: @family.name, else: gettext("Your family")
+            end %>
+          </.typography>
 
           <div class="flex items-center gap-sm">
-            <%!-- Family switcher in header --%>
-            <%= if @show_family_switcher do %>
-              <details class="relative">
-                <summary class="cursor-pointer ac-secondary-button rounded-full px-md py-2xs text-sm">
-                  <%= gettext("Your families") %>
-                </summary>
-                <div class="absolute right-0 top-full mt-1 z-10 min-w-[160px] rounded-md border border-[var(--color-brown-200)] bg-white shadow-lg p-2 flex flex-col gap-1">
-                  <%= for %{family: f, role: _role} <- @all_memberships do %>
-                    <%= if f.id == @active_family_id do %>
-                      <span class="block rounded px-3 py-1.5 text-sm font-medium text-[var(--color-brown-900)] bg-[var(--color-brown-100)]">
-                        <%= f.name %>
-                      </span>
-                    <% else %>
-                      <form method="post" action={"/" <> (@user_locale || "en") <> "/families/switch"}>
-                        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
-                        <input type="hidden" name="family_id" value={f.id} />
-                        <button
-                          type="submit"
-                          class="block w-full text-left rounded px-3 py-1.5 text-sm text-[var(--color-brown-600)] hover:bg-[var(--color-brown-50)] transition-colors"
-                        >
-                          <%= f.name %>
-                        </button>
-                      </form>
-                    <% end %>
-                  <% end %>
-                </div>
-              </details>
-            <% end %>
-
+            <%!-- Language switcher --%>
+            <nav aria-label={gettext("Language switcher")}>
+              <ul class="flex gap-md">
+                <li>
+                  <.link
+                    href={build_localized_path(@current_path, "en")}
+                    aria-current={if @user_locale == "en", do: "page", else: "false"}
+                  >
+                    <.typography
+                      tag="span"
+                      size="1xs"
+                      color={if @user_locale == "en", do: "main", else: "deemphasized"}
+                    >
+                      EN
+                    </.typography>
+                  </.link>
+                </li>
+                <li>
+                  <.link
+                    href={build_localized_path(@current_path, "ja")}
+                    aria-current={if @user_locale == "ja", do: "page", else: "false"}
+                  >
+                    <.typography
+                      tag="span"
+                      size="1xs"
+                      color={if @user_locale == "ja", do: "main", else: "deemphasized"}
+                    >
+                      JA
+                    </.typography>
+                  </.link>
+                </li>
+              </ul>
+            </nav>
             <%!-- Connect/disconnect button is a dev tool only --%>
             <%= if @dev_mode do %>
               <button
@@ -274,17 +295,7 @@
                 </.typography>
               </button>
             <% end %>
-            <%!-- Admin invite button in header when conversation exists --%>
-            <%= if @is_admin do %>
-              <button
-                phx-click="generate_invite"
-                class="ac-primary-button rounded-full px-md py-2xs"
-              >
-                <.typography tag="span" size="2xs" color="callout">
-                  <%= gettext("Invite") %>
-                </.typography>
-              </button>
-            <% end %>
+            <%!-- Sign out --%>
             <button
               type="button"
               phx-click="sign-out"
@@ -296,6 +307,7 @@
             </button>
           </div>
         </header>
+        <%!-- TODO: At L2 (3+ members), restore family switcher and invite button to header --%>
 
         <%= if @dev_mode do %>
           <details class="mx-md mb-sm rounded-md border border-[var(--color-brown-200)] bg-white/70">
@@ -430,37 +442,6 @@
           </details>
         <% end %>
 
-        <%!-- Invite URL display inside conversation view (if admin just generated one) --%>
-        <%= if @invite_url do %>
-          <div class="mx-md mb-sm flex flex-col gap-sm rounded-md border border-[var(--color-brown-200)] bg-white/70 p-3">
-            <.typography tag="p" size="sm" color="deemphasized">
-              <%= gettext(
-                "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
-              ) %>
-            </.typography>
-            <div class="flex gap-sm items-center">
-              <input
-                type="text"
-                readonly
-                class="ac-text-input grow font-mono"
-                value={@invite_url}
-                id="invite-url-display-chat"
-                aria-label={gettext("Invite link")}
-              />
-              <button
-                phx-hook="CopyToClipboard"
-                id="copy-invite-url-chat"
-                data-copy-value={@invite_url}
-                class="ac-primary-button shrink-0 px-md py-2xs rounded-full"
-              >
-                <.typography tag="span" size="sm" color="callout">
-                  <%= gettext("Copy") %>
-                </.typography>
-              </button>
-            </div>
-          </div>
-        <% end %>
-
         <div
           id="messages-scroll-container"
           class="flex grow flex-col gap-lg overflow-y-auto p-md pb-xl"
@@ -469,18 +450,21 @@
           <%= if is_nil(@last_seen_message_id) do %>
             <div
               id="empty-state"
-              class="mb-auto mt-auto flex flex-col items-center justify-center text-center opacity-70"
+              class="mb-auto mt-auto flex flex-col items-center justify-center text-center gap-sm px-lg opacity-70"
             >
               <.typography tag="p" size="lg" color="deemphasized">
                 <%= case @family_members do
                   [other] ->
-                    gettext("Your private space with %{name}. Say hello.",
+                    gettext("Your private space with %{name}.",
                       name: other.username
                     )
 
                   _ ->
-                    gettext("Your private family space. Say hello.")
+                    gettext("Your private family space.")
                 end %>
+              </.typography>
+              <.typography tag="p" size="sm" color="deemphasized">
+                <%= gettext("This is just for the two of you. Messages stay here.") %>
               </.typography>
             </div>
           <% end %>

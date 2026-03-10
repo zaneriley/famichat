@@ -41,6 +41,10 @@ defmodule FamichatWeb.HomeLive do
     all_memberships = FamilyContext.all_memberships(user.id)
     show_family_switcher = length(all_memberships) > 1
 
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Famichat.PubSub, "family:#{family.id}:member_joined")
+    end
+
     {:ok, conversations} = get_user_conversations(user.id, family.id)
 
     base_socket =
@@ -62,10 +66,19 @@ defmodule FamichatWeb.HomeLive do
 
     case conversations do
       [conversation | _] ->
+        page_title =
+          case family_members do
+            [other] -> other.username
+            _ -> family.name
+          end
+
+        conv_type = Atom.to_string(conversation.conversation_type)
+
         result_socket =
           base_socket
-          |> assign(conversation_id: conversation.id)
+          |> assign(conversation_id: conversation.id, conversation_type: conv_type)
           |> load_messages(conversation.id, user.id)
+          |> assign_page_metadata(page_title)
 
         if connected?(result_socket) do
           send(self(), :auto_connect)
@@ -112,7 +125,7 @@ defmodule FamichatWeb.HomeLive do
   defp assign_socket_state(socket, user, device_id, _token, params) do
     assign(socket,
       channel_joined: false,
-      conversation_type: "family",
+      conversation_type: nil,
       current_message: "",
       user_id: user.id,
       device_id: device_id,
@@ -130,7 +143,10 @@ defmodule FamichatWeb.HomeLive do
       last_seen_message_id: nil,
       mls_enforcement_enabled:
         Application.get_env(:famichat, :mls_enforcement, false),
-      dev_mode: Application.get_env(:famichat, :environment) == :dev
+      dev_mode: Application.get_env(:famichat, :environment) == :dev,
+      show_welcome_prompt: false,
+      welcome_message: "",
+      pending_welcome_message: nil
     )
   end
 
@@ -208,7 +224,7 @@ defmodule FamichatWeb.HomeLive do
        invite_url: nil,
        no_family: true,
        channel_joined: false,
-       conversation_type: "family",
+       conversation_type: nil,
        current_message: "",
        topic: nil,
        security_reason: nil,
@@ -218,7 +234,10 @@ defmodule FamichatWeb.HomeLive do
        recovery_last_status: nil,
        last_seen_message_id: nil,
        mls_enforcement_enabled: false,
-       dev_mode: false
+       dev_mode: false,
+       show_welcome_prompt: false,
+       welcome_message: "",
+       pending_welcome_message: nil
      )
      |> stream(:messages, [], reset: true)
      |> push_navigate(to: locale_path(socket, "/login"))}
@@ -322,7 +341,7 @@ defmodule FamichatWeb.HomeLive do
     cond do
       target == "" ->
         {:noreply,
-         assign(socket, error_message: "Enter a device id to revoke.")}
+         assign(socket, error_message: gettext("Enter a device id to revoke."))}
 
       true ->
         case Sessions.revoke_device(socket.assigns.user_id, target) do
@@ -330,19 +349,19 @@ defmodule FamichatWeb.HomeLive do
             {:noreply,
              socket
              |> assign(error_message: nil)
-             |> put_system_notice("Revoked device #{target}.")}
+             |> put_system_notice(gettext("Revoked device %{device}.", device: target))}
 
           {:error, :not_found} ->
             {:noreply,
              assign(
                socket,
-               error_message: "Device #{target} not found for this user."
+               error_message: gettext("Device %{device} not found for this user.", device: target)
              )}
 
           {:error, reason} ->
             {:noreply,
              assign(socket,
-               error_message: "Device revoke failed: #{inspect(reason)}"
+               error_message: gettext("Device revoke failed: %{reason}", reason: inspect(reason))
              )}
         end
     end
@@ -576,7 +595,9 @@ defmodule FamichatWeb.HomeLive do
               "#{FamichatWeb.Endpoint.url()}/#{socket.assigns[:user_locale] || "en"}/invites/#{invite_token}"
 
             {:noreply,
-             assign(socket, invite_url: invite_url, error_message: nil)}
+             socket
+             |> assign(invite_url: invite_url, error_message: nil)
+             |> assign(show_welcome_prompt: true, welcome_message: "")}
 
           {:error, reason} ->
             Logger.warning("[HomeLive] issue_invite error: #{inspect(reason)}")
@@ -585,6 +606,25 @@ defmodule FamichatWeb.HomeLive do
              assign(socket, error_message: gettext("Could not generate invite link."))}
         end
     end
+  end
+
+  @impl true
+  def handle_event("submit-welcome-message", %{"message" => message}, socket) do
+    message = String.trim(message)
+
+    if message == "" do
+      {:noreply, assign(socket, show_welcome_prompt: false)}
+    else
+      {:noreply,
+       socket
+       |> assign(show_welcome_prompt: false)
+       |> assign(pending_welcome_message: message)}
+    end
+  end
+
+  @impl true
+  def handle_event("skip-welcome-prompt", _params, socket) do
+    {:noreply, assign(socket, show_welcome_prompt: false)}
   end
 
   @impl true
@@ -638,8 +678,77 @@ defmodule FamichatWeb.HomeLive do
   end
 
   @impl true
+  def handle_info(%{event: "member_joined"}, socket) do
+    if socket.assigns.conversation_id != nil do
+      {:noreply, socket}
+    else
+      user_id = socket.assigns.user_id
+      family_id = socket.assigns.active_family_id
+
+      case get_user_conversations(user_id, family_id) do
+        {:ok, [conversation | _]} ->
+          conv_type = Atom.to_string(conversation.conversation_type)
+          family_members = load_family_members(family_id, user_id)
+
+          page_title =
+            case family_members do
+              [other] -> other.username
+              _ -> socket.assigns.family && socket.assigns.family.name
+            end
+
+          result_socket =
+            socket
+            |> assign(
+              conversation_id: conversation.id,
+              conversation_type: conv_type,
+              show_welcome_prompt: false,
+              family_members: family_members
+            )
+            |> maybe_inject_welcome_message(conversation.id, user_id)
+            |> load_messages(conversation.id, user_id)
+            |> assign_page_metadata(page_title)
+
+          send(self(), :auto_connect)
+
+          {:noreply, result_socket}
+
+        _ ->
+          {:noreply, socket}
+      end
+    end
+  end
+
+  @impl true
   def handle_info(_msg, socket) do
     {:noreply, socket}
+  end
+
+  ## -- Welcome message injection ---------------------------------------------
+
+  defp maybe_inject_welcome_message(socket, conversation_id, user_id) do
+    case socket.assigns[:pending_welcome_message] do
+      nil ->
+        socket
+
+      "" ->
+        socket
+
+      message when is_binary(message) ->
+        case Famichat.Chat.MessageService.send_message(%{
+               conversation_id: conversation_id,
+               sender_id: user_id,
+               content: message
+             }) do
+          {:ok, _msg} ->
+            socket
+            |> assign(pending_welcome_message: nil)
+            |> load_messages(conversation_id, user_id)
+
+          {:error, reason} ->
+            Logger.warning("[HomeLive] Failed to inject welcome message: #{inspect(reason)}")
+            assign(socket, pending_welcome_message: nil)
+        end
+    end
   end
 
   ## -- Family data loading ---------------------------------------------------
@@ -806,10 +915,10 @@ defmodule FamichatWeb.HomeLive do
   end
 
   defp sender_name_for_payload(payload, assigns) do
-    if payload["user_id"] == assigns.user_id do
-      "Me"
-    else
-      "Family Member"
+    cond do
+      payload["user_id"] == assigns.user_id -> "Me"
+      is_binary(payload["sender_name"]) and payload["sender_name"] != "" -> payload["sender_name"]
+      true -> "Family Member"
     end
   end
 
@@ -870,4 +979,14 @@ defmodule FamichatWeb.HomeLive do
 
   defp maybe_put_after(opts, after_cursor),
     do: Keyword.put(opts, :after, after_cursor)
+
+  defp build_localized_path(current_path, locale) do
+    base_path = FamichatWeb.Layouts.remove_locale_from_path(current_path)
+
+    if base_path == "/" do
+      "/#{locale}"
+    else
+      "/#{locale}#{base_path}"
+    end
+  end
 end

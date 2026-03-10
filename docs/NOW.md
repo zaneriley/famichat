@@ -1,6 +1,6 @@
 # Famichat NOW
 
-**Last updated:** 2026-03-09
+**Last updated:** 2026-03-10
 
 Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [ADR 012](decisions/012-spa-wasm-client-architecture.md).
 
@@ -8,9 +8,15 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-The browser front door is walkable for core CUJs. All three P0 blockers from the 2026-03-09 browser walkthrough are resolved (90b0d5b): token kind constraint mismatch, non-transactional user creation, and FallbackController 404 crash. Admin bootstrap → passkey → sign-in → invite → invite acceptance all verified in a real browser. The message plane data model substrate is in place (message_seq, conversation_summaries, user_read_cursors) but unread count math and HomeLive family context wiring are not yet connected. Next priority: wire FamilyContext into HomeLive for multi-family switching, then complete the MLP dogfood gates.
+7 more P0s closed in this round: auto-auth after passkey, browser notifications, home-opens-to-conversation, conversation_type fix, push_navigate removal, sender_name forwarding, UNIQUE_CONVERSATION_KEY_SALT config. 1 P1 closed (Mix.env fix). 6 review findings fixed (runtime.exs config, verify_otp session parity, seenMessageIds leak, notification prompt guard, FamilyContext error catch-all, gettext wrappers). Remaining P0s: warm empty states, consumed-invite recovery, locale persistence, .env.production.example, Japanese translations.
 
 ---
+
+## What just happened (2026-03-10)
+
+- **P0 next-four implemented + review-gated** — 4 P0 items from MLP UX consensus researched (2 rounds, 8 agents), synthesized, peer-reviewed, then implemented by 3 parallel agents with 3-reviewer code review gate. Auto-auth: extracted `enrich_session/2` in AuthController, wired into `passkey_register`, `passkey_assert`, and `verify_otp`; `remember_device?: true` for registration. Browser notifications: permission prompt on channel join (once per lifecycle), `Notification` on `new_msg` when tab hidden, sender name + truncated body. HomeLive conversation: `conversation_type` derived from actual conversation (was hardcoded `"family"`), `push_navigate` replaced with in-place assigns + `send(self(), :auto_connect)`, `sender_name` forwarded through JS hook. Config: `UNIQUE_CONVERSATION_KEY_SALT` moved to `runtime.exs` with prod raise guard, `Application.fetch_env!` in `conversation.ex`, `Mix.env()` replaced with `Application.get_env(:famichat, :environment)` in `application.ex`. Review findings fixed: missing `unique_conversation_key_salt` config (would crash at runtime), `verify_otp` missing `enrich_session` call (OTP users lacked family context), `seenMessageIds` not cleared on conversation switch (dedup leak), notification prompt re-firing on every join, `FamilyContext.resolve` missing catch-all (silent 500), 4 device-revoke error messages unwrapped in gettext.
+- **L1 dogfood ideation implemented** — 12 fixes from 10-agent ideation round shipped in 5 parallel groups. Security: logout now revokes device via `Sessions.revoke_device/2`, family creation rate limit raised 3→10/IP/hr, discoverable passkey assert rate-limited (20/IP/min). Validation: name minimum reduced to 1 char across 5 files (CJK unblocked). Templates: 404/410 stripped to content-only (fixes duplicate LiveSocket, duplicate skip links, hardcoded lang); 410 copy rewritten to brand voice. A11y: `--color-mint-500` contrast fixed (#45bd7f→#2d8f5f, 4.5:1), "Getting started?" text bumped 2xs→1xs, `id="main-content"` added. UX: welcome message prompt after invite generation, PubSub auto-navigate on `member_joined`, self-service button demoted to text link. I18n: 2 Japanese brand voice violations fixed (権限/管理者), 11 new JA translations added. All compile clean; 88 auth tests pass (5 pre-existing failures).
+- **L1 dogfood ideation round** — 10 agents explored ~35 open backlog items across security, UX, i18n, infrastructure, and accessibility. Consensus: `.tmp/2026-03-10-ideation/consensus.md`. Key outcomes: logout must revoke device (new P0), name minimum must drop to 1 char (P1→P0 upgrade), 404/410 template fix is a 3-for-1, 4 open decisions resolved, 3 backlog items closed as already done. Peer-reviewed by 3 agents against codebase; 2 corrections applied (privacy line already exists in both templates; logout gap was known in NOW.md, not truly new).
 
 ## What just happened (2026-03-09)
 
@@ -45,7 +51,7 @@ The browser front door is walkable for core CUJs. All three P0 blockers from the
 | `/` | ✓ 302 → `/en/` | Canonical root redirect; respects Accept-Language partially via locale infrastructure |
 | `/en` | ✓ 302 → `/en/login` | Works for unauthenticated users |
 | `/en/login` | ✓ 200 | Renders passkey sign-in page with no dead OTP link |
-| `/en/setup` | ✓ 200 | Bootstrap → passkey → invite step all verified (90b0d5b). Bootstrapped instance redirects to login. Incomplete-bootstrap recovery works. Admin is NOT auto-authenticated after passkey ceremony — must sign in separately. Invite generation from setup_live crashes (pre-existing; home page invite works). |
+| `/en/setup` | ✓ 200 | Bootstrap → passkey → invite step all verified (90b0d5b). Bootstrapped instance redirects to login. Incomplete-bootstrap recovery works. Admin IS now auto-authenticated after passkey ceremony via `enrich_session/2`. Invite generation from setup_live crashes (pre-existing; home page invite works). |
 | `/en/invites/:token` | ✓ 200 | Invalid/used tokens stay on the invite LiveView instead of falling through to 404 |
 | `/en/families/start/:token` | ✓ 200 | Token-gated family setup; reconnect recovery via `peek_family_setup/1` |
 | `/api/v1/health` | ✓ 200 | No longer shadowed by `:locale` catch-all |
@@ -131,6 +137,17 @@ CommunityAdminLive committed. FamilyNewLive committed for self-service path.
 ### ~~4. Run a real browser walkthrough~~ DONE (90b0d5b)
 Browser walkthrough completed. Bootstrap, passkey, sign-in, invite generation, invite acceptance all verified. Three P0 blockers found and fixed. Pre-existing issues documented (setup_live invite crash, MessageChannel join failure).
 
+### ~~5. MLP UX consensus P0s (first batch)~~ DONE
+Auto-authenticate after passkey, browser notifications, HomeLive opens to conversation, conversation_type fix, push_navigate removal, sender_name forwarding, UNIQUE_CONVERSATION_KEY_SALT config — all implemented and review-gated.
+
+### 6. MLP UX consensus P0s (remaining)
+These block handing the URL to family. Full detail and rationale in the consensus doc.
+- Add warm empty-state copy when conversation has zero messages — blank void causes hesitation
+- Show clear forward path for consumed-but-incomplete invites — cancelled passkey mid-flow is a dead end
+- Persist user_locale to users table — bilingual spouse loses language on every reconnect
+- Add .env.production.example with all required env vars — server crashes on first passkey without WebAuthn vars
+- Complete ~30 missing Japanese gettext translations — half-translated screens block Japanese-speaking spouse (P0 per user decision)
+
 ---
 
 ## What was completed (no longer in the build queue)
@@ -160,6 +177,31 @@ Browser walkthrough completed. Bootstrap, passkey, sign-in, invite generation, i
 - ✓ PendingUserReaper — GenServer sweeping pending users every 15 min
 - ✓ Cursor pagination substrate — `message_seq` column, `conversation_summaries` table with trigger, `user_read_cursors` table
 - ✓ `last_message_preview` removed from conversation list API (E2EE spec compliance)
+- ✓ Logout device revocation — `SessionController.delete/2` calls `Sessions.revoke_device/2`
+- ✓ Name minimum reduced to 1 char — CJK single-kanji names unblocked across 5 validation sites
+- ✓ 404/410 templates stripped to content-only — no duplicate LiveSocket, skip links, or HTML shell
+- ✓ 410 error page rewritten to brand voice — warm relational copy, no ALL-CAPS terminal aesthetic
+- ✓ Green CTA button contrast fixed — `--color-mint-500` #45bd7f→#2d8f5f (4.5:1 ratio)
+- ✓ Skip-to-content target — `id="main-content"` added to `<main>` in app.html.heex
+- ✓ "Getting started?" text size bumped 2xs→1xs
+- ✓ Welcome message prompt after invite generation — operator can leave a greeting before invitee arrives
+- ✓ PubSub auto-navigate on member_joined — operator sees conversation when invitee completes registration
+- ✓ Self-service button demoted to text link on login page
+- ✓ Discoverable passkey assert rate-limited (20/IP/min)
+- ✓ Family creation rate limit raised 3→10/IP/hr (NAT-friendly)
+- ✓ 2 Japanese brand voice violations fixed (権限がありません→許可されていません, 管理者→セットアップが必要)
+- ✓ 11 new Japanese gettext translations added
+- ✓ Auto-authenticate after passkey registration — `enrich_session/2` extracted, wired into register+assert+OTP; `remember_device?: true`
+- ✓ Browser Notification API on incoming Channel messages — permission on join, Notification on `new_msg` when tab hidden
+- ✓ HomeLive opens directly to 1:1 conversation — `conversation_type` derived from actual conversation, not hardcoded `"family"`
+- ✓ `push_navigate` removed from `member_joined` handler — replaced with in-place assigns + `send(self(), :auto_connect)`
+- ✓ `sender_name` forwarded through JS hook pushEvent to LiveView
+- ✓ `UNIQUE_CONVERSATION_KEY_SALT` moved to runtime.exs with prod raise guard + dev/test default
+- ✓ `Mix.env()` replaced with `Application.get_env(:famichat, :environment)` in application.ex
+- ✓ `seenMessageIds` cleared on conversation switch in JS hook (review fix: dedup cache leak)
+- ✓ `verify_otp` wired with `enrich_session/2` (review fix: OTP session parity)
+- ✓ `FamilyContext.resolve` catch-all with Logger.warning (review fix: silent 500 prevention)
+- ✓ Device revoke error messages wrapped in `gettext()` (review fix: i18n compliance)
 
 ---
 
@@ -168,10 +210,10 @@ Browser walkthrough completed. Bootstrap, passkey, sign-in, invite generation, i
 - **OTP email delivery** — infra not configured; skip for L1. Note: the OTP and magic link routes (`/auth/otp/request`, `/auth/otp/verify`, `/auth/magic-link/*`) are declared in the router and reachable in production but deliver no email. They return HTTP 202 for both existing and nonexistent addresses (intentional enumeration prevention). The `x-test-token` header works only in `:test` env.
 - **Full WASM E2EE (Path C)** — L3 work
 - **Key package endpoints, Welcome routing, multi-device join** — L3 gate items
-- **Photo sharing, message threads, reactions** — deferrable per SPEC
+- **Photo sharing, message threads, reactions** — deferrable per SPEC; photo sharing punted to next cycle
 - **Design system, LiveView abstractions** — throwaway views, don't invest
 - **QR pairing UI** — invite link is sufficient for 2-person L1
-- **Push notifications** — L3 scope
+- **Letters** — deferred entirely for L1 per consensus; validate daily text use first
 
 ---
 
@@ -214,7 +256,7 @@ Browser walkthrough completed. Bootstrap, passkey, sign-in, invite generation, i
 - No CI workflow runs `mix test` or `rust:test` as a standalone step — tests only run through `./run qa:messaging:*`.
 - `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME` not configured for production. Note: these values are baked at compile time in releases, not read at runtime — setting them as deploy-time env vars alone does not work.
 - `GET /api/v1/devices` endpoint not built
-- Logout (`GET /:locale/logout` → `SessionController.delete/2`) clears the session cookie but does not revoke the refresh token. A stolen refresh token remains usable for up to 30 days after logout.
+- ~~Logout does not revoke refresh token~~ Fixed: `SessionController.delete/2` now calls `Sessions.revoke_device/2` before clearing the session.
 - `excludeCredentials` and `allowCredentials` in passkey challenge options use standard `Base.encode64` instead of `Base.url_encode64` (base64url). This may silently fail credential matching on strictly conformant browsers.
 - ~~301 Permanent Redirect in `LocaleRedirection`~~ — Fixed: now 302 (76776e4).
 - Hardcoded GitHub webhook secret in `backend/lib/famichat_web/endpoint.ex` line 18, and `FamichatWeb.ContentWebhookController` referenced there does not exist — will crash on first webhook delivery.

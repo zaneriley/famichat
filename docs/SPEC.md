@@ -189,10 +189,10 @@ Conflicts are flagged inline with `[CONFLICT]`. Unresolved decisions are flagged
 
 ### Family Setup Flow (fourth and fifth public entry points)
 - `/:locale/families/start/:token` is the token-gated fourth public entry point for MLP (alongside `/`, `/:locale/login`, and `/:locale/invites/:token`). Community admin creates a family and generates a `:family_setup` token (72-hour TTL). The first person to redeem the setup link becomes the family's household admin. The setup link is shared privately by the community admin.
-- `/:locale/families/new` is the self-service fifth public entry point. Shown as a secondary CTA ("Set up your family space") on the login page when `self_service_enabled` is `true`. Rate-limited (3 per IP per hour). Creates an isolated family and a `:family_setup` token internally (`"initiated_by" => "self"`). The first person through becomes the family's household admin.
+- `/:locale/families/new` is the self-service fifth public entry point. Shown as a secondary CTA ("Set up your family space") on the login page when `self_service_enabled` is `true`. Rate-limited (10 per IP per hour). Creates an isolated family and a `:family_setup` token internally (`"initiated_by" => "self"`). The first person through becomes the family's household admin.
 
 ### Invite Flow
-- Household admin issues invite → invitee accepts (one-time, 10-min JWT) → passkey registration
+- Household admin issues invite → invitee accepts (one-time, 72-hour JWT) → passkey registration
 - `POST /auth/invites/accept` consumes invite immediately + mints registration JWT
 - Invite issuable by household admin only (role enforced)
 
@@ -565,7 +565,8 @@ Every user-facing `:string` field in an Ecto schema must have `validate_length` 
 ### L1 — Dyad (next)
 - 2 users: parent + spouse; encrypted 1:1 family messaging
 - Hypothesis: encrypted 1:1 solves JTBD #2 (emotional bonding)
-- Features needed: 1:1 messaging, photo sharing, message threads, both passkey + QR device auth, real WebAuthn JS (`navigator.credentials.create()` / `navigator.credentials.get()`), real login page, invite redemption UI
+- Features needed: 1:1 messaging, browser notifications, both passkey + QR device auth, real WebAuthn JS (`navigator.credentials.create()` / `navigator.credentials.get()`), real login page, invite redemption UI, home screen opens directly to the 1:1 conversation (no conversation list), warm empty states, auto-authenticate after passkey registration
+- Deferred from L1: photo sharing, message threads, letters (validate daily text use first)
 - Success: daily usage, replaces SMS/WhatsApp, cozy UI, zero encryption issues
 - Kill: no daily use after 2 weeks, UI feels clinical not cozy
 

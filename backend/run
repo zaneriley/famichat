@@ -253,7 +253,7 @@ function _qa_base_url {
 
   local mapped_port=""
   local candidate_container_port
-  local -a candidates=(9000 8002 4000)
+  local -a candidates=(8002 8001 4000)
   for candidate_container_port in "${candidates[@]}"; do
     mapped_port="$(docker compose port web "${candidate_container_port}" 2>/dev/null | head -n 1 || true)"
     if [[ -n "${mapped_port}" ]]; then

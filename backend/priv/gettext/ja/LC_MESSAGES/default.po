@@ -1,443 +1,1068 @@
-msgid "%{name} invited you"
-msgstr "%{name} さんに招待されました"
-
-msgid "A passkey keeps your account secure — no password needed. Your device handles it for you, and only you can sign in."
-msgstr "パスキーでアカウントを守ります。パスワード不要。あなたのデバイスが代わりに認証してくれるので、サインインできるのはあなただけです。"
-
-msgid "Actions"
-msgstr "操作"
-
-msgid "Attempting to reconnect"
-msgstr "再接続しています…"
-
-msgid "Ask the person who invited you to send a new link, or reply to the message you received."
-msgstr "招待してくれた方に新しいリンクを送ってもらうか、受信したメッセージに返信してください。"
-
-msgid "Continue"
-msgstr "続ける"
-
-msgid "Continue — set up your passkey next"
-msgstr "続ける — 次にパスキーを設定します"
-
-msgid "Dark"
-msgstr "ダーク"
-
-msgid "e.g. Mum, Dad, Grandma Rose"
-msgstr "例：お母さん、お父さん、おばあちゃん"
-
-msgid "Famichat"
-msgstr "Famichat"
-
-msgid "Go back"
-msgstr "戻る"
-
-msgid "Famichat home"
-msgstr "Famichatのホームへ"
-
-msgid "Language switcher"
-msgstr "言語切替"
-
-msgid "Light"
-msgstr "ライト"
-
-msgid "Open Famichat"
-msgstr "Famichatを開く"
-
-msgid "Private, self-hosted messaging for families."
-msgstr "家族のための、プライベートな自前メッセージアプリ。"
-
-msgid "Set up passkey"
-msgstr "パスキーを設定する"
-
-msgid "Set up your passkey"
-msgstr "パスキーを設定しましょう"
-
-msgid "Can't use a passkey? Sign in another way"
-msgstr "パスキーを使用できませんか？別の方法でサインイン"
-
-msgid "Sign in to Famichat"
-msgstr "Famichat にサインイン"
-
-msgid "Sign in to your family's private space."
-msgstr "家族のプライベートスペースにサインイン。"
-
-msgid "Sign in with passkey"
-msgstr "パスキーでサインイン"
-
-msgid "Signing you in…"
-msgstr "サインイン中…"
-
-msgid "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt."
-msgstr "サインインがキャンセルまたはタイムアウトしました。ボタンをタップしてデバイスの指示に従ってください。"
-
-msgid "Use your passkey to continue — your device will ask to confirm it's you."
-msgstr "続けるにはパスキーを使用してください。デバイスが本人確認を行います。"
-
-msgid "Your device will ask to confirm it's you — the same way it unlocks your phone."
-msgstr "デバイスがあなた本人か確認します。スマホのロック解除と同じ方法です。"
-
-msgid "New to Famichat? You need an invite link from a family member to get started."
-msgstr "Famichatは初めてですか？始めるには家族からの招待リンクが必要です。"
-
-msgid "Just a name your family will recognise"
-msgstr "家族が認識できる名前を入力してください"
-
-msgid "Just a name your family will see. We don't ask for your real name, phone number, or email."
-msgstr "家族に表示される名前だけで大丈夫です。本名、電話番号、メールアドレスは必要ありません。"
-
-msgid "Famichat is invite-only. There's no public sign-up — that's the point."
-msgstr "Famichatは招待制です。公開サインアップはありません。それがポイントです。"
-
-msgid "%{name} set up a private family space and wants you in it. Choose a name so they know it's you."
-msgstr "%{name} さんがプライベートな家族スペースを作り、あなたを招いています。あなたとわかる名前を入れてください。"
-
-msgid "Your device will ask to confirm it's you — it takes about 2 seconds."
-msgstr "デバイスが本人確認を求めます。約2秒で完了します。"
-
-msgid "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
-msgstr "パスキーはデバイスの外に出ることはありません。Famichatが指紋や顔を見ることはありません。"
-
-msgid "Invite links are single-use and expire after 10 minutes. This keeps the space private."
-msgstr "招待リンクは一度しか使えず、10分で期限切れになります。これがプライバシーを守る仕組みです。"
-
-msgid "Loading…"
-msgstr "読み込み中…"
-
-msgid "Skip to main content"
-msgstr "メインコンテンツへスキップ"
-
-msgid "Someone who loves you set up a private space just for your family. Choose a name so they know it's you."
-msgstr "あなたを大切に思う人が、家族だけのプライベートな場所を用意しました。あなたとわかる名前を入れてください。"
-
-msgid "System"
-msgstr "システム"
-
-msgid "Theme"
-msgstr "テーマ"
-
-msgid "This invite link didn't work"
-msgstr "この招待リンクは使えませんでした"
-
-msgid "We can't find the internet"
-msgstr "インターネットに接続できません"
-
-msgid "Welcome back"
-msgstr "おかえりなさい"
-
-msgid "You're in!"
-msgstr "ようこそ！"
-
-msgid "You're invited"
-msgstr "招待が届いています"
-
-msgid "Your name"
-msgstr "お名前"
-
-msgid "Your passkey is set up. Taking you to your family space…"
-msgstr "パスキーの設定が完了しました。ファミリースペースに移動しています…"
-
-msgid "Your private space for the people who matter most."
-msgstr "大切な人たちと過ごす、あなただけのプライベートスペース。"
-
-msgid "Your session ended. Sign in again to pick up where you left off."
-msgstr "セッションが終了しました。もう一度サインインして、続きをどうぞ。"
-
-msgid "close"
-msgstr "閉じる"
-
-msgid "Admin Setup"
-msgstr "管理者設定"
-
-msgid "Checking setup status…"
-msgstr "セットアップ状態を確認中…"
-
-msgid "Welcome to Famichat"
-msgstr "Famichatへようこそ"
-
-msgid "Let's get you set up. Create your admin account to get started."
-msgstr "セットアップを始めましょう。管理者アカウントを作成してください。"
-
-msgid "Your name (e.g. Mum, Dad)"
-msgstr "お名前（例：お母さん、お父さん）"
-
-msgid "The name your family will see"
-msgstr "家族に表示される名前"
-
-msgid "Family name (optional, defaults to \"My Family\")"
-msgstr "ファミリー名（任意、省略時は「My Family」になります）"
-
-msgid "The name for your family group"
-msgstr "家族グループの名前"
-
-msgid "Create admin account"
-msgstr "管理者アカウントを作成"
-
-msgid "Please enter a username."
-msgstr "ユーザー名を入力してください。"
-
-msgid "Username must be at least 3 characters."
-msgstr "ユーザー名は3文字以上で入力してください。"
-
-msgid "Something went wrong. Please try again."
-msgstr "エラーが発生しました。もう一度お試しください。"
-
-msgid "Could not generate an invite link. Please try again."
-msgstr "招待リンクを生成できませんでした。もう一度お試しください。"
-
-msgid "You must complete setup first before generating an invite."
-msgstr "招待リンクを生成する前にセットアップを完了してください。"
-
-msgid "Something went wrong."
-msgstr "問題が発生しました。"
-
-msgid "Passkey set up!"
-msgstr "パスキー設定完了！"
-
-msgid "Your admin account is ready. Now invite your family members — each person needs their own invite link."
-msgstr "管理者アカウントの準備ができました。家族を招待しましょう。各自に個別の招待リンクが必要です。"
-
-msgid "Generate invite link"
-msgstr "招待リンクを生成する"
-
-msgid "Invite link ready"
-msgstr "招待リンクの準備ができました"
-
-msgid "Share this link with the person you want to invite. Each link can only be used once."
-msgstr "このリンクを招待したい方と共有してください。各リンクは一度だけ使用できます。"
-
-msgid "Invite link"
-msgstr "招待リンク"
-
-msgid "Generate another invite"
-msgstr "別の招待リンクを生成"
-
-msgid "Go to login"
-msgstr "ログインへ移動"
-
-msgid "Admin already exists"
-msgstr "管理者はすでに存在します"
-
-msgid "This Famichat instance has already been set up. Sign in with your passkey to manage your family space."
-msgstr "このFamichatインスタンスはすでに設定済みです。パスキーでサインインしてファミリースペースを管理してください。"
-
-msgid "Generate an invite"
-msgstr "招待リンクを生成する"
-
-msgid "To generate an invite link, sign in first and return to this page."
-msgstr "招待リンクを生成するには、まずサインインしてこのページに戻ってください。"
-
-msgid "Unknown error"
-msgstr "不明なエラー"
-
-msgid "Set up your family space"
-msgstr "ファミリースペースをセットアップ"
-
-msgid "Getting things ready…"
-msgstr "準備しています…"
-
-msgid "Welcome to your family space."
-msgstr "ファミリースペースへようこそ。"
-
-msgid "Let's get you set up. Tell us who you are — your family will see this name."
-msgstr "セットアップを始めましょう。あなたのお名前を教えてください。家族にはこの名前が表示されます。"
-
-msgid "Your name (e.g. Mum, Dad, Grandpa)"
-msgstr "お名前（例：お母さん、お父さん、おじいちゃん）"
-
-msgid "This is how your family will know it's you."
-msgstr "家族があなたとわかる名前にしましょう。"
-
-msgid "Family name (e.g. The Rileys) — optional"
-msgstr "ファミリー名（例：鈴木家）— 任意"
-
-msgid "Used as the name of your shared space. You can change this later."
-msgstr "共有スペースの名前として使われます。後で変更できます。"
-
-msgid "Please enter your name."
-msgstr "お名前を入力してください。"
-
-msgid "Your name needs to be at least 3 characters."
-msgstr "お名前は3文字以上で入力してください。"
-
-msgid "Something went wrong — please try again."
-msgstr "エラーが発生しました。もう一度お試しください。"
-
-msgid "Complete setup first, then you can generate an invite."
-msgstr "先にセットアップを完了してから、招待リンクを生成できます。"
-
-msgid "Secure your account with a passkey."
-msgstr "パスキーでアカウントを守りましょう。"
-
-msgid "A passkey is like a fingerprint for your account — it uses your device's built-in security (Face ID, Touch ID, Windows Hello, or a PIN) so only you can sign in. No password to forget or lose."
-msgstr "パスキーはアカウントの指紋のようなものです。デバイスの内蔵セキュリティ（Face ID、Touch ID、Windows Hello、またはPIN）を使うので、サインインできるのはあなただけ。パスワードを忘れたり失くしたりする心配もありません。"
-
-msgid "Your device will ask to confirm it's you. Follow the prompt and you're done."
-msgstr "デバイスが本人確認を求めます。指示に従えば完了です。"
-
-msgid "Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably)."
-msgstr "もう一度試すか、別のブラウザに切り替えてください（ChromeとSafariがパスキーを最も確実にサポートしています）。"
-
-msgid "If this doesn't work, try refreshing the page or switching to a different browser."
-msgstr "うまくいかない場合は、ページを更新するか別のブラウザをお試しください。"
-
-msgid "You're in. Now let's bring your family."
-msgstr "アカウント完了。家族を呼びましょう。"
-
-msgid "Each family member needs their own invite link — Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
-msgstr "家族全員にそれぞれ個別の招待リンクが必要です。Famichatはプライベートなので、招待した人だけが参加できます。リンクを生成して、お好きな方法（SMS、メール、なんでも）で送れば、1〜2分で参加できます。"
-
-msgid "Invite link ready to send."
-msgstr "招待リンクが準備できました。送りましょう。"
-
-msgid "Share this link with one family member. It works once and expires in 10 minutes, so send it when they're ready to join."
-msgstr "このリンクを家族の一人に送ってください。一度だけ使え、10分で期限切れになります。相手が参加できる状態のときに送ってください。"
-
-msgid "Copy link"
-msgstr "リンクをコピー"
-
-msgid "Copied!"
-msgstr "コピーしました！"
-
-msgid "Invite link copied to clipboard"
-msgstr "招待リンクをクリップボードにコピーしました"
-
-msgid "Sign in to your family space"
-msgstr "ファミリースペースにサインイン"
-
-msgid "This family space is already set up."
-msgstr "このファミリースペースはすでに設定済みです。"
-
-msgid "Sign in with your passkey to get back to your family space. If you need to invite a new member, you can do that after signing in."
-msgstr "パスキーでサインインして、ファミリースペースに戻りましょう。新しいメンバーを招待したい場合は、サインイン後に行えます。"
-
-msgid "Sign in"
-msgstr "サインイン"
-
-msgid "Generate an invite link"
-msgstr "招待リンクを生成する"
-
-msgid "Sign in first, then return to this page to invite someone new."
-msgstr "先にサインインしてから、このページに戻って招待してください。"
-
-msgid "Your family space is ready."
-msgstr "ファミリースペースの準備ができました。"
-
-msgid "Invite someone to start the conversation."
-msgstr "家族を招待して、会話を始めましょう。"
-
-msgid "You're in. Say hello to %{name}."
-msgstr "参加しました。%{name}さんに挨拶しましょう。"
-
-msgid "You're in. Your family space is ready."
-msgstr "参加しました。ファミリースペースへようこそ。"
-
-msgid "Members"
-msgstr "メンバー"
-
+#: lib/famichat_web/live/home_live.html.heex:111
+#, elixir-autogen, elixir-format
 msgid "%{name} (you)"
 msgstr "%{name}（あなた）"
 
-msgid "Invite a family member"
-msgstr "家族を招待する"
+#: lib/famichat_web/live/auth/invite_live.html.heex:19
+#, elixir-autogen, elixir-format
+msgid "%{name} invited you"
+msgstr "%{name} さんに招待されました"
 
-msgid "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
-msgstr "このリンクを招待したい方に送ってください。10分で期限切れになり、一度しか使えません。"
+#: lib/famichat_web/live/auth/invite_live.html.heex:28
+#, elixir-autogen, elixir-format
+msgid "%{name} set up a private family space and wants you in it. Choose a name so they know it's you."
+msgstr "%{name} さんがプライベートな家族スペースを作り、あなたを招いています。あなたとわかる名前を入れてください。"
 
-msgid "Copy"
-msgstr "コピー"
+#: lib/famichat_web/live/auth/invite_live.html.heex:115
+#, elixir-autogen, elixir-format
+msgid "A passkey is already set up on this device. Try signing in instead."
+msgstr "このデバイスにはパスキーが設定済みです。サインインをお試しください。"
 
-msgid "My Family"
-msgstr "マイファミリー"
+#: lib/famichat_web/live/admin/setup_live.html.heex:103
+#, elixir-autogen, elixir-format, fuzzy
+msgid "A passkey is like a fingerprint for your account — it uses your device’s built-in security (Face ID, Touch ID, Windows Hello, or a PIN) so only you can sign in. No password to forget or lose."
+msgstr "パスキーはアカウントの指紋のようなものです。デバイスの内蔵セキュリティ（Face ID、Touch ID、Windows Hello、またはPIN）を使うので、サインインできるのはあなただけ。パスワードを忘れたり失くしたりする心配もありません。"
 
-msgid "Say hello…"
-msgstr "挨拶してみましょう…"
+#: lib/famichat_web/live/auth/invite_live.html.heex:88
+#, elixir-autogen, elixir-format
+msgid "A passkey keeps your account secure — no password needed. Your device handles it for you, and only you can sign in."
+msgstr "パスキーでアカウントを守ります。パスワード不要。あなたのデバイスが代わりに認証してくれるので、サインインできるのはあなただけです。"
 
-msgid "Type a message…"
-msgstr "メッセージを入力…"
+#: lib/famichat_web/live/admin/setup_live.ex:220
+#, elixir-autogen, elixir-format
+msgid "A passkey setup conflict occurred. Please reload."
+msgstr "パスキーの設定で問題が発生しました。ページを再読み込みしてください。"
 
-msgid "Invite"
-msgstr "招待"
+#: lib/famichat_web/components/core_components.ex:627
+#, elixir-autogen, elixir-format
+msgid "Actions"
+msgstr "操作"
 
-msgid "Connected"
-msgstr "接続中"
+#: lib/famichat_web/live/home_live.html.heex:378
+#, elixir-autogen, elixir-format
+msgid "Admin Controls"
+msgstr "設定"
 
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:33
+#: lib/famichat_web/live/auth/invite_live.html.heex:223
+#, elixir-autogen, elixir-format
+msgid "Already have an account? Sign in"
+msgstr "すでにアカウントをお持ちですか？サインイン"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:214
+#, elixir-autogen, elixir-format
+msgid "Ask the person who invited you to send a new link, or reply to the message you received."
+msgstr "招待してくれた方に新しいリンクを送ってもらうか、受信したメッセージに返信してください。"
+
+#: lib/famichat_web/components/core_components.ex:299
+#, elixir-autogen, elixir-format
+msgid "Attempting to reconnect"
+msgstr "再接続しています…"
+
+#: lib/famichat_web/live/admin/setup_live.ex:334
+#, elixir-autogen, elixir-format
+msgid "Complete setup first, then you can generate an invite."
+msgstr "先にセットアップを完了してから、招待リンクを生成できます。"
+
+#: lib/famichat_web/live/home_live.html.heex:294
+#, elixir-autogen, elixir-format
 msgid "Connect"
 msgstr "接続"
 
-msgid "Your family"
-msgstr "あなたのファミリー"
+#: lib/famichat_web/live/home_live.html.heex:293
+#, elixir-autogen, elixir-format
+msgid "Connected"
+msgstr "接続中"
 
-msgid "Family name"
-msgstr "ファミリー名"
+#: lib/famichat_web/live/admin/setup_live.html.heex:93
+#: lib/famichat_web/live/auth/family_new_live.html.heex:44
+#, elixir-autogen, elixir-format
+msgid "Continue"
+msgstr "続ける"
 
-msgid "Sign in to get started"
-msgstr "サインインして始めましょう"
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:84
+#: lib/famichat_web/live/auth/invite_live.html.heex:78
+#, elixir-autogen, elixir-format
+msgid "Continue — set up your passkey next"
+msgstr "続ける — 次にパスキーを設定します"
 
-msgid "This is the name for your family. You can change it later."
-msgstr "ファミリーの名前です。後から変更できます。"
+#: lib/famichat_web/live/admin/setup_live.html.heex:262
+#, elixir-autogen, elixir-format
+msgid "Copied!"
+msgstr "コピーしました！"
 
-msgid "Your browser blocked the sign-in attempt. Try using a different browser or check your security settings."
-msgstr "ブラウザがサインインをブロックしました。別のブラウザを試すか、セキュリティ設定を確認してください。"
+#: lib/famichat_web/live/home_live.html.heex:155
+#, elixir-autogen, elixir-format
+msgid "Copy"
+msgstr "コピー"
 
-msgid "A passkey is already in use. Try refreshing the page."
-msgstr "パスキーはすでに使用中です。ページを更新してみてください。"
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:178
+#: lib/famichat_web/live/admin/setup_live.html.heex:258
+#: lib/famichat_web/live/admin/setup_live.html.heex:262
+#, elixir-autogen, elixir-format
+msgid "Copy link"
+msgstr "リンクをコピー"
 
-msgid "Could not reach the server. Check your connection and try again."
-msgstr "サーバーに接続できませんでした。接続を確認してもう一度お試しください。"
+#: lib/famichat_web/live/admin/setup_live.html.heex:269
+#, elixir-autogen, elixir-format
+msgid "Could not copy automatically. Please select the link above and copy it manually."
+msgstr "自動コピーできませんでした。上のリンクを選択して手動でコピーしてください。"
 
-msgid "Something went wrong signing in. Please try again."
-msgstr "サインイン中にエラーが発生しました。もう一度お試しください。"
+#: lib/famichat_web/live/admin/setup_live.ex:331
+#, elixir-autogen, elixir-format
+msgid "Could not generate an invite link. Please try again."
+msgstr "招待リンクを生成できませんでした。もう一度お試しください。"
 
-msgid "Something went wrong connecting. Try refreshing."
-msgstr "接続中にエラーが発生しました。ページを更新してみてください。"
+#: lib/famichat_web/components/theme_switcher.ex:42
+#, elixir-autogen, elixir-format
+msgid "Dark"
+msgstr "ダーク"
 
-msgid "Still connecting. Try again in a moment."
-msgstr "接続中です。少し待ってからもう一度お試しください。"
-
-msgid "This device has been removed. Please sign in again."
-msgstr "このデバイスは削除されました。もう一度サインインしてください。"
-
-msgid "Something went wrong with the connection. Try refreshing."
-msgstr "接続に問題が発生しました。ページを更新してみてください。"
-
-msgid "You must be in a family to generate an invite."
-msgstr "招待リンクを生成するにはファミリーに参加している必要があります。"
-
-msgid "Could not generate invite link."
-msgstr "招待リンクを生成できませんでした。"
-
-msgid "Something went wrong with this session. Try refreshing."
-msgstr "セッションに問題が発生しました。ページを更新してみてください。"
-
-msgid "Setting things up. This should only take a moment."
-msgstr "準備中です。すぐに完了します。"
-
-msgid "Something went wrong. Try refreshing."
-msgstr "エラーが発生しました。ページを更新してみてください。"
-
-msgid "Something needs attention. Try refreshing."
-msgstr "注意が必要です。ページを更新してみてください。"
-
-msgid "Your session is out of date. Try refreshing."
-msgstr "セッションが古くなっています。ページを更新してみてください。"
-
-msgid "Sign out"
-msgstr "サインアウト"
-
+#: lib/famichat_web/live/home_live.html.heex:315
+#, elixir-autogen, elixir-format
 msgid "Developer Tools"
 msgstr "開発者ツール"
 
-msgid "Admin Controls"
-msgstr "管理者メニュー"
+#: lib/famichat_web/live/admin/setup_live.html.heex:199
+#, elixir-autogen, elixir-format
+msgid "Each family member needs their own invite link — Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
+msgstr "家族全員にそれぞれ個別の招待リンクが必要です。Famichatはプライベートなので、招待した人だけが参加できます。リンクを生成して、お好きな方法（SMS、メール、なんでも）で送れば、1〜2分で参加できます。"
 
+#: lib/famichat_web/live/live_helpers.ex:38
+#, elixir-autogen, elixir-format
+msgid "Famichat"
+msgstr "Famichat"
+
+#: lib/famichat_web/components/navigation.ex:46
+#, elixir-autogen, elixir-format
+msgid "Famichat home"
+msgstr "Famichatのホームへ"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:39
+#, elixir-autogen, elixir-format
+msgid "Famichat is invite-only. There's no public sign-up — that's the point."
+msgstr "Famichatは招待制です。公開サインアップはありません。それがポイントです。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:323
+#, elixir-autogen, elixir-format
+msgid "Generate an invite link"
+msgstr "招待リンクを生成する"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:282
+#, elixir-autogen, elixir-format
+msgid "Generate another invite"
+msgstr "別の招待リンクを生成"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:219
+#, elixir-autogen, elixir-format
+msgid "Generate invite link"
+msgstr "招待リンクを生成する"
+
+#: lib/famichat_web/live/auth/login_live.html.heex:49
+#: lib/famichat_web/live/home_live.html.heex:30
+#, elixir-autogen, elixir-format
 msgid "Getting started? Ask the person who told you about Famichat to send you an invite link."
 msgstr "Famichatは初めてですか？教えてくれた方に招待リンクを送ってもらってください。"
 
+#: lib/famichat_web/live/admin/setup_live.html.heex:11
+#, elixir-autogen, elixir-format
+msgid "Getting things ready…"
+msgstr "準備しています…"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:108
+#: lib/famichat_web/live/auth/invite_live.html.heex:125
+#: lib/famichat_web/live/auth/invite_live.html.heex:140
+#: lib/famichat_web/live/auth/invite_live.html.heex:178
+#, elixir-autogen, elixir-format
+msgid "Go back"
+msgstr "戻る"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:291
+#, elixir-autogen, elixir-format
+msgid "Go to your family space"
+msgstr "ファミリースペースへ"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:156
+#: lib/famichat_web/live/admin/setup_live.html.heex:187
+#, elixir-autogen, elixir-format, fuzzy
+msgid "If this doesn’t work, try refreshing the page or switching to a different browser."
+msgstr "うまくいかない場合は、ページを更新するか別のブラウザをお試しください。"
+
+#: lib/famichat_web/live/home_live.html.heex:128
+#, elixir-autogen, elixir-format
+msgid "Invite a family member"
+msgstr "家族を招待する"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:236
+#: lib/famichat_web/live/home_live.html.heex:146
+#, elixir-autogen, elixir-format
+msgid "Invite link"
+msgstr "招待リンク"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:257
+#, elixir-autogen, elixir-format
+msgid "Invite link copied to clipboard"
+msgstr "招待リンクをクリップボードにコピーしました"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:225
+#, elixir-autogen, elixir-format
+msgid "Invite link ready to send."
+msgstr "招待リンクが準備できました。送りましょう。"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:206
+#, elixir-autogen, elixir-format
+msgid "Invite links are single-use and expire after 10 minutes. This keeps the space private."
+msgstr "招待リンクは一度しか使えず、10分で期限切れになります。これがプライバシーを守る仕組みです。"
+
+#: lib/famichat_web/live/home_live.html.heex:86
+#, elixir-autogen, elixir-format
+msgid "Invite someone to start the conversation."
+msgstr "家族を招待して、会話を始めましょう。"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:69
+#: lib/famichat_web/live/auth/invite_live.html.heex:63
+#, elixir-autogen, elixir-format
+msgid "Just a name your family will see. We don't ask for your real name, phone number, or email."
+msgstr "家族に表示される名前だけで大丈夫です。本名、電話番号、メールアドレスは必要ありません。"
+
+#: lib/famichat_web/components/navigation.ex:51
+#: lib/famichat_web/live/home_live.html.heex:247
+#, elixir-autogen, elixir-format
+msgid "Language switcher"
+msgstr "言語切替"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:31
+#, elixir-autogen, elixir-format, fuzzy
+msgid "Let’s get you set up. Tell us who you are — your family will see this name."
+msgstr "セットアップを始めましょう。あなたのお名前を教えてください。家族にはこの名前が表示されます。"
+
+#: lib/famichat_web/components/theme_switcher.ex:41
+#, elixir-autogen, elixir-format
+msgid "Light"
+msgstr "ライト"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:12
+#, elixir-autogen, elixir-format
+msgid "Loading…"
+msgstr "読み込み中…"
+
+#: lib/famichat_web/live/home_live.html.heex:106
+#, elixir-autogen, elixir-format
+msgid "Members"
+msgstr "メンバー"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:110
+#: lib/famichat_web/live/admin/setup_live.html.heex:62
+#: lib/famichat_web/live/auth/family_new_live.html.heex:17
+#, elixir-autogen, elixir-format
+msgid "Family name"
+msgstr "ファミリー名"
+
+#: lib/famichat_web/live/home_live.html.heex:17
+#, elixir-autogen, elixir-format
+msgid "Open Famichat"
+msgstr "Famichatを開く"
+
+#: lib/famichat_web/live/auth/invite_live.ex:318
+#, elixir-autogen, elixir-format
+msgid "Please enter a username."
+msgstr "ユーザー名を入力してください。"
+
+#: lib/famichat_web/live/admin/setup_live.ex:322
+#, elixir-autogen, elixir-format
+msgid "Please enter your name."
+msgstr "お名前を入力してください。"
+
+#: lib/famichat_web/components/layouts/root.html.heex:17
+#: lib/famichat_web/live/live_helpers.ex:39
+#, elixir-autogen, elixir-format
+msgid "Private, self-hosted messaging for families."
+msgstr "家族のための、プライベートな自前メッセージアプリ。"
+
+#: lib/famichat_web/live/auth/invite_live.ex:332
+#, elixir-autogen, elixir-format
+msgid "Registration token missing. Please go back and try again."
+msgstr "登録情報が見つかりません。戻ってもう一度お試しください。"
+
+#: lib/famichat_web/live/home_live.html.heex:524
+#, elixir-autogen, elixir-format
+msgid "Say hello…"
+msgstr "挨拶してみましょう…"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:100
+#, elixir-autogen, elixir-format
+msgid "Secure your account with a passkey."
+msgstr "パスキーでアカウントを守りましょう。"
+
+#: lib/famichat_web/live/home_live.html.heex:135
+#, elixir-autogen, elixir-format
+msgid "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
+msgstr "このリンクを招待したい方に送ってください。10分で期限切れになり、一度しか使えません。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:183
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:130
+#: lib/famichat_web/live/auth/invite_live.html.heex:168
+#, elixir-autogen, elixir-format
+msgid "Set up passkey"
+msgstr "パスキーを設定する"
+
+#: lib/famichat_web/live/admin/setup_live.ex:128
+#: lib/famichat_web/live/auth/family_new_live.ex:30
+#: lib/famichat_web/live/auth/family_new_live.html.heex:7
+#, elixir-autogen, elixir-format
+msgid "Set up your family space"
+msgstr "ファミリースペースをセットアップ"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:85
+#, elixir-autogen, elixir-format
+msgid "Set up your passkey"
+msgstr "パスキーを設定しましょう"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:228
+#, elixir-autogen, elixir-format, fuzzy
+msgid "Share this link with one family member. It works once and expires in 10 minutes, so send it when they’re ready to join."
+msgstr "このリンクを家族の一人に送ってください。一度だけ使え、10分で期限切れになります。相手が参加できる状態のときに送ってください。"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:27
+#: lib/famichat_web/live/admin/setup_live.html.heex:313
+#: lib/famichat_web/live/auth/family_new_live.html.heex:52
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:159
+#, elixir-autogen, elixir-format
+msgid "Sign in"
+msgstr "サインイン"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:328
+#, elixir-autogen, elixir-format
+msgid "Sign in first, then return to this page to invite someone new."
+msgstr "先にサインインしてから、このページに戻って招待してください。"
+
+#: lib/famichat_web/live/auth/login_live.html.heex:7
+#, elixir-autogen, elixir-format
+msgid "Sign in to Famichat"
+msgstr "Famichat にサインイン"
+
+#: lib/famichat_web/live/auth/login_live.html.heex:35
+#, elixir-autogen, elixir-format
+msgid "Sign in with passkey"
+msgstr "パスキーでサインイン"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:301
+#, elixir-autogen, elixir-format
+msgid "Sign in with your passkey to get back to your family space. If you need to invite a new member, you can do that after signing in."
+msgstr "パスキーでサインインして、ファミリースペースに戻りましょう。新しいメンバーを招待したい場合は、サインイン後に行えます。"
+
+#: lib/famichat_web/live/home_live.html.heex:38
+#: lib/famichat_web/live/home_live.html.heex:218
+#: lib/famichat_web/live/home_live.html.heex:305
+#, elixir-autogen, elixir-format
+msgid "Sign out"
+msgstr "サインアウト"
+
+#: lib/famichat_web/live/auth/login_live.html.heex:31
+#, elixir-autogen, elixir-format
+msgid "Signing you in…"
+msgstr "サインイン中…"
+
+#: lib/famichat_web/components/layouts/root.html.heex:74
+#: lib/famichat_web/controllers/error_html/500.html.heex:66
+#, elixir-autogen, elixir-format
+msgid "Skip to main content"
+msgstr "メインコンテンツへスキップ"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:33
+#, elixir-autogen, elixir-format
+msgid "Someone who loves you set up a private space just for your family. Choose a name so they know it's you."
+msgstr "あなたを大切に思う人が、家族だけのプライベートな場所を用意しました。あなたとわかる名前を入れてください。"
+
+#: lib/famichat_web/live/admin/setup_live.ex:328
+#, elixir-autogen, elixir-format
+msgid "Something went wrong — please try again."
+msgstr "エラーが発生しました。もう一度お試しください。"
+
+#: lib/famichat_web/live/admin/community_admin_live.ex:212
+#: lib/famichat_web/live/admin/setup_live.ex:338
+#: lib/famichat_web/live/auth/family_new_live.ex:83
+#: lib/famichat_web/live/auth/family_setup_live.ex:248
+#: lib/famichat_web/live/auth/invite_live.ex:337
+#, elixir-autogen, elixir-format
+msgid "Something went wrong."
+msgstr "問題が発生しました。"
+
+#: lib/famichat_web/live/auth/invite_live.ex:335
+#, elixir-autogen, elixir-format
+msgid "Something went wrong. Please go back and try again."
+msgstr "問題が発生しました。戻ってもう一度お試しください。"
+
+#: lib/famichat_web/live/admin/community_admin_live.ex:210
+#: lib/famichat_web/live/auth/family_new_live.ex:81
+#: lib/famichat_web/live/auth/family_setup_live.ex:244
+#: lib/famichat_web/live/auth/invite_live.ex:315
+#, elixir-autogen, elixir-format
+msgid "Something went wrong. Please try again."
+msgstr "エラーが発生しました。もう一度お試しください。"
+
+#: lib/famichat_web/components/theme_switcher.ex:43
+#, elixir-autogen, elixir-format
+msgid "System"
+msgstr "システム"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:241
+#: lib/famichat_web/live/auth/invite_live.ex:327
+#, elixir-autogen, elixir-format
+msgid "That name is already taken. Please choose a different one."
+msgstr "その名前はすでに使われています。別の名前を選んでください。"
+
+#: lib/famichat_web/components/theme_switcher.ex:52
+#, elixir-autogen, elixir-format
+msgid "Theme"
+msgstr "テーマ"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:298
+#, elixir-autogen, elixir-format
+msgid "This family space is already set up."
+msgstr "このファミリースペースはすでに設定済みです。"
+
+#: lib/famichat_web/live/auth/invite_live.ex:307
+#, elixir-autogen, elixir-format
+msgid "This invite has already been used to create an account. Try signing in instead."
+msgstr "この招待はすでにアカウント作成に使用されています。サインインをお試しください。"
+
+#: lib/famichat_web/controllers/error_html/410.html.heex:7
+#: lib/famichat_web/live/auth/invite_live.html.heex:203
+#, elixir-autogen, elixir-format
+msgid "This invite link didn't work"
+msgstr "この招待リンクは使えませんでした"
+
+#: lib/famichat_web/live/auth/invite_live.ex:298
+#, elixir-autogen, elixir-format
+msgid "This invite link has expired. Ask for a new one."
+msgstr "この招待リンクの有効期限が切れています。新しいリンクをもらってください。"
+
+#: lib/famichat_web/live/auth/invite_live.ex:309
+#, elixir-autogen, elixir-format
+msgid "This invite link is not valid."
+msgstr "この招待リンクは無効です。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:56
+#, elixir-autogen, elixir-format, fuzzy
+msgid "This is how your family will know it’s you."
+msgstr "家族があなたとわかる名前にしましょう。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:77
+#, elixir-autogen, elixir-format
+msgid "This is the name for your family. You can change it later."
+msgstr "ファミリーの名前です。後から変更できます。"
+
+#: lib/famichat_web/live/auth/invite_live.ex:312
+#, elixir-autogen, elixir-format
+msgid "Too many attempts. Please try again later."
+msgstr "試行回数が多すぎます。しばらくしてからもう一度お試しください。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:128
+#: lib/famichat_web/live/admin/setup_live.html.heex:152
+#, elixir-autogen, elixir-format
+msgid "Try again"
+msgstr "もう一度試す"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:138
+#: lib/famichat_web/live/admin/setup_live.html.heex:168
+#, elixir-autogen, elixir-format
+msgid "Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably)."
+msgstr "もう一度試すか、別のブラウザに切り替えてください（ChromeとSafariがパスキーを最も確実にサポートしています）。"
+
+#: lib/famichat_web/live/home_live.html.heex:525
+#, elixir-autogen, elixir-format
+msgid "Type a message…"
+msgstr "メッセージを入力…"
+
+#: lib/famichat_web/live/admin/setup_live.ex:246
+#: lib/famichat_web/live/auth/family_setup_live.ex:209
+#: lib/famichat_web/live/auth/invite_live.ex:279
+#, elixir-autogen, elixir-format
+msgid "Unknown error"
+msgstr "不明なエラー"
+
+#: lib/famichat_web/live/auth/invite_live.ex:324
+#, elixir-autogen, elixir-format
+msgid "Username must be 50 characters or fewer."
+msgstr "お名前は50文字以内で入力してください。"
+
+#: lib/famichat_web/components/core_components.ex:293
+#, elixir-autogen, elixir-format
+msgid "We can't find the internet"
+msgstr "インターネットに接続できません"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:28
+#, elixir-autogen, elixir-format
+msgid "Welcome to your family space."
+msgstr "ファミリースペースへようこそ。"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:192
+#, elixir-autogen, elixir-format
+msgid "You're in!"
+msgstr "ようこそ！"
+
+#: lib/famichat_web/live/home_live.html.heex:92
+#, elixir-autogen, elixir-format
+msgid "You're in. Say hello to %{name}."
+msgstr "参加しました。%{name}さんに挨拶しましょう。"
+
+#: lib/famichat_web/live/home_live.html.heex:98
+#, elixir-autogen, elixir-format
+msgid "You're in. Your family space is ready."
+msgstr "参加しました。ファミリースペースへようこそ。"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:23
+#, elixir-autogen, elixir-format
+msgid "You're invited"
+msgstr "招待が届いています"
+
+#: lib/famichat_web/live/home_live.html.heex:48
+#: lib/famichat_web/live/home_live.html.heex:238
+#: lib/famichat_web/live/home_live.html.heex:241
+#, elixir-autogen, elixir-format
+msgid "Your family"
+msgstr "あなたのファミリー"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:98
+#, elixir-autogen, elixir-format
 msgid "Your browser doesn't support passkeys. Try Chrome or Safari."
 msgstr "お使いのブラウザはパスキーに対応していません。ChromeまたはSafariをお試しください。"
 
-msgid "Your private space with %{name}. Say hello."
-msgstr "%{name}さんとのプライベートスペース。挨拶してみましょう。"
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:117
+#: lib/famichat_web/live/auth/invite_live.html.heex:154
+#, elixir-autogen, elixir-format
+msgid "Your device will ask to confirm it's you — it takes about 2 seconds."
+msgstr "デバイスが本人確認を求めます。約2秒で完了します。"
 
-msgid "Your private family space. Say hello."
-msgstr "ファミリーのプライベートスペース。挨拶してみましょう。"
+#: lib/famichat_web/live/auth/login_live.html.heex:10
+#, elixir-autogen, elixir-format
+msgid "Your device will ask to confirm it's you — the same way it unlocks your phone."
+msgstr "デバイスがあなた本人か確認します。スマホのロック解除と同じ方法です。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:108
+#, elixir-autogen, elixir-format, fuzzy
+msgid "Your device will ask to confirm it’s you. Follow the prompt and you’re done."
+msgstr "デバイスが本人確認を求めます。指示に従えば完了です。"
+
+#: lib/famichat_web/live/home_live.html.heex:83
+#, elixir-autogen, elixir-format
+msgid "Your family space is ready."
+msgstr "ファミリースペースの準備ができました。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:40
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:54
+#: lib/famichat_web/live/auth/invite_live.html.heex:48
+#, elixir-autogen, elixir-format
+msgid "Your name"
+msgstr "お名前"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:47
+#, elixir-autogen, elixir-format
+msgid "Your name (e.g. Mum, Dad, Grandpa)"
+msgstr "お名前（例：お母さん、お父さん、おじいちゃん）"
+
+#: lib/famichat_web/live/auth/invite_live.html.heex:195
+#, elixir-autogen, elixir-format
+msgid "Your passkey is set up. Taking you to your family space…"
+msgstr "パスキーの設定が完了しました。ファミリースペースに移動しています…"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:134
+#: lib/famichat_web/live/auth/invite_live.html.heex:183
+#, elixir-autogen, elixir-format
+msgid "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
+msgstr "パスキーはデバイスの外に出ることはありません。Famichatが指紋や顔を見ることはありません。"
+
+#: lib/famichat_web/live/home_live.html.heex:10
+#, elixir-autogen, elixir-format
+msgid "Your private space for the people who matter most."
+msgstr "大切な人たちと過ごす、あなただけのプライベートスペース。"
+
+#: lib/famichat_web/live/home_live.html.heex:7
+#, elixir-autogen, elixir-format
+msgid "Your session ended. Sign in again to pick up where you left off."
+msgstr "セッションが終了しました。もう一度サインインして、続きをどうぞ。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:196
+#, elixir-autogen, elixir-format, fuzzy
+msgid "You’re in. Now let’s bring your family."
+msgstr "完了しました。次はファミリーを招待しましょう。"
+
+#: lib/famichat_web/components/core_components.ex:81
+#: lib/famichat_web/components/core_components.ex:265
+#, elixir-autogen, elixir-format
+msgid "close"
+msgstr "閉じる"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:61
+#: lib/famichat_web/live/auth/invite_live.html.heex:55
+#, elixir-autogen, elixir-format
+msgid "e.g. Mum, Dad, Grandma Rose"
+msgstr "例：お母さん、お父さん、おばあちゃん"
+
+#: lib/famichat_web/live/auth/login_live.ex:69
+#, elixir-autogen, elixir-format
+msgid "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt."
+msgstr "サインインがキャンセルまたはタイムアウトしました。ボタンをタップしてデバイスの指示に従ってください。"
+
+#: lib/famichat_web/live/home_live.ex:286
+#: lib/famichat_web/live/home_live.ex:503
+#: lib/famichat_web/live/home_live.ex:667
+#, elixir-autogen, elixir-format
+msgid "Something went wrong connecting. Try refreshing."
+msgstr "接続中にエラーが発生しました。ページを更新してみてください。"
+
+#: lib/famichat_web/live/home_live.ex:330
+#, elixir-autogen, elixir-format
+msgid "Still connecting. Try again in a moment."
+msgstr "接続中です。少し待ってからもう一度お試しください。"
+
+#: lib/famichat_web/live/home_live.ex:462
+#: lib/famichat_web/live/home_live.ex:910
+#: lib/famichat_web/live/home_live.ex:913
+#: lib/famichat_web/live/home_live.ex:941
+#: lib/famichat_web/live/home_live.ex:944
+#, elixir-autogen, elixir-format
+msgid "This device has been removed. Please sign in again."
+msgstr "このデバイスは削除されました。もう一度サインインしてください。"
+
+#: lib/famichat_web/live/home_live.ex:464
+#, elixir-autogen, elixir-format
+msgid "Something went wrong with the connection. Try refreshing."
+msgstr "接続に問題が発生しました。ページを更新してみてください。"
+
+#: lib/famichat_web/live/home_live.ex:583
+#, elixir-autogen, elixir-format
+msgid "You must be in a family to generate an invite."
+msgstr "招待リンクを生成するにはファミリーに参加している必要があります。"
+
+#: lib/famichat_web/live/home_live.ex:604
+#, elixir-autogen, elixir-format
+msgid "Could not generate invite link."
+msgstr "招待リンクを生成できませんでした。"
+
+#: lib/famichat_web/live/home_live.ex:907
+#, elixir-autogen, elixir-format
+msgid "Something went wrong with this session. Try refreshing."
+msgstr "セッションに問題が発生しました。ページを更新してみてください。"
+
+#: lib/famichat_web/live/home_live.ex:916
+#: lib/famichat_web/live/home_live.ex:953
+#, elixir-autogen, elixir-format
+msgid "Setting things up. This should only take a moment."
+msgstr "準備中です。すぐに完了します。"
+
+#: lib/famichat_web/controllers/family_context_controller.ex:40
+#: lib/famichat_web/controllers/family_context_controller.ex:47
+#: lib/famichat_web/live/home_live.ex:918
+#, elixir-autogen, elixir-format
+msgid "Something went wrong. Try refreshing."
+msgstr "エラーが発生しました。ページを更新してみてください。"
+
+#: lib/famichat_web/live/home_live.ex:938
+#: lib/famichat_web/live/home_live.ex:956
+#, elixir-autogen, elixir-format
+msgid "Something needs attention. Try refreshing."
+msgstr "注意が必要です。ページを更新してみてください。"
+
+#: lib/famichat_web/live/home_live.ex:947
+#: lib/famichat_web/live/home_live.ex:950
+#, elixir-autogen, elixir-format
+msgid "Your session is out of date. Try refreshing."
+msgstr "セッションが古くなっています。ページを更新してみてください。"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:60
+#, elixir-autogen, elixir-format
+msgid "%{count} member"
+msgid_plural "%{count} members"
+msgstr[0] "%{count}人のメンバー"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:196
+#, elixir-autogen, elixir-format
+msgid "A passkey conflict occurred. Please reload."
+msgstr "パスキーで問題が発生しました。ページを再読み込みしてください。"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:94
+#, elixir-autogen, elixir-format
+msgid "A passkey is like a fingerprint for your account — it uses your device to confirm it's you."
+msgstr "パスキーはアカウントの指紋のようなものです。デバイスを使ってあなた本人か確認します。"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:91
+#, elixir-autogen, elixir-format
+msgid "Add a family"
+msgstr "ファミリーを追加"
+
+#: lib/famichat_web/live/auth/family_new_live.html.heex:50
+#, elixir-autogen, elixir-format
+msgid "Already have an account?"
+msgstr "すでにアカウントをお持ちですか？"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:189
+#, elixir-autogen, elixir-format
+msgid "Back to families"
+msgstr "ファミリー一覧に戻る"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:145
+#, elixir-autogen, elixir-format
+msgid "Cancel"
+msgstr "キャンセル"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:71
+#: lib/famichat_web/live/auth/family_setup_live.ex:93
+#, elixir-autogen, elixir-format
+msgid "Complete your setup"
+msgstr "セットアップを完了しましょう"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:70
+#, elixir-autogen, elixir-format
+msgid "Family name (e.g. The Rileys) — optional"
+msgstr "ファミリー名（例：鈴木家）— 任意"
+
+#: lib/famichat_web/live/admin/community_admin_live.ex:201
+#: lib/famichat_web/live/auth/family_new_live.ex:72
+#, elixir-autogen, elixir-format
+msgid "Family name must be 100 characters or fewer."
+msgstr "ファミリー名は100文字以内で入力してください。"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:135
+#, elixir-autogen, elixir-format
+msgid "Generate setup link"
+msgstr "セットアップリンクを生成する"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:101
+#, elixir-autogen, elixir-format
+msgid "Give this space a name. You'll get a setup link to share with the person who will run it."
+msgstr "スペースに名前をつけましょう。セットアップリンクを作成して、管理する方に共有できます。"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:24
+#, elixir-autogen, elixir-format
+msgid "It may have expired or already been used. Ask the person who sent it to you to generate a new one."
+msgstr "期限切れか、すでに使用された可能性があります。送ってくれた方に新しいリンクを作ってもらってください。"
+
+#: lib/famichat_web/live/auth/family_new_live.html.heex:31
+#, elixir-autogen, elixir-format
+msgid "Leave blank to use \"My Family.\""
+msgstr "空欄にすると「マイファミリー」になります。"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:11
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:12
+#, elixir-autogen, elixir-format
+msgid "Loading..."
+msgstr "読み込み中…"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:238
+#, elixir-autogen, elixir-format
+msgid "Name must be 50 characters or fewer."
+msgstr "お名前は50文字以内で入力してください。"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:49
+#, elixir-autogen, elixir-format
+msgid "No families yet."
+msgstr "ファミリーはまだありません。"
+
+#: lib/famichat_web/live/admin/community_admin_live.ex:70
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:17
+#, elixir-autogen, elixir-format
+msgid "Not authorized"
+msgstr "この操作は許可されていません"
+
+#: lib/famichat_web/live/auth/family_new_live.html.heex:10
+#, elixir-autogen, elixir-format
+msgid "Pick a name for your family. You can change it later."
+msgstr "ファミリーの名前を決めましょう。後から変更できます。"
+
+#: lib/famichat_web/live/admin/community_admin_live.ex:198
+#: lib/famichat_web/live/auth/family_new_live.ex:69
+#, elixir-autogen, elixir-format
+msgid "Please enter a family name."
+msgstr "ファミリー名を入力してください。"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:232
+#, elixir-autogen, elixir-format
+msgid "Please enter a name."
+msgstr "お名前を入力してください。"
+
+#: lib/famichat_web/live/admin/community_admin_live.ex:207
+#, elixir-autogen, elixir-format
+msgid "Please sign in to access this page."
+msgstr "このページにアクセスするにはサインインしてください。"
+
+#: lib/famichat_web/live/admin/setup_live.html.heex:21
+#, elixir-autogen, elixir-format
+msgid "Reload"
+msgstr "再読み込み"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:76
+#, elixir-autogen, elixir-format
+msgid "Resend setup link"
+msgstr "セットアップリンクを再送信"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:91
+#, elixir-autogen, elixir-format
+msgid "Secure your account, %{username}."
+msgstr "%{username}さん、アカウントを守りましょう。"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:98
+#, elixir-autogen, elixir-format
+msgid "Set up a new family space"
+msgstr "新しいファミリースペースをセットアップ"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:168
+#, elixir-autogen, elixir-format
+msgid "Setup link"
+msgstr "セットアップリンク"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:105
+#, elixir-autogen, elixir-format
+msgid "Setup link not available"
+msgstr "セットアップリンクが利用できません"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:152
+#, elixir-autogen, elixir-format
+msgid "Setup link ready"
+msgstr "セットアップリンクの準備ができました"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:155
+#, elixir-autogen, elixir-format
+msgid "Share this link with the person who will manage the %{family_name} space. It expires in 3 days."
+msgstr "このリンクを%{family_name}スペースを管理する方に共有してください。3日間で期限切れになります。"
+
+#: lib/famichat_web/live/auth/login_live.ex:73
+#, elixir-autogen, elixir-format
+msgid "Something went wrong connecting securely. Try a different browser or check your URL."
+msgstr "安全な接続で問題が発生しました。別のブラウザを試すか、URLを確認してください。"
+
+#: lib/famichat_web/live/auth/login_live.ex:105
+#, elixir-autogen, elixir-format
+msgid "Something went wrong connecting. Check your connection and try again."
+msgstr "接続中に問題が発生しました。接続を確認してもう一度お試しください。"
+
+#: lib/famichat_web/live/admin/setup_live.ex:112
+#, elixir-autogen, elixir-format
+msgid "Something went wrong loading this page."
+msgstr "ページの読み込みで問題が発生しました。"
+
+#: lib/famichat_web/live/auth/login_live.ex:101
+#: lib/famichat_web/live/auth/login_live.ex:109
+#: lib/famichat_web/live/auth/login_live.ex:112
+#, elixir-autogen, elixir-format
+msgid "Something went wrong signing in. Try again."
+msgstr "サインイン中に問題が発生しました。もう一度お試しください。"
+
+#: lib/famichat_web/live/auth/login_live.ex:97
+#, elixir-autogen, elixir-format
+msgid "Something went wrong starting sign-in. Try again."
+msgstr "サインインの開始で問題が発生しました。もう一度お試しください。"
+
+#: lib/famichat_web/live/auth/login_live.ex:85
+#, elixir-autogen, elixir-format
+msgid "Something went wrong verifying your passkey. Try again."
+msgstr "パスキーの確認で問題が発生しました。もう一度お試しください。"
+
+#: lib/famichat_web/live/auth/login_live.ex:81
+#, elixir-autogen, elixir-format
+msgid "Something went wrong with your passkey. Try refreshing the page."
+msgstr "パスキーで問題が発生しました。ページを更新してみてください。"
+
+#: lib/famichat_web/live/auth/family_new_live.ex:75
+#, elixir-autogen, elixir-format
+msgid "That family name is already taken. Try something else."
+msgstr "そのファミリー名はすでに使われています。別の名前をお試しください。"
+
+#: lib/famichat_web/controllers/family_context_controller.ex:35
+#, elixir-autogen, elixir-format
+msgid "That family space could not be found."
+msgstr "そのファミリースペースが見つかりませんでした。"
+
+#: lib/famichat_web/controllers/family_context_controller.ex:30
+#, elixir-autogen, elixir-format
+msgid "That family space is no longer available to you."
+msgstr "そのファミリースペースはご利用いただけなくなりました。"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:45
+#, elixir-autogen, elixir-format
+msgid "The person who set this up has made you the first member. Just pick a name your family will see."
+msgstr "セットアップした方があなたを最初のメンバーにしました。家族に表示される名前を選んでください。"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:226
+#, elixir-autogen, elixir-format
+msgid "This family has already been set up. You can sign in."
+msgstr "このファミリーはすでにセットアップ済みです。サインインできます。"
+
+#: lib/famichat_web/live/home_live.html.heex:467
+#, elixir-autogen, elixir-format
+msgid "This is just for the two of you. Messages stay here."
+msgstr "ふたりだけの場所です。メッセージはここに残ります。"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:18
+#, elixir-autogen, elixir-format
+msgid "This setup link didn't work"
+msgstr "このセットアップリンクは使えませんでした"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:223
+#, elixir-autogen, elixir-format
+msgid "This setup link has already been used."
+msgstr "このセットアップリンクはすでに使用されています。"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:220
+#, elixir-autogen, elixir-format
+msgid "This setup link has expired. Ask the person who sent it to generate a new one."
+msgstr "このセットアップリンクの有効期限が切れています。送ってくれた方に新しいリンクを作ってもらってください。"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:229
+#, elixir-autogen, elixir-format
+msgid "This setup link is not valid."
+msgstr "このセットアップリンクは無効です。"
+
+#: lib/famichat_web/live/auth/login_live.ex:93
+#, elixir-autogen, elixir-format
+msgid "Too many attempts. Wait a moment and try again."
+msgstr "試行回数が多すぎます。少し待ってからもう一度お試しください。"
+
+#: lib/famichat_web/live/home_live.html.heex:27
+#, elixir-autogen, elixir-format
+msgid "You are not part of any family yet."
+msgstr "まだどのファミリーにも参加していません。"
+
+#: lib/famichat_web/live/admin/community_admin_live.ex:204
+#, elixir-autogen, elixir-format
+msgid "You need to be an admin of at least one family space to access this page."
+msgstr "このページにアクセスするには、ファミリースペースのセットアップが必要です。"
+
+#: lib/famichat_web/live/auth/invite_live.ex:302
+#, elixir-autogen, elixir-format
+msgid "You started setting up with this link but didn't finish. Try signing in, or ask for a new invite."
+msgstr "このリンクでのセットアップが途中です。サインインするか、新しい招待リンクをもらってください。"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:144
+#, elixir-autogen, elixir-format
+msgid "You're part of the %{family_name} family."
+msgstr "%{family_name}ファミリーのメンバーです。"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:40
+#, elixir-autogen, elixir-format
+msgid "You've been invited to the %{family_name} family."
+msgstr "%{family_name}ファミリーに招待されました。"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:148
+#, elixir-autogen, elixir-format
+msgid "Your account is ready."
+msgstr "アカウントの準備ができました。"
+
+#: lib/famichat_web/live/auth/login_live.ex:77
+#, elixir-autogen, elixir-format
+msgid "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge."
+msgstr "お使いのブラウザはパスキーに対応していません。Safari、Chrome、またはEdgeをお試しください。"
+
+#: lib/famichat_web/live/admin/community_admin_live.ex:63
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:34
+#: lib/famichat_web/live/home_live.html.heex:55
+#, elixir-autogen, elixir-format
+msgid "Your families"
+msgstr "あなたのファミリー"
+
+#: lib/famichat_web/live/auth/family_setup_live.html.heex:152
+#, elixir-autogen, elixir-format
+msgid "Your passkey is set up. Sign in to get started."
+msgstr "パスキーの設定が完了しました。サインインして始めましょう。"
+
+#: lib/famichat_web/live/home_live.html.heex:463
+#, elixir-autogen, elixir-format
+msgid "Your private family space."
+msgstr "ファミリーのプライベートスペース。"
+
+#: lib/famichat_web/live/home_live.html.heex:458
+#, elixir-autogen, elixir-format
+msgid "Your private space with %{name}."
+msgstr "%{name}さんとのプライベートスペース。"
+
+#: lib/famichat_web/live/auth/login_live.ex:89
+#, elixir-autogen, elixir-format
+msgid "Your sign-in session expired. Tap the button to start again."
+msgstr "サインインセッションの期限が切れました。ボタンをタップしてもう一度お試しください。"
+
+#: lib/famichat_web/live/auth/family_new_live.html.heex:24
+#, elixir-autogen, elixir-format
+msgid "e.g. The Rileys"
+msgstr "例：鈴木家"
+
+#: lib/famichat_web/live/admin/community_admin_live.html.heex:117
+#, elixir-autogen, elixir-format
+msgid "e.g. The Rileys, Smith Family"
+msgstr "例：鈴木家、田中ファミリー"
+
+#: lib/famichat_web/live/home_live.html.heex:168
+#, elixir-autogen, elixir-format
+msgid "Add a message so they see you're waiting."
+msgstr "待っていることが伝わるメッセージを添えましょう。"
+
+#: lib/famichat_web/controllers/error_html/410.html.heex:13
+#, elixir-autogen, elixir-format
+msgid "Ask the person who sent you the invite to send a new one. They can generate a fresh link anytime."
+msgstr "招待した方にもう一度リンクを送ってもらいましょう。いつでも新しいリンクを作れます。"
+
+#: lib/famichat_web/live/auth/family_setup_live.ex:235
+#, elixir-autogen, elixir-format
+msgid "Name must be at least 1 character."
+msgstr "お名前は1文字以上で入力してください。"
+
+#: lib/famichat_web/controllers/error_html/404.html.heex:7
+#, elixir-autogen, elixir-format
+msgid "Page not found"
+msgstr "ページが見つかりません"
+
+#: lib/famichat_web/controllers/error_html/404.html.heex:17
+#: lib/famichat_web/controllers/error_html/410.html.heex:20
+#, elixir-autogen, elixir-format
+msgid "Return to Famichat"
+msgstr "Famichatに戻る"
+
+#: lib/famichat_web/live/home_live.html.heex:183
+#, elixir-autogen, elixir-format
+msgid "Save message"
+msgstr "メッセージを保存"
+
+#: lib/famichat_web/live/home_live.html.heex:192
+#, elixir-autogen, elixir-format
+msgid "Skip"
+msgstr "スキップ"
+
+#: lib/famichat_web/controllers/error_html/404.html.heex:10
+#, elixir-autogen, elixir-format
+msgid "The page you're looking for doesn't exist or may have moved."
+msgstr "お探しのページは存在しないか、移動した可能性があります。"
+
+#: lib/famichat_web/live/auth/family_new_live.ex:78
+#, elixir-autogen, elixir-format
+msgid "Too many family spaces created from this network. Try again in a few minutes."
+msgstr "このネットワークからのファミリースペース作成が多すぎます。数分後にもう一度お試しください。"
+
+#: lib/famichat_web/live/auth/invite_live.ex:321
+#, elixir-autogen, elixir-format
+msgid "Username must be at least 1 character."
+msgstr "お名前は1文字以上で入力してください。"
+
+#: lib/famichat_web/live/auth/login_live.html.heex:59
+#, elixir-autogen, elixir-format
+msgid "Want to set up your own family space?"
+msgstr "自分のファミリースペースを作りたいですか？"
+
+#: lib/famichat_web/live/home_live.html.heex:165
+#, elixir-autogen, elixir-format
+msgid "Welcome them!"
+msgstr "メッセージで迎えましょう！"
+
+#: lib/famichat_web/controllers/error_html/410.html.heex:10
+#, elixir-autogen, elixir-format
+msgid "Your invite link has expired or has already been used."
+msgstr "この招待リンクは期限切れか、すでに使用されています。"
+
+#: lib/famichat_web/live/admin/setup_live.ex:325
+#, elixir-autogen, elixir-format
+msgid "Your name needs to be at least 1 character."
+msgstr "お名前は1文字以上で入力してください。"
+
+#: lib/famichat_web/live/home_live.html.heex:174
+#, elixir-autogen, elixir-format
+msgid "e.g., Hi! So glad you're here. Talk soon?"
+msgstr "例：やっほー！来てくれてうれしい。またね！"

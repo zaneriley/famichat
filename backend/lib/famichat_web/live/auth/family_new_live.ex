@@ -75,7 +75,7 @@ defmodule FamichatWeb.AuthLive.FamilyNewLive do
     do: gettext("That family name is already taken. Try something else.")
 
   defp error_message(:rate_limited),
-    do: gettext("Something went wrong. Try again in a bit.")
+    do: gettext("Too many family spaces created from this network. Try again in a few minutes.")
 
   defp error_message(:unexpected),
     do: gettext("Something went wrong. Please try again.")

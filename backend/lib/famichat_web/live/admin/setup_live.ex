@@ -322,7 +322,7 @@ defmodule FamichatWeb.AdminLive.SetupLive do
   defp error_message(:username_required), do: gettext("Please enter your name.")
 
   defp error_message(:username_too_short),
-    do: gettext("Your name needs to be at least 3 characters.")
+    do: gettext("Your name needs to be at least 1 character.")
 
   defp error_message(:unexpected),
     do: gettext("Something went wrong \u2014 please try again.")
