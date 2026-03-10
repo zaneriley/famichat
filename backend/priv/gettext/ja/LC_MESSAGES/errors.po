@@ -12,82 +12,82 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 msgid "can't be blank"
-msgstr ""
+msgstr "入力してください"
 
 msgid "has already been taken"
-msgstr ""
+msgstr "すでに使われています"
 
 msgid "is invalid"
-msgstr ""
+msgstr "正しくありません"
 
 msgid "must be accepted"
-msgstr ""
+msgstr "同意が必要です"
 
 msgid "has invalid format"
-msgstr ""
+msgstr "形式が正しくありません"
 
 msgid "has an invalid entry"
-msgstr ""
+msgstr "無効な項目があります"
 
 msgid "is reserved"
-msgstr ""
+msgstr "使用できない値です"
 
 msgid "does not match confirmation"
-msgstr ""
+msgstr "確認と一致しません"
 
 msgid "is still associated with this entry"
-msgstr ""
+msgstr "まだこの項目に関連付けられています"
 
 msgid "are still associated with this entry"
-msgstr ""
+msgstr "まだこの項目に関連付けられています"
 
 msgid "should have %{count} item(s)"
 msgid_plural "should have %{count} item(s)"
-msgstr[0] ""
+msgstr[0] "%{count}個の項目が必要です"
 
 msgid "should be %{count} character(s)"
 msgid_plural "should be %{count} character(s)"
-msgstr[0] ""
+msgstr[0] "%{count}文字にしてください"
 
 msgid "should be %{count} byte(s)"
 msgid_plural "should be %{count} byte(s)"
-msgstr[0] ""
+msgstr[0] "%{count}バイトにしてください"
 
 msgid "should have at least %{count} item(s)"
 msgid_plural "should have at least %{count} item(s)"
-msgstr[0] ""
+msgstr[0] "%{count}個以上の項目が必要です"
 
 msgid "should be at least %{count} character(s)"
 msgid_plural "should be at least %{count} character(s)"
-msgstr[0] ""
+msgstr[0] "%{count}文字以上で入力してください"
 
 msgid "should be at least %{count} byte(s)"
 msgid_plural "should be at least %{count} byte(s)"
-msgstr[0] ""
+msgstr[0] "%{count}バイト以上にしてください"
 
 msgid "should have at most %{count} item(s)"
 msgid_plural "should have at most %{count} item(s)"
-msgstr[0] ""
+msgstr[0] "%{count}個以下の項目にしてください"
 
 msgid "should be at most %{count} character(s)"
 msgid_plural "should be at most %{count} character(s)"
-msgstr[0] ""
+msgstr[0] "%{count}文字以内で入力してください"
 
 msgid "should be at most %{count} byte(s)"
 msgid_plural "should be at most %{count} byte(s)"
-msgstr[0] ""
+msgstr[0] "%{count}バイト以下にしてください"
 
 msgid "must be less than %{number}"
-msgstr ""
+msgstr "%{number}未満にしてください"
 
 msgid "must be greater than %{number}"
-msgstr ""
+msgstr "%{number}より大きくしてください"
 
 msgid "must be less than or equal to %{number}"
-msgstr ""
+msgstr "%{number}以下にしてください"
 
 msgid "must be greater than or equal to %{number}"
-msgstr ""
+msgstr "%{number}以上にしてください"
 
 msgid "must be equal to %{number}"
-msgstr ""
+msgstr "%{number}にしてください"

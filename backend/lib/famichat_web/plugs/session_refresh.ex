@@ -13,6 +13,7 @@ defmodule FamichatWeb.Plugs.SessionRefresh do
   """
 
   import Plug.Conn
+  import Ecto.Query, only: [from: 2]
 
   alias Famichat.Auth.Sessions
   alias FamichatWeb.ConnHelpers
@@ -82,7 +83,12 @@ defmodule FamichatWeb.Plugs.SessionRefresh do
 
           :ok = TokenVerifyCache.cache(new_tokens.access_token)
 
-          {ConnHelpers.put_session_from_issued(conn, new_tokens),
+          refreshed_conn =
+            conn
+            |> ConnHelpers.put_session_from_issued(new_tokens)
+            |> maybe_restore_locale(new_tokens[:user_id])
+
+          {refreshed_conn,
            %{cache_status: cache_status, refreshed?: true, result: :refreshed}}
 
         {:error, reason} ->
@@ -99,4 +105,27 @@ defmodule FamichatWeb.Plugs.SessionRefresh do
       {conn, %{cache_status: cache_status, refreshed?: false, result: :skipped}}
     end
   end
+
+  defp maybe_restore_locale(conn, user_id) when is_binary(user_id) do
+    locale =
+      Famichat.Repo.one(
+        from u in Famichat.Accounts.User,
+          where: u.id == ^user_id,
+          select: u.locale
+      )
+
+    case locale do
+      l when is_binary(l) and l != "" ->
+        put_session(conn, SessionKeys.user_locale(), l)
+
+      _ ->
+        conn
+    end
+  rescue
+    e ->
+      Logger.warning("[SessionRefresh] Failed to restore locale: #{inspect(e)}")
+      conn
+  end
+
+  defp maybe_restore_locale(conn, _user_id), do: conn
 end

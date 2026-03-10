@@ -123,6 +123,17 @@ defmodule FamichatWeb.AuthLive.InviteLive do
             {:ok, mount_invalid(socket, :already_completed)}
 
           {:error, reason} ->
+            Logger.warning(
+              "[InviteLive] Invite consumed but registration incomplete — invitee may be stuck",
+              invite_error: reason
+            )
+
+            :telemetry.execute(
+              [:famichat, :invite, :abandoned],
+              %{count: 1},
+              %{reason: reason}
+            )
+
             {:ok, mount_invalid(socket, reason)}
         end
 
@@ -173,12 +184,6 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     cond do
       username == "" ->
         {:noreply, assign(socket, :error, :username_required)}
-
-      String.length(username) < 1 ->
-        {:noreply,
-         socket
-         |> assign(:error, :username_too_short)
-         |> assign(:username, username)}
 
       String.length(username) > 50 ->
         {:noreply,
@@ -300,7 +305,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
   defp error_message(:used),
     do:
       gettext(
-        "You started setting up with this link but didn't finish. Try signing in, or ask for a new invite."
+        "This link has already been opened. Ask the person who invited you to send a new one."
       )
 
   defp error_message(:already_completed),

@@ -204,7 +204,7 @@
         </.typography>
         <.typography tag="p" size="md" color="deemphasized">
           <%= gettext(
-            "Invite links are single-use and expire after 10 minutes. This keeps the space private."
+            "Invite links are single-use and expire after 72 hours. This keeps the space private."
           ) %>
         </.typography>
         <.typography tag="p" size="md" color="deemphasized">
@@ -215,14 +215,16 @@
             "Ask the person who invited you to send a new link, or reply to the message you received."
           ) %>
         </.typography>
-        <a
-          href={locale_path(assigns, "/login")}
-          class="ac-secondary-button w-full text-center rounded-full px-md py-2xs"
-        >
-          <.typography tag="span" size="md" color="deemphasized">
-            <%= gettext("Already have an account? Sign in") %>
-          </.typography>
-        </a>
+        <%= if @error != :used do %>
+          <a
+            href={locale_path(assigns, "/login")}
+            class="ac-secondary-button w-full text-center rounded-full px-md py-2xs"
+          >
+            <.typography tag="span" size="md" color="deemphasized">
+              <%= gettext("Already have an account? Sign in") %>
+            </.typography>
+          </a>
+        <% end %>
       </div>
   <% end %>
 </div>

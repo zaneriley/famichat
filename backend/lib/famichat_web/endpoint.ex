@@ -14,11 +14,6 @@ defmodule FamichatWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  plug GitHubWebhook,
-    secret: "V/cR1ORkr+Fi5FHCzmzoEtgud7Tjdg/7ZS+DTOdzX2qm+LEwve3XkKwqoXAfTvCH",
-    path: "/api/v1/content/push",
-    action: {FamichatWeb.ContentWebhookController, :handle_webhook}
-
   socket "/socket", FamichatWeb.UserSocket,
     websocket: [
       serializer: [
@@ -80,10 +75,5 @@ defmodule FamichatWeb.Endpoint do
     end)
 
     conn
-  end
-
-  def get_github_webhook_secret do
-    Application.get_env(:famichat, :github_webhook_secret) ||
-      raise "GitHub webhook secret is not configured!"
   end
 end

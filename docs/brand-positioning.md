@@ -49,7 +49,7 @@ Real decisions from the codebase. "Good" vs "almost good" — the second column 
 | "Set up your family space" | "Create a family" | "Set up" = preparing a place. "Create a family" is existentially weird. |
 | "Family name — optional" | "Enter your family name (optional)" | "Enter your" is form-label boilerplate. |
 | "Your device will ask to confirm it's you." | "Biometric authentication required." | Describes what actually happens, not the technology category. |
-| "Invite links are single-use and expire after 10 minutes." | "For security, each invite link can only be used once." | States the fact. Doesn't lecture about why. Users are resigned, not paranoid. |
+| "Invite links are single-use and expire after 72 hours." | "For security, each invite link can only be used once." | States the fact. Doesn't lecture about why. Users are resigned, not paranoid. |
 | "Getting started? Ask the person who told you about Famichat to send you an invite link." | "You need an invitation to use Famichat. Contact your administrator." | Assumes a social relationship exists. Doesn't invoke "administrator." |
 
 ### 日本語 (Japanese)

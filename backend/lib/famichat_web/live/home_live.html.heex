@@ -133,7 +133,7 @@
             <div class="flex flex-col gap-sm">
               <.typography tag="p" size="sm" color="deemphasized">
                 <%= gettext(
-                  "Send this link to the person you want to invite. It expires in 10 minutes and can only be used once."
+                  "Send this link to the person you want to invite. It expires in 72 hours and can only be used once."
                 ) %>
               </.typography>
               <div class="flex gap-sm items-center">
@@ -464,7 +464,19 @@
                 end %>
               </.typography>
               <.typography tag="p" size="sm" color="deemphasized">
-                <%= gettext("This is just for the two of you. Messages stay here.") %>
+                <%= if @is_admin do %>
+                  <%= gettext("You'll be the first to see each other's messages here.") %>
+                <% else %>
+                  <%= case @family_members do
+                    [other] ->
+                      gettext("%{name} set this up for you. Say something — they're waiting.",
+                        name: other.username
+                      )
+
+                    _ ->
+                      gettext("This space was set up for you. Say something — they're waiting.")
+                  end %>
+                <% end %>
               </.typography>
             </div>
           <% end %>

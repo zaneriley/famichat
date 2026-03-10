@@ -30,11 +30,26 @@ database =
     database
   end
 
+db_password =
+  case {config_env(), System.get_env("POSTGRES_PASSWORD")} do
+    {:prod, nil} ->
+      raise "environment variable POSTGRES_PASSWORD is required in production"
+
+    {:prod, "password"} ->
+      raise "POSTGRES_PASSWORD must not be the default value \"password\" in production"
+
+    {_, nil} ->
+      "password"
+
+    {_, value} ->
+      value
+  end
+
 repo_config =
   [
     url: System.get_env("DATABASE_URL"),
     username: db_user,
-    password: System.get_env("POSTGRES_PASSWORD", "password"),
+    password: db_password,
     database: database,
     hostname: System.get_env("POSTGRES_HOST", "postgres"),
     port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
@@ -69,11 +84,6 @@ unique_conversation_key_salt =
 
 config :famichat, :unique_conversation_key_salt, unique_conversation_key_salt
 
-config :famichat, :github_token, System.get_env("GITHUB_TOKEN")
-
-config :famichat,
-  github_webhook_secret: System.get_env("GITHUB_WEBHOOK_SECRET")
-
 mls_snapshot_hmac_key_raw =
   case {config_env(), System.get_env("MLS_SNAPSHOT_HMAC_KEY")} do
     {:prod, nil} ->
@@ -105,6 +115,39 @@ mls_snapshot_hmac_key =
   end
 
 config :famichat, :mls_snapshot_hmac_key, mls_snapshot_hmac_key
+
+webauthn_origin =
+  case {config_env(), System.get_env("WEBAUTHN_ORIGIN")} do
+    {:prod, nil} ->
+      raise "environment variable WEBAUTHN_ORIGIN is required in production"
+
+    {_, nil} ->
+      # Dev/test default. DO NOT use in production.
+      "http://localhost:9000"
+
+    {_, value} ->
+      value
+  end
+
+webauthn_rp_id =
+  case {config_env(), System.get_env("WEBAUTHN_RP_ID")} do
+    {:prod, nil} ->
+      raise "environment variable WEBAUTHN_RP_ID is required in production"
+
+    {_, nil} ->
+      # Dev/test default. DO NOT use in production.
+      "localhost"
+
+    {_, value} ->
+      value
+  end
+
+webauthn_rp_name = System.get_env("WEBAUTHN_RP_NAME") || "Famichat"
+
+config :famichat, :webauthn,
+  origin: webauthn_origin,
+  rp_id: webauthn_rp_id,
+  rp_name: webauthn_rp_name
 
 case System.get_env("FAMICHAT_MLS_ENFORCEMENT") do
   nil ->
@@ -149,16 +192,3 @@ config :famichat, Famichat.Vault,
   ciphers: [
     default: {Cloak.Ciphers.AES.GCM, tag: "AES.GCM.V1", key: vault_key}
   ]
-
-config :famichat, content_repo_url: System.get_env("CONTENT_REPO_URL")
-
-if config_env() == :prod do
-  config :famichat, content_base_path: "app/priv/content"
-else
-  config :famichat, content_base_path: "priv/content"
-end
-
-content_base_path = Application.get_env(:famichat, :content_base_path)
-
-config :famichat, Famichat.Content.FileManagement.Watcher,
-  paths: [System.get_env("CONTENT_BASE_PATH", "priv/content")]

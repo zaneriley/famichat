@@ -28,12 +28,13 @@ defmodule FamichatWeb.LiveHelpers do
 
   * `on_mount/4`: Sets up common assigns for default and admin mounts
   * `assign_page_metadata/3`: Assigns custom or default page metadata
-  * `handle_locale_and_path/3`: Manages locale changes and updates current path
-  * `assign_locale/2`: Assigns user's locale to the socket
   """
 
   import Phoenix.Component
   import FamichatWeb.Gettext
+  import Ecto.Query, only: [from: 2]
+
+  require Logger
 
   @default_title gettext("Famichat")
   @default_description gettext("Private, self-hosted messaging for families.")
@@ -54,17 +55,29 @@ defmodule FamichatWeb.LiveHelpers do
   end
 
   def on_mount(:require_authenticated, params, session, socket) do
-    socket = setup_common_assigns(socket, params, session)
     token = session["access_token"]
 
     case Famichat.Auth.Sessions.verify_access_token(token) do
       {:ok, %{user_id: user_id, device_id: device_id}} ->
-        {:cont,
-         socket
-         |> assign(:current_user_id, user_id)
-         |> assign(:current_device_id, device_id)}
+        # Lightweight query: fetch only the locale column, not the full User struct.
+        user_locale =
+          Famichat.Repo.one(
+            from u in Famichat.Accounts.User,
+              where: u.id == ^user_id,
+              select: u.locale
+          )
+
+        socket =
+          socket
+          |> assign(:current_user_locale, user_locale)
+          |> setup_common_assigns(params, session)
+          |> assign(:current_user_id, user_id)
+          |> assign(:current_device_id, device_id)
+
+        {:cont, socket}
 
       _ ->
+        socket = setup_common_assigns(socket, params, session)
         locale = socket.assigns[:user_locale] || "en"
         {:halt, Phoenix.LiveView.push_navigate(socket, to: "/#{locale}/login")}
     end
@@ -76,11 +89,14 @@ defmodule FamichatWeb.LiveHelpers do
     session_locale = session["user_locale"]
 
     # User's DB-persisted locale is a fallback between session and default.
-    # It's restored into the session on sign-in (auth_controller.ex) and
-    # persisted to DB when the user navigates to a locale-prefixed URL.
+    # It's restored into the session on sign-in (auth_controller.ex),
+    # refreshed in SessionRefresh plug, and persisted to DB when the user
+    # navigates to a locale-prefixed URL.
+    # :current_user_locale is assigned by on_mount(:require_authenticated)
+    # via a lightweight SELECT u.locale query — no full User struct needed.
     db_locale =
-      case socket.assigns[:current_user] do
-        %{locale: l} when is_binary(l) and l != "" -> l
+      case socket.assigns[:current_user_locale] do
+        l when is_binary(l) and l != "" -> l
         _ -> nil
       end
 
@@ -120,47 +136,23 @@ defmodule FamichatWeb.LiveHelpers do
     )
   end
 
-  defp get_user_locale(session) do
-    session["user_locale"] || @default_locale
-  end
-
-  def handle_locale_and_path(socket, params, uri) do
-    new_locale = params["locale"] || socket.assigns.user_locale
-    current_path = URI.parse(uri).path
-
-    socket = assign(socket, current_path: current_path)
-
-    if new_locale != socket.assigns.user_locale do
-      Gettext.put_locale(FamichatWeb.Gettext, new_locale)
-      assign(socket, user_locale: new_locale)
-    else
-      socket
-    end
-  end
-
-  def assign_locale(socket, session) do
-    user_locale = get_user_locale(session)
-    Gettext.put_locale(FamichatWeb.Gettext, user_locale)
-    assign(socket, user_locale: user_locale)
-  end
-
   defp maybe_persist_locale_change(socket, resolved_locale) do
-    user = socket.assigns[:current_user]
+    user_id = socket.assigns[:current_user_id]
+    db_locale = socket.assigns[:current_user_locale]
 
     cond do
-      is_nil(user) ->
+      is_nil(user_id) ->
         socket
 
-      user.locale == resolved_locale ->
+      db_locale == resolved_locale ->
         socket
 
       # Don't persist the default locale if user has no preference yet.
       # This avoids a needless DB write on every first mount.
-      is_nil(user.locale) and resolved_locale == @default_locale ->
+      is_nil(db_locale) and resolved_locale == @default_locale ->
         socket
 
       true ->
-        user_id = user.id
 
         Task.start(fn ->
           try do
@@ -182,6 +174,8 @@ defmodule FamichatWeb.LiveHelpers do
             end
           rescue
             e ->
+              Logger.warning("Failed to persist locale change: #{inspect(e)}")
+
               :telemetry.execute(
                 [:famichat, :locale, :persist],
                 %{success: false},

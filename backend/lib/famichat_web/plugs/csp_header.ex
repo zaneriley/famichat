@@ -55,10 +55,12 @@ defmodule FamichatWeb.Plugs.CSPHeader do
 
   @spec get_csp_config(Plug.Conn.t()) :: csp_config()
   defp get_csp_config(conn) do
+    endpoint_url = Application.get_env(:famichat, FamichatWeb.Endpoint)[:url] || []
+
     %{
-      scheme: System.get_env("URL_SCHEME", @default_scheme),
+      scheme: endpoint_url[:scheme] || @default_scheme,
       host: get_host(conn),
-      port: System.get_env("URL_PORT", @default_port),
+      port: to_string(endpoint_url[:port] || @default_port),
       additional_hosts: parse_additional_hosts(),
       report_only: @report_only
     }
@@ -114,7 +116,9 @@ defmodule FamichatWeb.Plugs.CSPHeader do
 
   @spec get_all_hosts(csp_config) :: String.t()
   defp get_all_hosts(config) do
+    port = if config.port in ["80", "443"], do: "", else: ":#{config.port}"
+
     [config.host, "localhost", "0.0.0.0" | config.additional_hosts]
-    |> Enum.map_join(" ", &"#{config.scheme}://#{&1}:#{config.port}")
+    |> Enum.map_join(" ", &"#{config.scheme}://#{&1}#{port}")
   end
 end

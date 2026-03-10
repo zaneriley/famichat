@@ -61,7 +61,6 @@ defmodule Famichat.Auth.Tokens.Policy do
   @one_day 86_400
   @three_days 3 * @one_day
   @seven_days 7 * @one_day
-  @fourteen_days 14 * @one_day
   @thirty_days 30 * @one_day
   @ninety_days 90 * @one_day
 
@@ -69,8 +68,8 @@ defmodule Famichat.Auth.Tokens.Policy do
               invite: %Definition{
                 kind: :invite,
                 storage: :ledgered,
-                ttl: @seven_days,
-                max_ttl: @fourteen_days,
+                ttl: @three_days,
+                max_ttl: @seven_days,
                 audience: :registrant,
                 legacy_context: "invite",
                 subject_strategy: :none
