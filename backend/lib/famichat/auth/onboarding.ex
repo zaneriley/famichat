@@ -41,6 +41,7 @@ defmodule Famichat.Auth.Onboarding do
   @pairing_redeem_bucket :"pairing.redeem"
   @pairing_reissue_bucket :"pairing.reissue"
   @self_service_bucket :"family.self_service"
+  @passkey_reissue_bucket :"passkey.reissue"
 
   @spec issue_invite(Ecto.UUID.t(), String.t() | nil, map()) ::
           {:ok, %{invite: String.t(), qr: String.t(), admin_code: String.t()}}
@@ -581,7 +582,8 @@ defmodule Famichat.Auth.Onboarding do
           | {:error,
              :user_not_found | :already_registered | :invalid_user_state}
   def reissue_passkey_token(user_id) do
-    with {:ok, user} <- Identity.fetch_user(user_id),
+    with :ok <- RateLimit.check(@passkey_reissue_bucket, user_id, limit: 5, interval: 300),
+         {:ok, user} <- Identity.fetch_user(user_id),
          :ok <- assert_reissuable_user_state(user),
          :ok <- assert_no_active_passkey(user_id),
          {:ok, %IssuedToken{raw: register_token}} <-

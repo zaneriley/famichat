@@ -133,7 +133,7 @@ msgstr "Developer Tools"
 msgid "Each family member needs their own invite link — Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
 msgstr "Each family member needs their own invite link — Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
 
-#: lib/famichat_web/live/live_helpers.ex:41
+#: lib/famichat_web/live/live_helpers.ex:39
 #, elixir-autogen, elixir-format
 msgid "Famichat"
 msgstr "Famichat"
@@ -163,7 +163,7 @@ msgstr "Generate another invite"
 msgid "Generate invite link"
 msgstr "Generate invite link"
 
-#: lib/famichat_web/live/auth/login_live.html.heex:49
+#: lib/famichat_web/live/auth/login_live.html.heex:56
 #: lib/famichat_web/live/home_live.html.heex:30
 #, elixir-autogen, elixir-format
 msgid "Getting started? Ask the person who told you about Famichat to send you an invite link."
@@ -263,7 +263,7 @@ msgstr "Family name"
 msgid "Open Famichat"
 msgstr "Open Famichat"
 
-#: lib/famichat_web/live/auth/invite_live.ex:318
+#: lib/famichat_web/live/auth/invite_live.ex:323
 #, elixir-autogen, elixir-format
 msgid "Please enter a username."
 msgstr "Please enter a username."
@@ -274,17 +274,17 @@ msgid "Please enter your name."
 msgstr "Please enter your name."
 
 #: lib/famichat_web/components/layouts/root.html.heex:17
-#: lib/famichat_web/live/live_helpers.ex:42
+#: lib/famichat_web/live/live_helpers.ex:40
 #, elixir-autogen, elixir-format
 msgid "Private, self-hosted messaging for families."
 msgstr "Private, self-hosted messaging for families."
 
-#: lib/famichat_web/live/auth/invite_live.ex:332
+#: lib/famichat_web/live/auth/invite_live.ex:337
 #, elixir-autogen, elixir-format
 msgid "Registration token missing. Please go back and try again."
 msgstr ""
 
-#: lib/famichat_web/live/home_live.html.heex:536
+#: lib/famichat_web/live/home_live.html.heex:539
 #, elixir-autogen, elixir-format
 msgid "Say hello…"
 msgstr "Say hello…"
@@ -373,12 +373,12 @@ msgstr "Something went wrong — please try again."
 #: lib/famichat_web/live/admin/setup_live.ex:338
 #: lib/famichat_web/live/auth/family_new_live.ex:83
 #: lib/famichat_web/live/auth/family_setup_live.ex:248
-#: lib/famichat_web/live/auth/invite_live.ex:337
+#: lib/famichat_web/live/auth/invite_live.ex:342
 #, elixir-autogen, elixir-format
 msgid "Something went wrong."
 msgstr "Something went wrong."
 
-#: lib/famichat_web/live/auth/invite_live.ex:335
+#: lib/famichat_web/live/auth/invite_live.ex:340
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Something went wrong. Please go back and try again."
 msgstr "Something went wrong. Please try again."
@@ -386,7 +386,7 @@ msgstr "Something went wrong. Please try again."
 #: lib/famichat_web/live/admin/community_admin_live.ex:210
 #: lib/famichat_web/live/auth/family_new_live.ex:81
 #: lib/famichat_web/live/auth/family_setup_live.ex:244
-#: lib/famichat_web/live/auth/invite_live.ex:315
+#: lib/famichat_web/live/auth/invite_live.ex:320
 #, elixir-autogen, elixir-format
 msgid "Something went wrong. Please try again."
 msgstr "Something went wrong. Please try again."
@@ -397,7 +397,7 @@ msgid "System"
 msgstr "System"
 
 #: lib/famichat_web/live/auth/family_setup_live.ex:241
-#: lib/famichat_web/live/auth/invite_live.ex:327
+#: lib/famichat_web/live/auth/invite_live.ex:332
 #, elixir-autogen, elixir-format
 msgid "That name is already taken. Please choose a different one."
 msgstr ""
@@ -412,7 +412,7 @@ msgstr "Theme"
 msgid "This family space is already set up."
 msgstr "This family space is already set up."
 
-#: lib/famichat_web/live/auth/invite_live.ex:307
+#: lib/famichat_web/live/auth/invite_live.ex:312
 #, elixir-autogen, elixir-format
 msgid "This invite has already been used to create an account. Try signing in instead."
 msgstr ""
@@ -423,12 +423,12 @@ msgstr ""
 msgid "This invite link didn't work"
 msgstr "This invite link didn't work"
 
-#: lib/famichat_web/live/auth/invite_live.ex:298
+#: lib/famichat_web/live/auth/invite_live.ex:303
 #, elixir-autogen, elixir-format
 msgid "This invite link has expired. Ask for a new one."
 msgstr ""
 
-#: lib/famichat_web/live/auth/invite_live.ex:309
+#: lib/famichat_web/live/auth/invite_live.ex:314
 #, elixir-autogen, elixir-format, fuzzy
 msgid "This invite link is not valid."
 msgstr "This invite link didn't work"
@@ -443,7 +443,7 @@ msgstr "This space was set up for you. Say something — they're waiting."
 msgid "This is the name for your family. You can change it later."
 msgstr "This is the name for your family. You can change it later."
 
-#: lib/famichat_web/live/auth/invite_live.ex:312
+#: lib/famichat_web/live/auth/invite_live.ex:317
 #, elixir-autogen, elixir-format
 msgid "Too many attempts. Please try again later."
 msgstr ""
@@ -460,19 +460,19 @@ msgstr ""
 msgid "Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably)."
 msgstr "Try again, or switch to a different browser (Chrome and Safari support passkeys most reliably)."
 
-#: lib/famichat_web/live/home_live.html.heex:537
+#: lib/famichat_web/live/home_live.html.heex:540
 #, elixir-autogen, elixir-format
 msgid "Type a message…"
 msgstr "Type a message…"
 
 #: lib/famichat_web/live/admin/setup_live.ex:246
 #: lib/famichat_web/live/auth/family_setup_live.ex:209
-#: lib/famichat_web/live/auth/invite_live.ex:279
+#: lib/famichat_web/live/auth/invite_live.ex:284
 #, elixir-autogen, elixir-format
 msgid "Unknown error"
 msgstr "Unknown error"
 
-#: lib/famichat_web/live/auth/invite_live.ex:324
+#: lib/famichat_web/live/auth/invite_live.ex:329
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Username must be 50 characters or fewer."
 msgstr "Username must be at least 3 characters."
@@ -595,73 +595,73 @@ msgstr "close"
 msgid "e.g. Mum, Dad, Grandma Rose"
 msgstr "e.g. Mum, Dad, Grandma Rose"
 
-#: lib/famichat_web/live/auth/login_live.ex:69
+#: lib/famichat_web/live/auth/login_live.ex:72
 #, elixir-autogen, elixir-format
 msgid "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt."
 msgstr "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt."
 
-#: lib/famichat_web/live/home_live.ex:288
-#: lib/famichat_web/live/home_live.ex:505
-#: lib/famichat_web/live/home_live.ex:669
+#: lib/famichat_web/live/home_live.ex:289
+#: lib/famichat_web/live/home_live.ex:506
+#: lib/famichat_web/live/home_live.ex:670
 #, elixir-autogen, elixir-format
 msgid "Something went wrong connecting. Try refreshing."
 msgstr "Something went wrong connecting. Try refreshing."
 
-#: lib/famichat_web/live/home_live.ex:332
+#: lib/famichat_web/live/home_live.ex:333
 #, elixir-autogen, elixir-format
 msgid "Still connecting. Try again in a moment."
 msgstr "Still connecting. Try again in a moment."
 
-#: lib/famichat_web/live/home_live.ex:464
-#: lib/famichat_web/live/home_live.ex:929
-#: lib/famichat_web/live/home_live.ex:932
-#: lib/famichat_web/live/home_live.ex:960
-#: lib/famichat_web/live/home_live.ex:963
+#: lib/famichat_web/live/home_live.ex:465
+#: lib/famichat_web/live/home_live.ex:930
+#: lib/famichat_web/live/home_live.ex:933
+#: lib/famichat_web/live/home_live.ex:961
+#: lib/famichat_web/live/home_live.ex:964
 #, elixir-autogen, elixir-format
 msgid "This device has been removed. Please sign in again."
 msgstr "This device has been removed. Please sign in again."
 
-#: lib/famichat_web/live/home_live.ex:466
+#: lib/famichat_web/live/home_live.ex:467
 #, elixir-autogen, elixir-format
 msgid "Something went wrong with the connection. Try refreshing."
 msgstr "Something went wrong with the connection. Try refreshing."
 
-#: lib/famichat_web/live/home_live.ex:585
+#: lib/famichat_web/live/home_live.ex:586
 #, elixir-autogen, elixir-format
 msgid "You must be in a family to generate an invite."
 msgstr "You must be in a family to generate an invite."
 
-#: lib/famichat_web/live/home_live.ex:606
+#: lib/famichat_web/live/home_live.ex:607
 #, elixir-autogen, elixir-format
 msgid "Could not generate invite link."
 msgstr "Could not generate invite link."
 
-#: lib/famichat_web/live/home_live.ex:926
+#: lib/famichat_web/live/home_live.ex:927
 #, elixir-autogen, elixir-format
 msgid "Something went wrong with this session. Try refreshing."
 msgstr "Something went wrong with this session. Try refreshing."
 
-#: lib/famichat_web/live/home_live.ex:935
-#: lib/famichat_web/live/home_live.ex:972
+#: lib/famichat_web/live/home_live.ex:936
+#: lib/famichat_web/live/home_live.ex:973
 #, elixir-autogen, elixir-format
 msgid "Setting things up. This should only take a moment."
 msgstr "Setting things up. This should only take a moment."
 
 #: lib/famichat_web/controllers/family_context_controller.ex:40
 #: lib/famichat_web/controllers/family_context_controller.ex:47
-#: lib/famichat_web/live/home_live.ex:937
+#: lib/famichat_web/live/home_live.ex:938
 #, elixir-autogen, elixir-format
 msgid "Something went wrong. Try refreshing."
 msgstr "Something went wrong. Try refreshing."
 
-#: lib/famichat_web/live/home_live.ex:957
-#: lib/famichat_web/live/home_live.ex:975
+#: lib/famichat_web/live/home_live.ex:958
+#: lib/famichat_web/live/home_live.ex:976
 #, elixir-autogen, elixir-format
 msgid "Something needs attention. Try refreshing."
 msgstr "Something needs attention. Try refreshing."
 
-#: lib/famichat_web/live/home_live.ex:966
-#: lib/famichat_web/live/home_live.ex:969
+#: lib/famichat_web/live/home_live.ex:967
+#: lib/famichat_web/live/home_live.ex:970
 #, elixir-autogen, elixir-format
 msgid "Your session is out of date. Try refreshing."
 msgstr "Your session is out of date. Try refreshing."
@@ -823,12 +823,12 @@ msgstr ""
 msgid "Share this link with the person who will manage the %{family_name} space. It expires in 3 days."
 msgstr ""
 
-#: lib/famichat_web/live/auth/login_live.ex:73
+#: lib/famichat_web/live/auth/login_live.ex:76
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Something went wrong connecting securely. Try a different browser or check your URL."
 msgstr "Something went wrong connecting. Try refreshing."
 
-#: lib/famichat_web/live/auth/login_live.ex:105
+#: lib/famichat_web/live/auth/login_live.ex:108
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Something went wrong connecting. Check your connection and try again."
 msgstr "Something went wrong connecting. Try refreshing."
@@ -838,24 +838,24 @@ msgstr "Something went wrong connecting. Try refreshing."
 msgid "Something went wrong loading this page."
 msgstr "Something went wrong — please try again."
 
-#: lib/famichat_web/live/auth/login_live.ex:101
-#: lib/famichat_web/live/auth/login_live.ex:109
+#: lib/famichat_web/live/auth/login_live.ex:104
 #: lib/famichat_web/live/auth/login_live.ex:112
+#: lib/famichat_web/live/auth/login_live.ex:115
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Something went wrong signing in. Try again."
 msgstr "Something went wrong signing in. Please try again."
 
-#: lib/famichat_web/live/auth/login_live.ex:97
+#: lib/famichat_web/live/auth/login_live.ex:100
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Something went wrong starting sign-in. Try again."
 msgstr "Something went wrong signing in. Please try again."
 
-#: lib/famichat_web/live/auth/login_live.ex:85
+#: lib/famichat_web/live/auth/login_live.ex:88
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Something went wrong verifying your passkey. Try again."
 msgstr "Something went wrong. Try refreshing."
 
-#: lib/famichat_web/live/auth/login_live.ex:81
+#: lib/famichat_web/live/auth/login_live.ex:84
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Something went wrong with your passkey. Try refreshing the page."
 msgstr "Something went wrong with this session. Try refreshing."
@@ -905,7 +905,7 @@ msgstr ""
 msgid "This setup link is not valid."
 msgstr ""
 
-#: lib/famichat_web/live/auth/login_live.ex:93
+#: lib/famichat_web/live/auth/login_live.ex:96
 #, elixir-autogen, elixir-format
 msgid "Too many attempts. Wait a moment and try again."
 msgstr ""
@@ -935,7 +935,7 @@ msgstr ""
 msgid "Your account is ready."
 msgstr ""
 
-#: lib/famichat_web/live/auth/login_live.ex:77
+#: lib/famichat_web/live/auth/login_live.ex:80
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge."
 msgstr "Your browser doesn't support passkeys. Try Chrome or Safari."
@@ -962,7 +962,7 @@ msgstr ""
 msgid "Your private space with %{name}."
 msgstr ""
 
-#: lib/famichat_web/live/auth/login_live.ex:89
+#: lib/famichat_web/live/auth/login_live.ex:92
 #, elixir-autogen, elixir-format
 msgid "Your sign-in session expired. Tap the button to start again."
 msgstr ""
@@ -1023,12 +1023,12 @@ msgstr ""
 msgid "Too many family spaces created from this network. Try again in a few minutes."
 msgstr ""
 
-#: lib/famichat_web/live/auth/invite_live.ex:321
+#: lib/famichat_web/live/auth/invite_live.ex:326
 #, elixir-autogen, elixir-format, fuzzy
 msgid "Username must be at least 1 character."
 msgstr "Username must be at least 3 characters."
 
-#: lib/famichat_web/live/auth/login_live.html.heex:59
+#: lib/famichat_web/live/auth/login_live.html.heex:66
 #, elixir-autogen, elixir-format
 msgid "Want to set up your own family space?"
 msgstr ""
@@ -1053,22 +1053,22 @@ msgstr "Your name needs to be at least 3 characters."
 msgid "e.g., Hi! So glad you're here. Talk soon?"
 msgstr ""
 
-#: lib/famichat_web/live/home_live.ex:358
+#: lib/famichat_web/live/home_live.ex:359
 #, elixir-autogen, elixir-format
 msgid "Device %{device} not found for this user."
 msgstr ""
 
-#: lib/famichat_web/live/home_live.ex:364
+#: lib/famichat_web/live/home_live.ex:365
 #, elixir-autogen, elixir-format
 msgid "Device revoke failed: %{reason}"
 msgstr ""
 
-#: lib/famichat_web/live/home_live.ex:344
+#: lib/famichat_web/live/home_live.ex:345
 #, elixir-autogen, elixir-format
 msgid "Enter a device id to revoke."
 msgstr ""
 
-#: lib/famichat_web/live/home_live.ex:352
+#: lib/famichat_web/live/home_live.ex:353
 #, elixir-autogen, elixir-format
 msgid "Revoked device %{device}."
 msgstr ""
@@ -1078,7 +1078,7 @@ msgstr ""
 msgid "This is how your family will know it’s you."
 msgstr "This is how your family will know it's you."
 
-#: lib/famichat_web/live/auth/invite_live.ex:302
+#: lib/famichat_web/live/auth/invite_live.ex:307
 #, elixir-autogen, elixir-format
 msgid "This link has already been opened. Ask the person who invited you to send a new one."
 msgstr ""
@@ -1094,6 +1094,16 @@ msgid "Send this link to the person you want to invite. It expires in 72 hours a
 msgstr "Send this link to the person you want to invite. It expires in 72 hours and can only be used once."
 
 #: lib/famichat_web/live/admin/setup_live.html.heex:228
-#, elixir-autogen, elixir-format
-msgid "Share this link with one family member. It works once and expires in 72 hours, so send it when they're ready to join."
+#, elixir-autogen, elixir-format, fuzzy
+msgid "Share this link with one family member. It works once and expires in 72 hours, so send it when they’re ready to join."
 msgstr "Share this link with one family member. It works once and expires in 72 hours, so send it when they're ready to join."
+
+#: lib/famichat_web/live/auth/login_live.html.heex:47
+#, elixir-autogen, elixir-format
+msgid "If this keeps happening, your passkey might not be on this device. Try a different device, or ask the person who set up Famichat to help you get back in."
+msgstr ""
+
+#: lib/famichat_web/live/home_live.html.heex:482
+#, elixir-autogen, elixir-format
+msgid "Messages here don't show when they've been read — just write naturally."
+msgstr ""

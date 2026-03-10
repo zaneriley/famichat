@@ -14,5 +14,6 @@ defmodule Famichat.Auth.RateLimit.Buckets do
           | :"otp.issue"
           | :"otp.verify"
           | :"recovery.issue"
+          | :"passkey.reissue"
           | :"recovery.redeem"
 end

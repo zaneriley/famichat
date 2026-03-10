@@ -478,6 +478,9 @@
                   end %>
                 <% end %>
               </.typography>
+              <.typography tag="p" size="2xs" color="deemphasized" class="mt-sm">
+                <%= gettext("Messages here don't show when they've been read — just write naturally.") %>
+              </.typography>
             </div>
           <% end %>
           <%= for {dom_id, message} <- @streams.messages do %>

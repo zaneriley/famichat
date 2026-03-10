@@ -14,7 +14,8 @@ defmodule FamichatWeb.AuthLive.LoginLive do
       {:ok,
        socket
        |> assign(:error, nil)
-       |> assign(:loading, false)}
+       |> assign(:loading, false)
+       |> assign(:error_count, 0)}
     end
   end
 
@@ -31,14 +32,16 @@ defmodule FamichatWeb.AuthLive.LoginLive do
   @impl true
   def handle_event("passkey-error", %{"code" => code} = params, socket) when is_binary(code) do
     Logger.warning("[LoginLive] passkey-error: #{code} — #{Map.get(params, "message", "")}")
-    {:noreply, assign(socket, error: normalize_passkey_error(code), loading: false)}
+    count = socket.assigns.error_count + 1
+    {:noreply, assign(socket, error: normalize_passkey_error(code), loading: false, error_count: count)}
   end
 
   # Fallback for events that carry only a message and no code (e.g. legacy hooks).
   @impl true
   def handle_event("passkey-error", %{"message" => msg}, socket) do
     Logger.warning("[LoginLive] passkey-error (no code): #{msg}")
-    {:noreply, assign(socket, error: normalize_passkey_error(msg), loading: false)}
+    count = socket.assigns.error_count + 1
+    {:noreply, assign(socket, error: normalize_passkey_error(msg), loading: false, error_count: count)}
   end
 
   @impl true

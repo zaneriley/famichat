@@ -93,6 +93,7 @@ defmodule FamichatWeb.HomeLive do
            conversation_id: nil,
            error_message: nil
          )
+         |> assign_page_metadata(family.name)
          |> stream(:messages, [], reset: true)}
     end
   end

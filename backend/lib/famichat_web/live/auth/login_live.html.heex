@@ -42,6 +42,13 @@
           <.typography tag="p" size="2xs" color="callout">
             <%= error_message(@error) %>
           </.typography>
+          <%= if @error_count >= 3 do %>
+            <.typography tag="p" size="2xs" color="deemphasized">
+              <%= gettext(
+                "If this keeps happening, your passkey might not be on this device. Try a different device, or ask the person who set up Famichat to help you get back in."
+              ) %>
+            </.typography>
+          <% end %>
         </div>
       <% end %>
 
