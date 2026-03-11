@@ -6,11 +6,14 @@ url_host = System.fetch_env!("URL_HOST")
 
 config :famichat, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
-config :famichat, FamichatWeb.Endpoint,
+url_scheme = System.get_env("URL_SCHEME", "https")
+url_port = System.get_env("URL_PORT", "443")
+
+endpoint_config = [
   url: [
-    scheme: System.get_env("URL_SCHEME", "https"),
+    scheme: url_scheme,
     host: url_host,
-    port: System.get_env("URL_PORT", "443")
+    port: url_port
   ],
   static_url: [
     host: System.get_env("URL_STATIC_HOST", url_host)
@@ -19,6 +22,17 @@ config :famichat, FamichatWeb.Endpoint,
   secret_key_base: System.fetch_env!("SECRET_KEY_BASE"),
   # It is completely safe to hard code and use this salt value.
   live_view: [signing_salt: "k4yfnQW4r"]
+]
+
+endpoint_config =
+  if config_env() == :prod do
+    origin_port = if url_port in ["80", "443"], do: "", else: ":#{url_port}"
+    Keyword.put(endpoint_config, :check_origin, ["#{url_scheme}://#{url_host}#{origin_port}"])
+  else
+    endpoint_config
+  end
+
+config :famichat, FamichatWeb.Endpoint, endpoint_config
 
 db_user = System.get_env("POSTGRES_USER", "famichat")
 database = System.get_env("POSTGRES_DB", db_user)

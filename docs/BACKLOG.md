@@ -54,6 +54,7 @@ Items are grouped by what they block, not by technical category.
 - **Blocks dogfooding (P0)** — Cannot hand the URL to family until these are fixed.
 - **Blocks confidence (P1)** — Can dogfood, but these erode trust in the system.
 - **Known debt (P2)** — Tracked, not blocking. Will matter at scale or for public launch.
+- **Someday/maybe (P3)** — Documentation, guidance, and ideas. Infra will change; don't invest until it stabilizes.
 - **Decisions needed** — Items that need human judgment, not implementation. May carry any severity.
 - **Cut / Won't do** — Explicitly rejected with a reason. Tracks what we decided NOT to do and why. These stay in the doc permanently.
 
@@ -120,6 +121,9 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Fix LiveView locale redirect — setup_common_assigns falls back to default locale, making /ja/* unusable → backend/lib/famichat_web/live/live_helpers.ex | P0-dogfood | bug-bash (76776e4)
 - [x] Fix blank family name "already taken" error — empty submit collides with default "My Family"; misleading → .tmp/2026-03-09-bug-bash/02-non-tech-family-member.md BUG-02 | P0-dogfood | bug-bash (76776e4)
 - [x] Constrain :locale route param to known locales — /:locale catch-all swallows API routes, returns 200 HTML → backend/lib/famichat_web/router.ex:241 | P0-dogfood | bug-bash (76776e4)
+- [x] Remove `pull_repository()` call and dead content-repo code from `docker-entrypoint-web` — container crashes on every production startup → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
+- [x] Remove `config :famichat, :cache, disabled: true` from prod.exs — all rate limits silently unenforced in production → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
+- [x] Fix CORS: remove CORSPlug for L1 or make origin configurable via env var — hardcoded localhost blocks browser requests from production domain → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
 
 ## Blocks confidence (P1)
 <!-- Can dogfood, but these make us nervous -->
@@ -153,6 +157,28 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Fix 404/410 templates to content-only — 3-for-1: resolves duplicate LiveSocket, duplicate skip links, and locale-awareness → .tmp/2026-03-10-ideation/07-routing-locale.md | P1-confidence | agent:consensus
 - [x] Add rate limiting to discoverable passkey assert/challenge endpoint — unauthenticated endpoint has no DoS protection → .tmp/2026-03-10-ideation/08-test-infrastructure.md | P1-confidence | agent:consensus
 - [x] Raise family creation rate limit from 3 to 10/IP/hour — same-household devices collide at 3/hr behind NAT → .tmp/2026-03-10-ideation/09-rate-limiting-nat.md | P1-confidence | agent:consensus
+- [x] Add `secure: true` to session cookie options for production — session cookie leaks over HTTP without Secure flag → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Remove LiveDashboard RequestLogger plug from production — debug plug processes query param in every prod request → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Remove `localhost`/`0.0.0.0` from CSP hosts in production — CSP allows script loading from localhost → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Restrict CSP `connect-src` to specific WebSocket URL, not bare `ws:/wss:` — XSS payload could exfiltrate via WebSocket to any host → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Add explicit `check_origin` for production WebSocket connections — cross-origin hijacking possible; tunnel may cause failures → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [ ] Fix `release-please.yml` Docker build context to `backend/` — CI release builds fail with repo-root context → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [ ] Add NIF load verification step to Dockerfile after `mix release` — silent NIF failure crashes release on first MLS operation → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Add web healthcheck to `docker-compose.production.yml` — no restart if app crashes after postgres healthy → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Update stale WebAuthn compile-time warnings in `.env.production.example` — operator wastes time on non-issue during deploy → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [ ] Change Docker Compose port default to `127.0.0.1` — forgotten env var exposes service on all interfaces → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [ ] Add build args and `POSTGRES_DB` to production compose — fragile defaults cause silent failures → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [ ] Add `restart: unless-stopped` to production compose services — services don't recover after homelab reboot → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [ ] Document WebAuthn/URL variable relationships with decision tree in `.env.production.example` — passkeys silently fail if RP_ID doesn't match domain → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [ ] Fix env_file reference to `.env.production` in compose file — first `docker compose up` fails with missing-file error → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [ ] Replace misleading pg_dump comment with setup instructions in compose — operators think they must dump nonexistent database → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [ ] Add POSTGRES_PASSWORD generation command to `.env.production.example` — no guidance; operator may use weak password → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [ ] Simplify compose healthcheck to CMD array form — nested variable interpolation fails silently if PORT misconfigured → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [ ] Add Docker build validation step to CI (build without push) — broken Dockerfile merges undetected → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [ ] Document FAMICHAT_MLS_ENFORCEMENT in `.env.production.example` — operator cannot discover MLS enforcement toggle → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [ ] Create `./run setup` interactive wizard that generates `.env.production` — operator must manually configure 15+ vars with no guidance → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
+- [ ] Create `./run check-config` pre-flight validation script — operators deploy with invalid config and get cryptic crashes → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
+- [ ] Add warm error messages to `runtime.exs` for all missing env vars — raw RuntimeError gives no diagnostic path → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
 
 ## Known debt (P2)
 <!-- Tracked, not blocking, will matter at scale or for public launch -->
@@ -171,6 +197,33 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [-] Make invite error copy available in all supported locales — all error_message/1 strings already have Japanese translations; verified by ideation agent 04 → .tmp/2026-03-10-ideation/04-i18n-cjk.md | agent:consensus
 - [x] Move CSP plug env var reads to Application.get_env — per-request System.get_env diverges from runtime.exs values → .tmp/2026-03-10-p0-next-four/round-2/consensus.md | P2-debt | agent:consensus (dfd6091)
 - [ ] Add photo sharing for 1:1 conversations — half of couple communication is visual; punted to next cycle → .tmp/2026-03-09-mlp-ux/consensus.md | P2-debt | agent:consensus
+- [x] Remove Playwright from Docker assets stage — 300MB+ browser binaries add 5-10 min to build → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Strip unnecessary packages from prod Dockerfile stage — 100MB+ build tools in prod image → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Remove dead `github_webhook` dep from mix.exs and config.exs — dead dependency inflates compile surface → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
+- [x] Remove dead content-repo env vars from `.env.production.example` — operators confused by irrelevant config → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Remove `/api/v1/hello` route and HelloController — dev artifact in production API → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Establish green CI baseline with `--exclude` tags for known-broken tests — red CI masks new regressions → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Add Docker image smoke test to CI pipeline — broken Dockerfile only discovered after release → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Update README.md with "For Self-Hosters" link to deployment guide — no path from README to deploy → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
+- [ ] Remove unused COMPOSE_PROFILES from `.env.production.example` — set but unused; confuses operators → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
+- [ ] Remove unused CONTENT_REPO_URL and GITHUB_WEBHOOK_SECRET from dev `.env` — cargo-culted from prior project → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
+- [ ] Add Docker image name to compose file — orphaned images accumulate after rebuilds → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
+- [ ] Add resource limits to docker-compose.production.yml — Erlang VM can consume all homelab RAM → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
+- [ ] Add logging configuration to docker-compose.production.yml — no log rotation; logs fill disk → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
+- [ ] Add CSP report-uri logging endpoint for operator-visible violation diagnostics — CSP violations invisible without DevTools; operators can't diagnose from docker logs → .tmp/2026-03-11-security-config/round-1/consensus.md | P2-debt | agent:consensus
+
+## Someday/maybe (P3)
+<!-- Documentation and guidance items — infra will change; don't invest in docs until it stabilizes -->
+- [ ] Create unified self-hosting guide (`docs/self-hosting.md`) — deployment knowledge scattered across 4+ files → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
+- [ ] Create backup/restore procedures document — encryption key loss is unrecoverable → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
+- [ ] Create Cloudflare Tunnel operational walkthrough — instructions end at "point to localhost:8001" → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
+- [ ] Create troubleshooting guide for common deployment failures — WebAuthn RP mismatch has no diagnostic docs → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
+- [ ] Create update/upgrade runbook with rollback procedures — no version update documentation exists → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
+- [ ] Add encryption key management section to operator docs — 4 keys undocumented; loss = permanent data loss → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
+- [ ] Document CSP_ADDITIONAL_HOSTS in `.env.production.example` — undocumented env var for CDN config → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
+- [ ] Add Watchtower setup instructions for homelab auto-deploy — manual docker pull after every release → .tmp/2026-03-10-delivery-and-deployment/round-3/04-delivery-pipeline.md | P3-idea | agent:consensus
+- [ ] Document semver release policy and tag conventions — no release process exists → .tmp/2026-03-10-delivery-and-deployment/round-3/04-delivery-pipeline.md | P3-idea | agent:consensus
+- [ ] Document migration backward-compatibility strategy — no rollback guidance for operators → .tmp/2026-03-10-delivery-and-deployment/round-3/04-delivery-pipeline.md | P3-idea | agent:consensus
 
 ## Decisions needed
 <!-- Need human judgment, not implementation -->
@@ -186,6 +239,10 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Decide: add "thinking of you" one-tap message? — RESOLVED: no; user decision: that's just a poke/like → .tmp/2026-03-09-mlp-ux/consensus.md | agent:consensus
 - [x] Decide: reduce refresh token TTL from 30 to 7 days? — DEFERRED to L2: 30 days correct for dogfood; 7-day TTL adds auth friction with no security gain (revocation is device-level, not TTL-level) → .tmp/2026-03-10-ideation/09-rate-limiting-nat.md | agent:consensus
 - [x] Decide: deployment strategy for L1 dogfood — RESOLVED: homelab + Docker Compose + Cloudflare Tunnel; dogfoods operator self-hosting experience; captures friction for future documentation | agent:consensus
+- [x] Decide: remove `cache: disabled: true` entirely from prod.exs, not decouple rate limiting — RESOLVED: `Famichat.Cache` is only backing auth rate limiting, so preserving the dead flag adds coupling without user value → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | agent:consensus
+- [ ] Decide: which reverse proxy to recommend for non-Cloudflare self-hosters? (Caddy, Nginx, Traefik) — operators without Cloudflare need TLS termination guidance → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | agent:consensus
+- [ ] Decide: release cadence — ad-hoc for dogfood, sprint-aligned for L2+? — determines Watchtower polling and operator expectations → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | agent:consensus
+- [ ] Decide: should `./run setup` prompt for optional customizations or keep minimal? — more prompts = flexibility but slower setup → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | agent:consensus
 
 ## Cut / Won't do
 <!-- Explicitly rejected — reason noted inline on each item -->

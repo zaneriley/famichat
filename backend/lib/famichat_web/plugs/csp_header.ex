@@ -55,7 +55,8 @@ defmodule FamichatWeb.Plugs.CSPHeader do
 
   @spec get_csp_config(Plug.Conn.t()) :: csp_config()
   defp get_csp_config(conn) do
-    endpoint_url = Application.get_env(:famichat, FamichatWeb.Endpoint)[:url] || []
+    endpoint_url =
+      Application.get_env(:famichat, FamichatWeb.Endpoint)[:url] || []
 
     %{
       scheme: endpoint_url[:scheme] || @default_scheme,
@@ -71,9 +72,14 @@ defmodule FamichatWeb.Plugs.CSPHeader do
       Application.get_env(:famichat, FamichatWeb.Endpoint)[:url][:host]
   end
 
+  # Dev-only CSP relaxations: localhost hosts (here + get_all_hosts/1) and
+  # bare ws:/wss: protocols (build_csp/1). All three gates must stay in sync.
   @spec parse_additional_hosts() :: list(String.t())
   defp parse_additional_hosts do
-    (System.get_env("CSP_ADDITIONAL_HOSTS", "") <> ",localhost,0.0.0.0")
+    base = System.get_env("CSP_ADDITIONAL_HOSTS", "")
+    extra = if @env == :dev, do: base <> ",localhost,0.0.0.0", else: base
+
+    extra
     |> String.split(",", trim: true)
     |> Enum.map(&String.trim/1)
     |> Enum.uniq()
@@ -90,7 +96,7 @@ defmodule FamichatWeb.Plugs.CSPHeader do
       style_src: "'self' #{all_hosts} 'unsafe-inline'",
       img_src: "'self' #{all_hosts} data:",
       font_src: "'self' #{all_hosts} data:",
-      connect_src: "'self' #{all_hosts} #{ws_url} ws: wss:",
+      connect_src: "'self' #{all_hosts} #{ws_url}" <> if(@env == :dev, do: " ws: wss:", else: ""),
       frame_src: @env_module.frame_src(),
       object_src: "'none'",
       base_uri: "'self'",
@@ -118,7 +124,9 @@ defmodule FamichatWeb.Plugs.CSPHeader do
   defp get_all_hosts(config) do
     port = if config.port in ["80", "443"], do: "", else: ":#{config.port}"
 
-    [config.host, "localhost", "0.0.0.0" | config.additional_hosts]
+    dev_hosts = if @env == :dev, do: ["localhost", "0.0.0.0"], else: []
+
+    [config.host | dev_hosts ++ config.additional_hosts]
     |> Enum.map_join(" ", &"#{config.scheme}://#{&1}#{port}")
   end
 end

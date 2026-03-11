@@ -11,7 +11,8 @@ defmodule FamichatWeb.Endpoint do
     # It is completely safe to hard code and use these salt values.
     signing_salt: "XCu9aYUeZ",
     encryption_salt: "jIOxYIG2l",
-    same_site: "Lax"
+    same_site: "Lax",
+    secure: true
   ]
 
   socket "/socket", FamichatWeb.UserSocket,
@@ -37,11 +38,11 @@ defmodule FamichatWeb.Endpoint do
     plug Phoenix.LiveReloader
     plug Phoenix.CodeReloader
     plug Phoenix.Ecto.CheckRepoStatus, otp_app: :famichat
-  end
 
-  plug Phoenix.LiveDashboard.RequestLogger,
-    param_key: "request_logger",
-    cookie_key: "request_logger"
+    plug Phoenix.LiveDashboard.RequestLogger,
+      param_key: "request_logger",
+      cookie_key: "request_logger"
+  end
 
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
@@ -54,10 +55,6 @@ defmodule FamichatWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
-
-  plug CORSPlug,
-    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
-    methods: ["GET", "POST"]
 
   plug :strip_server_header
 
