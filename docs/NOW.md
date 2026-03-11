@@ -1,6 +1,6 @@
 # Famichat NOW
 
-**Last updated:** 2026-03-10
+**Last updated:** 2026-03-11
 
 Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [ADR 012](decisions/012-spa-wasm-client-architecture.md).
 
@@ -12,8 +12,14 @@ All P0 dogfood blockers closed. P1 confidence items resolved (1b02ab3). Deployin
 
 ---
 
+## What just happened (2026-03-11)
+
+- **Production security defaults hardened** (3eebfb5) — 5 P1 security config items closed: unconditional `secure: true` on session cookie (W3C Secure Contexts means localhost still works), LiveDashboard RequestLogger moved inside `code_reloading?` guard, CSP localhost hosts and bare `ws:/wss:` gated behind compile-time `@env == :dev`, WebSocket `check_origin` auto-derived from existing URL_HOST/URL_SCHEME/URL_PORT. Zero new env vars for operators. Operator-facing documentation started at `docs/self-hosting/security-defaults.md`.
+
 ## What just happened (2026-03-10)
 
+- **Delivery & deployment research complete** — 3 rounds, 13 agents. All P0 deploy blockers resolved in round 1. Round 2 identified 7 P1 DX gaps (compose/env hardening). Round 3 proposed `./run setup` interactive wizard, `./run check-config` validation, and `DEPLOYMENT_DOMAIN` config derivation. 10 new P1 items and 6 P2 items promoted to BACKLOG.md; 10 documentation/guidance items tracked as P3.
+- **Deploy hardening pass** — removed dead `pull_repository()` from entrypoint (container crash on boot), removed CORSPlug (hardcoded to localhost), stripped Playwright from Dockerfile assets stage (~300MB), removed `git` from prod Dockerfile stage, added web healthcheck to `docker-compose.production.yml`, corrected stale WebAuthn compile-time warnings in `.env.production.example` and NOW.md, removed dead content-repo env vars from both `.env` example files, removed `cors_plug` dep from mix.exs/mix.lock. One P0 deploy blocker remains: `cache: disabled: true` in prod.exs silently disables all rate limiting.
 - **7 P1 confidence items resolved** (1b02ab3) — TokenReaper (expired token cleanup every 30min), OrphanFamilyReaper (memberless family cleanup every 30min, 1hr buffer, guards for missing conversations FK), rate limit on `reissue_passkey_token/1` (5/5min per user_id, closes last unprotected token-issuing function), passkey error count escalation in LoginLive (3+ failures shows device hint + social recovery guidance), "no read receipts" contextual note in empty conversation state, browser tab title set to family name in no-conversation branch. Japanese translations for all new strings. P1-4 (passkey error feedback) confirmed already working — full hook→LiveView→template error chain wired in auth security fixes. Refresh token TTL decision deferred to L2 (30 days correct for dogfood).
 - **Deployment strategy decided** — homelab + Cloudflare Tunnel. Dogfoods the self-hosted operator experience. Captures friction for future operator documentation.
 - **All P0 dogfood blockers closed** (dfd6091) — Final 5 P0s implemented + 3-reviewer code review gate: warm empty-state copy (role-differentiated admin vs invitee), consumed-invite recovery (clear copy, conditional sign-in link hidden), locale persistence (on_mount DB load, SessionRefresh restore, RootRedirectController DB check), .env.production.example (ungitignored, WebAuthn moved to runtime.exs with prod raise guards), Japanese translations (22 errors.po entries, 7 fuzzy flags removed, orphaned 404.po deleted). Invite TTL aligned to SPEC: code changed from 7 days to 72 hours, all EN+JA copy updated. P1/P2 hardening: POSTGRES_PASSWORD prod guard, GitHub webhook plug removed (dead code), dead content_* config removed, CSP reads from Application.get_env, CSP port consistency fix, locale CHECK constraint migration, abandoned invite telemetry. Code subtraction: 3 unused functions deleted from live_helpers.ex, unreachable branch deleted from invite_live.ex, rescue added to root redirect locale resolution.
@@ -128,10 +134,15 @@ Deploy to homelab via Docker Compose + Cloudflare Tunnel. This IS the product ex
 6. Configure Cloudflare Tunnel to point to `localhost:8001`
 7. Hit the public URL, complete `/setup` bootstrap
 
-**Critical gotcha**: WebAuthn vars are compile-time in `config.exs`. They must be set in the environment BEFORE `docker compose build` (the Dockerfile runs `mix release` during build). If the image was built with localhost defaults, passkeys will silently fail with origin mismatch.
+**Note**: WebAuthn vars (`WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`) are read at container startup via `runtime.exs`. A container restart is sufficient after changing domain configuration — no rebuild needed.
+
+**Deploy blockers (fix before first `docker compose up`):**
+- [x] Remove `pull_repository()` from `docker-entrypoint-web` — calls nonexistent function; container crashes on boot
+- [x] Remove `config :famichat, :cache, disabled: true` from `prod.exs` — disables all rate limits in production
+- [x] Fix or remove CORSPlug — hardcoded to `localhost:3000`; blocks requests from production domain
 
 ### 2. Post-deploy browser walkthrough
-Run the full CUJ against the deployed instance: operator bootstrap → invite generation → spouse onboarding → message exchange. Catch deploy-specific issues: env var misconfiguration, WebSocket upgrade behind Cloudflare, passkey RP ID matching, CORS.
+Run the full CUJ against the deployed instance: operator bootstrap → invite generation → spouse onboarding → message exchange. Catch deploy-specific issues: env var misconfiguration, WebSocket upgrade behind Cloudflare, passkey RP ID matching.
 
 ### 3. Capture operator experience for documentation
 Every friction point we hit during deployment becomes documentation for future self-hosters. Track:
@@ -145,7 +156,7 @@ Every friction point we hit during deployment becomes documentation for future s
 - **What broke** — anything that works in dev but fails in prod (compile-time vs runtime config, missing assets, NIF loading, etc.)
 
 **What this produces**:
-- A `docs/self-hosting.md` guide written from real experience, not hypothetical
+- A `docs/self-hosting/` guide written from real experience, not hypothetical
 - Fixes to `.env.production.example` for anything that was unclear
 - Fixes to `runtime.exs` error messages for anything that was unhelpful
 - Confidence that the Docker Compose path actually works end-to-end
@@ -210,6 +221,12 @@ Use the app daily for real couple messaging. Track:
 - ✓ `Mix.env()` replaced with `Application.get_env(:famichat, :environment)` in application.ex
 - ✓ `seenMessageIds` cleared on conversation switch in JS hook (review fix: dedup cache leak)
 - ✓ `verify_otp` wired with `enrich_session/2` (review fix: OTP session parity)
+- ✓ Session cookie `secure: true` unconditional — W3C Secure Contexts means localhost still works
+- ✓ LiveDashboard RequestLogger inside `code_reloading?` guard — structurally absent in prod
+- ✓ CSP localhost/0.0.0.0 hosts gated behind `@env == :dev` — prod CSP only allows configured host
+- ✓ CSP bare `ws:/wss:` protocols gated behind `@env == :dev` — prod connect-src is specific WSS URL only
+- ✓ WebSocket `check_origin` auto-derived from URL config in prod — zero new env vars
+- ✓ `docs/self-hosting/security-defaults.md` — operator-facing security evidence (decoupled format)
 - ✓ `FamilyContext.resolve` catch-all with Logger.warning (review fix: silent 500 prevention)
 - ✓ Device revoke error messages wrapped in `gettext()` (review fix: i18n compliance)
 - ✓ Warm empty-state copy — role-differentiated (admin anticipatory, invitee action-prompting with partner name)

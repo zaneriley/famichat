@@ -1,6 +1,6 @@
 # Famichat Backlog
 
-**Last updated:** 2026-03-10
+**Last updated:** 2026-03-11
 
 Single prioritized index of every known issue, gap, debt item, and planned work. If it is not in this file, it is not tracked. Agent research, `.tmp/` files, handoff docs — those are source material. Findings get promoted to a one-liner here or they rot.
 
@@ -214,7 +214,7 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 
 ## Someday/maybe (P3)
 <!-- Documentation and guidance items — infra will change; don't invest in docs until it stabilizes -->
-- [ ] Create unified self-hosting guide (`docs/self-hosting.md`) — deployment knowledge scattered across 4+ files → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
+- [x] Create self-hosting docs folder (`docs/self-hosting/`) — deployment knowledge scattered across 4+ files → docs/self-hosting/security-defaults.md | P3-idea | agent:consensus (a85c2bd)
 - [ ] Create backup/restore procedures document — encryption key loss is unrecoverable → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
 - [ ] Create Cloudflare Tunnel operational walkthrough — instructions end at "point to localhost:8001" → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
 - [ ] Create troubleshooting guide for common deployment failures — WebAuthn RP mismatch has no diagnostic docs → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P3-idea | agent:consensus
