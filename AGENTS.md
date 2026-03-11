@@ -80,6 +80,12 @@ These rules exist because agents repeatedly committed broken code that was never
 - Use "Sign in" not "Log in", "Set up" not "Create", "name" not "username".
 - No corporate speak. Warm and familial. No E2EE claims in user-facing copy (server is trust anchor at MLP).
 
+### Config and Branding Consistency
+
+- **Every env var read in `runtime.exs` must be documented in `.env.production.example`.** If you add a new `System.get_env("FOO")` to runtime.exs, add it to the example file with: what it does, whether it's required or optional, its default value, and the `openssl` command to generate it (if it's a secret).
+- **Branding values must stay in sync across 4 touchpoints.** If you change the app name or display name, update all of: `config/config.exs` (`:app_name`), `assets/static/site.webmanifest` (`name` + `short_name`), `.env.production.example` (`WEBAUTHN_RP_NAME`), and `lib/famichat_web/app_name.ex` (fallback string). The `app_name()` helper is the runtime source of truth — all templates should use it, never hardcode the brand name.
+- **After running `bin/rename-project`**, verify: `mix compile` succeeds, `./run docs:boundary-check` passes, and the batch missing-var check in `runtime.exs` still lists the correct env var prefixes.
+
 ---
 
 ## Canonical Docs

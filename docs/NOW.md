@@ -14,6 +14,7 @@ All P0 dogfood blockers closed. P1 confidence items resolved (1b02ab3). Deployin
 
 ## What just happened (2026-03-11)
 
+- **Config UX research complete** — 5-agent round found warm errors in `runtime.exs` are the only L1-critical config UX item. Setup wizard and check-config deferred to P2 (operator IS the developer at L1). 3 new P1 items added: SECRET_KEY_BASE length guard, WEBAUTHN_ORIGIN scheme warning, batch missing-var errors. Secret rotation docs tracked as P2.
 - **Production security defaults hardened** (3eebfb5) — 5 P1 security config items closed: unconditional `secure: true` on session cookie (W3C Secure Contexts means localhost still works), LiveDashboard RequestLogger moved inside `code_reloading?` guard, CSP localhost hosts and bare `ws:/wss:` gated behind compile-time `@env == :dev`, WebSocket `check_origin` auto-derived from existing URL_HOST/URL_SCHEME/URL_PORT. Zero new env vars for operators. Operator-facing documentation started at `docs/self-hosting/security-defaults.md`.
 
 ## What just happened (2026-03-10)

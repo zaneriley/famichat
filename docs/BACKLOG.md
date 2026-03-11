@@ -176,13 +176,17 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Simplify compose healthcheck to CMD array form — nested variable interpolation fails silently if PORT misconfigured → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
 - [x] Add Docker build validation step to CI (build without push) — broken Dockerfile merges undetected → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
 - [x] Document FAMICHAT_MLS_ENFORCEMENT in `.env.production.example` — operator cannot discover MLS enforcement toggle → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
-- [ ] Create `./run setup` interactive wizard that generates `.env.production` — operator must manually configure 15+ vars with no guidance → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
-- [ ] Create `./run check-config` pre-flight validation script — operators deploy with invalid config and get cryptic crashes → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
-- [ ] Add warm error messages to `runtime.exs` for all missing env vars — raw RuntimeError gives no diagnostic path → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
+- [x] Add warm error messages to `runtime.exs` for all missing env vars — raw RuntimeError gives no diagnostic path → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md, .tmp/2026-03-11-config-ux/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Add SECRET_KEY_BASE length guard (>= 64 chars) to runtime.exs — short key silently weakens session cookie signatures → .tmp/2026-03-11-config-ux/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Add WEBAUTHN_ORIGIN https:// scheme warning to runtime.exs — http:// origin causes opaque passkey failure with no server-side diagnostic → .tmp/2026-03-11-config-ux/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Batch missing-required-var errors into single raise in runtime.exs — operator restarts container 12 times fixing one var at a time → .tmp/2026-03-11-config-ux/round-1/consensus.md | P1-confidence | agent:consensus
 - [x] Fix empty POSTGRES_PASSWORD bypass in runtime.exs (`{:prod, ""}` guard) — operator with unset password gets running system with empty DB password → .tmp/2026-03-11-compose-and-env/round-1/consensus.md | P1-confidence | agent:consensus
 
 ## Known debt (P2)
 <!-- Tracked, not blocking, will matter at scale or for public launch -->
+- [ ] Create `./run config:generate` interactive wizard that generates `.env.production` — operator must manually configure 15+ vars with no guidance; deferred from P1: targets non-developer operator who doesn't exist at L1 → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md, .tmp/2026-03-11-config-ux/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Create `./run config:check` pre-flight validation script — overlaps 70% with warm errors; deferred from P1 → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md, .tmp/2026-03-11-config-ux/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Add secret rotation reference to `.env.production.example` — operator who changes vault key loses all data with zero warning → .tmp/2026-03-11-config-ux/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Add visible focus indicators on interactive elements — WCAG 2.4.7 violation; outline-style is none → .tmp/2026-03-09-bug-bash/03-grandparent-user.md A11Y-05 | P2-debt | bug-bash
 - [ ] Remove or populate empty footer landmark — screen readers announce empty contentinfo region → .tmp/2026-03-09-bug-bash/01-community-admin.md BUG-05 | P2-debt | bug-bash
 - [ ] Add aria-live region for passkey button state changes — loading/error invisible to screen readers | P2-debt | bug-bash
@@ -244,7 +248,7 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Decide: remove `cache: disabled: true` entirely from prod.exs, not decouple rate limiting — RESOLVED: `Famichat.Cache` is only backing auth rate limiting, so preserving the dead flag adds coupling without user value → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | agent:consensus
 - [ ] Decide: which reverse proxy to recommend for non-Cloudflare self-hosters? (Caddy, Nginx, Traefik) — operators without Cloudflare need TLS termination guidance → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | agent:consensus
 - [ ] Decide: release cadence — ad-hoc for dogfood, sprint-aligned for L2+? — determines Watchtower polling and operator expectations → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | agent:consensus
-- [ ] Decide: should `./run setup` prompt for optional customizations or keep minimal? — more prompts = flexibility but slower setup → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | agent:consensus
+- [x] Decide: should `./run setup` prompt for optional customizations or keep minimal? — RESOLVED: no new surface; warm errors in runtime.exs only for L1; wizard/check-config deferred to P2 → .tmp/2026-03-11-config-ux/round-1/consensus.md | agent:consensus
 
 ## Cut / Won't do
 <!-- Explicitly rejected — reason noted inline on each item -->

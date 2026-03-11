@@ -49,6 +49,8 @@ Each implementation agent MUST run these checks and fix any issues:
 3. If the phase touches auth or onboarding, verify naming against `docs/ia-lexicon.md`
 4. If the phase creates or modifies a LiveView, verify that all assign state survives WebSocket reconnect. State stored only in assigns is lost on reconnect — use session storage, URL params, or database-backed state for anything that must survive disconnection.
 5. Run relevant tests: `cd backend && mix test <paths to touched test files>`
+6. If the phase adds, removes, or renames any `System.get_env` / `System.fetch_env!` call in `runtime.exs`, verify the variable is documented in `.env.production.example` with its generation command, default value, and whether it's required or optional. Run `cd backend && ./run config:env-sync` if it exists.
+7. If the phase changes any branding-visible value (app name, display name, PWA manifest), verify consistency across: `config/config.exs` (`:app_name`), `assets/static/site.webmanifest`, `.env.production.example` (`WEBAUTHN_RP_NAME`), and `lib/famichat_web/app_name.ex`.
 
 **Agent type:** `general-purpose`
 
