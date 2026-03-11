@@ -166,19 +166,20 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [ ] Add NIF load verification step to Dockerfile after `mix release` — silent NIF failure crashes release on first MLS operation → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
 - [x] Add web healthcheck to `docker-compose.production.yml` — no restart if app crashes after postgres healthy → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
 - [x] Update stale WebAuthn compile-time warnings in `.env.production.example` — operator wastes time on non-issue during deploy → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
-- [ ] Change Docker Compose port default to `127.0.0.1` — forgotten env var exposes service on all interfaces → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
-- [ ] Add build args and `POSTGRES_DB` to production compose — fragile defaults cause silent failures → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
-- [ ] Add `restart: unless-stopped` to production compose services — services don't recover after homelab reboot → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
-- [ ] Document WebAuthn/URL variable relationships with decision tree in `.env.production.example` — passkeys silently fail if RP_ID doesn't match domain → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
-- [ ] Fix env_file reference to `.env.production` in compose file — first `docker compose up` fails with missing-file error → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
-- [ ] Replace misleading pg_dump comment with setup instructions in compose — operators think they must dump nonexistent database → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
-- [ ] Add POSTGRES_PASSWORD generation command to `.env.production.example` — no guidance; operator may use weak password → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
-- [ ] Simplify compose healthcheck to CMD array form — nested variable interpolation fails silently if PORT misconfigured → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [x] Change Docker Compose port default to `127.0.0.1` — forgotten env var exposes service on all interfaces → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Add build args and `POSTGRES_DB` to production compose — fragile defaults cause silent failures → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Add `restart: unless-stopped` to production compose services — services don't recover after homelab reboot → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:consensus
+- [x] Document WebAuthn/URL variable relationships with decision tree in `.env.production.example` — passkeys silently fail if RP_ID doesn't match domain → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [x] Fix env_file reference to `.env.production` in compose file — first `docker compose up` fails with missing-file error → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [x] Replace misleading pg_dump comment with setup instructions in compose — operators think they must dump nonexistent database → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [x] Add POSTGRES_PASSWORD generation command to `.env.production.example` — no guidance; operator may use weak password → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [x] Simplify compose healthcheck to CMD array form — nested variable interpolation fails silently if PORT misconfigured → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
 - [ ] Add Docker build validation step to CI (build without push) — broken Dockerfile merges undetected → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
-- [ ] Document FAMICHAT_MLS_ENFORCEMENT in `.env.production.example` — operator cannot discover MLS enforcement toggle → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
+- [x] Document FAMICHAT_MLS_ENFORCEMENT in `.env.production.example` — operator cannot discover MLS enforcement toggle → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P1-confidence | agent:consensus
 - [ ] Create `./run setup` interactive wizard that generates `.env.production` — operator must manually configure 15+ vars with no guidance → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
 - [ ] Create `./run check-config` pre-flight validation script — operators deploy with invalid config and get cryptic crashes → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
 - [ ] Add warm error messages to `runtime.exs` for all missing env vars — raw RuntimeError gives no diagnostic path → .tmp/2026-03-10-delivery-and-deployment/round-3/05-config-ux.md | P1-confidence | agent:consensus
+- [x] Fix empty POSTGRES_PASSWORD bypass in runtime.exs (`{:prod, ""}` guard) — operator with unset password gets running system with empty DB password → .tmp/2026-03-11-compose-and-env/round-1/consensus.md | P1-confidence | agent:consensus
 
 ## Known debt (P2)
 <!-- Tracked, not blocking, will matter at scale or for public launch -->
@@ -205,12 +206,13 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [ ] Establish green CI baseline with `--exclude` tags for known-broken tests — red CI masks new regressions → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Add Docker image smoke test to CI pipeline — broken Dockerfile only discovered after release → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Update README.md with "For Self-Hosters" link to deployment guide — no path from README to deploy → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
-- [ ] Remove unused COMPOSE_PROFILES from `.env.production.example` — set but unused; confuses operators → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
+- [x] Remove unused COMPOSE_PROFILES from `.env.production.example` — set but unused; confuses operators → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Remove unused CONTENT_REPO_URL and GITHUB_WEBHOOK_SECRET from dev `.env` — cargo-culted from prior project → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Add Docker image name to compose file — orphaned images accumulate after rebuilds → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Add resource limits to docker-compose.production.yml — Erlang VM can consume all homelab RAM → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Add logging configuration to docker-compose.production.yml — no log rotation; logs fill disk → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Add CSP report-uri logging endpoint for operator-visible violation diagnostics — CSP violations invisible without DevTools; operators can't diagnose from docker logs → .tmp/2026-03-11-security-config/round-1/consensus.md | P2-debt | agent:consensus
+- [x] Remove dead CSP_SCHEME/CSP_HOST/CSP_PORT from `.env.production.example` — unused since CSP derives from endpoint config; creates false confidence → .tmp/2026-03-11-compose-and-env/round-1/consensus.md | P2-debt | agent:consensus
 
 ## Someday/maybe (P3)
 <!-- Documentation and guidance items — infra will change; don't invest in docs until it stabilizes -->

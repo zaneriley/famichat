@@ -49,6 +49,9 @@ db_password =
     {:prod, nil} ->
       raise "environment variable POSTGRES_PASSWORD is required in production"
 
+    {:prod, ""} ->
+      raise "POSTGRES_PASSWORD is set but empty — provide a real password in production"
+
     {:prod, "password"} ->
       raise "POSTGRES_PASSWORD must not be the default value \"password\" in production"
 
