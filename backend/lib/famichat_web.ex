@@ -64,6 +64,7 @@ defmodule FamichatWeb do
 
       import Plug.Conn
       import FamichatWeb.Gettext
+      import FamichatWeb.AppName
 
       unquote(verified_routes())
     end
@@ -108,6 +109,7 @@ defmodule FamichatWeb do
       import FamichatWeb.CoreComponents
       import FamichatWeb.Gettext
       import FamichatWeb.Components.Typography
+      import FamichatWeb.AppName
 
       # Shortcut for generating JS commands
       alias Phoenix.LiveView.JS

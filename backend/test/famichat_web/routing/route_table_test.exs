@@ -14,7 +14,10 @@ defmodule FamichatWeb.RouteTableTest do
   # Prefixes that must never be swallowed by /:locale parameter routes.
   @protected_prefixes ~w(api admin up)
 
-  @supported_locales Application.compile_env(:famichat, :supported_locales, ["en", "ja"])
+  @supported_locales Application.compile_env(:famichat, :supported_locales, [
+                       "en",
+                       "ja"
+                     ])
 
   test "no locale-scoped route can shadow a protected prefix" do
     routes = FamichatWeb.Router.__routes__()
@@ -44,9 +47,9 @@ defmodule FamichatWeb.RouteTableTest do
           real_index = Enum.find_index(routes, &(&1 == real_route))
 
           assert real_index < locale_route_index,
-            "Route #{real_route.path} (#{real_route.verb}) at index #{real_index} must be declared " <>
-              "before locale route #{route.path} at index #{locale_route_index} to avoid shadowing. " <>
-              "Move the locale scope below all /#{prefix} routes in router.ex."
+                 "Route #{real_route.path} (#{real_route.verb}) at index #{real_index} must be declared " <>
+                   "before locale route #{route.path} at index #{locale_route_index} to avoid shadowing. " <>
+                   "Move the locale scope below all /#{prefix} routes in router.ex."
         end
       end
     end
@@ -55,7 +58,7 @@ defmodule FamichatWeb.RouteTableTest do
   test "protected prefixes are not valid locale values" do
     for prefix <- @protected_prefixes do
       refute prefix in @supported_locales,
-        "#{prefix} must not be in :supported_locales -- it would collide with /#{prefix} routes"
+             "#{prefix} must not be in :supported_locales -- it would collide with /#{prefix} routes"
     end
   end
 
@@ -82,8 +85,8 @@ defmodule FamichatWeb.RouteTableTest do
         |> Enum.min()
 
       assert last_v1_index < first_catchall_index,
-        "API catch-all route must be declared after all /api/v1 routes. " <>
-          "Last /api/v1 route at index #{last_v1_index}, but catch-all at #{first_catchall_index}."
+             "API catch-all route must be declared after all /api/v1 routes. " <>
+               "Last /api/v1 route at index #{last_v1_index}, but catch-all at #{first_catchall_index}."
     end
   end
 

@@ -11,13 +11,13 @@ defmodule Famichat.Repo.Migrations.DropOldPaginationIndex do
 
   def up do
     drop_if_exists index(:messages, [:conversation_id, :inserted_at, :id],
-      name: :messages_conversation_id_inserted_at_id
-    )
+                     name: :messages_conversation_id_inserted_at_id
+                   )
   end
 
   def down do
     create index(:messages, [:conversation_id, :inserted_at, :id],
-      name: :messages_conversation_id_inserted_at_id
-    )
+             name: :messages_conversation_id_inserted_at_id
+           )
   end
 end

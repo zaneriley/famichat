@@ -309,7 +309,10 @@ defmodule FamichatWeb.AuthLive.InviteLive do
       )
 
   defp error_message(:already_completed),
-    do: gettext("This invite has already been used to create an account. Try signing in instead.")
+    do:
+      gettext(
+        "This invite has already been used to create an account. Try signing in instead."
+      )
 
   defp error_message(:invalid), do: gettext("This invite link is not valid.")
 

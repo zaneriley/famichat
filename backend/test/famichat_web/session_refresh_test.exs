@@ -107,7 +107,9 @@ defmodule FamichatWeb.SessionRefreshTest do
       })
 
     invalid_format_conn = get(build_conn(), "/en/invites/not.valid")
-    invalid_length_conn = get(build_conn(), "/en/invites/#{String.duplicate("a", 257)}")
+
+    invalid_length_conn =
+      get(build_conn(), "/en/invites/#{String.duplicate("a", 257)}")
 
     assert invalid_format_conn.status == 404
     assert invalid_length_conn.status == 404

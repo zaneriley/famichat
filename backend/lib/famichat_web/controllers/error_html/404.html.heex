@@ -7,14 +7,13 @@
       <%= gettext("Page not found") %>
     </h1>
     <p>
-      <%= gettext("The page you're looking for doesn't exist or may have moved.") %>
+      <%= gettext(
+        "The page you're looking for doesn't exist or may have moved."
+      ) %>
     </p>
     <p class="">
-      <a
-        href={"/#{@conn.assigns[:user_locale] || "en"}/"}
-        class="pb-6 block"
-      >
-        <%= gettext("Return to Famichat") %>
+      <a href={"/#{@conn.assigns[:user_locale] || "en"}/"} class="pb-6 block">
+        <%= gettext("Return to %{app_name}", app_name: app_name()) %>
       </a>
     </p>
 

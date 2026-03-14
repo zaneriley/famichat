@@ -24,7 +24,8 @@ defmodule FamichatWeb.RootRedirectController do
   end
 
   defp resolve_locale_from_token(conn) do
-    with token when is_binary(token) <- Plug.Conn.get_session(conn, SessionKeys.access_token()),
+    with token when is_binary(token) <-
+           Plug.Conn.get_session(conn, SessionKeys.access_token()),
          {:ok, %{user_id: user_id}} <- Sessions.verify_access_token(token),
          locale when is_binary(locale) and locale != "" <-
            Famichat.Repo.one(

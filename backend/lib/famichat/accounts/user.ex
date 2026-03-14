@@ -8,7 +8,11 @@ defmodule Famichat.Accounts.User do
   import Ecto.Changeset
   import Famichat.Schema.Validations
 
-  @supported_locales Application.compile_env(:famichat, :supported_locales, ~w(en ja))
+  @supported_locales Application.compile_env(
+                       :famichat,
+                       :supported_locales,
+                       ~w(en ja)
+                     )
 
   alias Famichat.Accounts.HouseholdMembership
   alias Famichat.Accounts.Passkey

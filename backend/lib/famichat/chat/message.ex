@@ -80,7 +80,11 @@ defmodule Famichat.Chat.Message do
       :timestamp
     ])
     |> validate_required([:sender_id, :conversation_id, :message_type, :status])
-    |> validate_string_field(:content, required: false, max: @max_content_bytes, count: :bytes)
+    |> validate_string_field(:content,
+      required: false,
+      max: @max_content_bytes,
+      count: :bytes
+    )
     |> validate_by_type()
   end
 
@@ -91,9 +95,14 @@ defmodule Famichat.Chat.Message do
 
   defp validate_by_type(changeset) do
     case get_field(changeset, :message_type) do
-      :text -> validate_required(changeset, [:content])
-      type when type in @media_types -> validate_required(changeset, [:media_url])
-      _ -> changeset
+      :text ->
+        validate_required(changeset, [:content])
+
+      type when type in @media_types ->
+        validate_required(changeset, [:media_url])
+
+      _ ->
+        changeset
     end
   end
 end

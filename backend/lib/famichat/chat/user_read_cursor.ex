@@ -25,7 +25,8 @@ defmodule Famichat.Chat.UserReadCursor do
     field :updated_at, :utc_datetime_usec
   end
 
-  @spec changeset(%__MODULE__{} | Ecto.Changeset.t(), map()) :: Ecto.Changeset.t()
+  @spec changeset(%__MODULE__{} | Ecto.Changeset.t(), map()) ::
+          Ecto.Changeset.t()
   def changeset(cursor, attrs) do
     cursor
     |> cast(attrs, [:user_id, :conversation_id, :last_acked_seq, :updated_at])

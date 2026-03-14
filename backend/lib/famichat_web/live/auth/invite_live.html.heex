@@ -37,7 +37,8 @@
         </.typography>
         <.typography tag="p" size="2xs" color="deemphasized">
           <%= gettext(
-            "Famichat is invite-only. There's no public sign-up — that's the point."
+            "%{app_name} is invite-only. There's no public sign-up — that's the point.",
+            app_name: app_name()
           ) %>
         </.typography>
       </div>
@@ -181,7 +182,8 @@
             <% end %>
             <.typography tag="p" size="2xs" color="deemphasized">
               <%= gettext(
-                "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
+                "Your passkey never leaves your device. %{app_name} never sees your fingerprint or face.",
+                app_name: app_name()
               ) %>
             </.typography>
           </div>

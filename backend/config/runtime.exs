@@ -285,6 +285,22 @@ case System.get_env("FAMICHAT_MLS_ENFORCEMENT") do
     config :famichat, mls_enforcement: enabled?
 end
 
+# ── Public registration ──────────────────────────────────────────
+# Controls whether strangers can create new families via /families/new.
+# Default: true in dev/test, false in prod. Set REGISTRATION_OPEN=true
+# to allow public sign-ups.
+
+registration_open =
+  case System.get_env("REGISTRATION_OPEN") do
+    nil ->
+      config_env() != :prod
+
+    value ->
+      value |> String.trim() |> String.downcase() |> then(&(&1 in ["1", "true", "yes", "on"]))
+  end
+
+config :famichat, registration_open: registration_open
+
 # ── Vault encryption key ───────────────────────────────────────────
 
 vault_key_base64 =

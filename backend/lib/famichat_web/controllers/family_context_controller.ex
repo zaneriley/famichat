@@ -27,7 +27,10 @@ defmodule FamichatWeb.FamilyContextController do
 
       {:error, :not_a_member} ->
         conn
-        |> put_flash(:error, gettext("That family space is no longer available to you."))
+        |> put_flash(
+          :error,
+          gettext("That family space is no longer available to you.")
+        )
         |> redirect(to: home_path(conn))
 
       {:error, :no_family} ->

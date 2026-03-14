@@ -6,10 +6,12 @@
 import Config
 
 config :famichat,
+  app_name: "Famichat",
   ecto_repos: [Famichat.Repo],
   generators: [timestamp_type: :utc_datetime],
   mls_adapter: Famichat.Crypto.MLS.Adapter.Nif,
   mls_enforcement: false,
+  registration_open: true,
   default_locale: "en",
   default_theme: "dark",
   supported_locales: ["en", "ja"],
@@ -38,22 +40,6 @@ config :famichat, FamichatWeb.Endpoint,
 
 config :famichat, Famichat.Repo, adapter: Ecto.Adapters.Postgres
 
-config :famichat, Famichat.Content.Utils.MetadataCalculator,
-  reading_configs: %{
-    "en" => %{
-      counting_method: :words,
-      native_reading_speed: 238.0,
-      non_native_reading_speed: 80.0,
-      code_reading_speed: 50.0
-    },
-    "ja" => %{
-      counting_method: :characters,
-      native_reading_speed: 600.0,
-      non_native_reading_speed: 600.0,
-      code_reading_speed: 50.0
-    }
-  }
-
 config :logger, :console,
   format: {LogfmtEx, :format},
   metadata: :all
@@ -67,6 +53,3 @@ config :famichat, Famichat.Mailer, adapter: Swoosh.Adapters.Local
 config :swoosh, :api_client, false
 
 import_config "#{Mix.env()}.exs"
-
-config :github_webhook,
-  json_library: Jason

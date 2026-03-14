@@ -1,10 +1,10 @@
 <div class="flex min-h-screen flex-col items-center justify-center p-2xl">
   <div class="flex w-full max-w-sm flex-col gap-2xl">
-    <.typography tag="span" size="1xl" font="cardinal">Famichat</.typography>
+    <.typography tag="span" size="1xl" font="cardinal"><%= app_name() %></.typography>
 
     <div class="flex flex-col gap-md">
       <.typography tag="h1" size="2xl" color="main">
-        <%= gettext("Sign in to Famichat") %>
+        <%= gettext("Sign in to %{app_name}", app_name: app_name()) %>
       </.typography>
       <.typography tag="p" size="md" color="deemphasized">
         <%= gettext(
@@ -45,7 +45,8 @@
           <%= if @error_count >= 3 do %>
             <.typography tag="p" size="2xs" color="deemphasized">
               <%= gettext(
-                "If this keeps happening, your passkey might not be on this device. Try a different device, or ask the person who set up Famichat to help you get back in."
+                "If this keeps happening, your passkey might not be on this device. Try a different device, or ask the person who set up %{app_name} to help you get back in.",
+                app_name: app_name()
               ) %>
             </.typography>
           <% end %>
@@ -54,18 +55,21 @@
 
       <.typography tag="p" size="1xs" color="deemphasized">
         <%= gettext(
-          "Getting started? Ask the person who told you about Famichat to send you an invite link."
+          "Getting started? Ask the person who told you about %{app_name} to send you an invite link.",
+          app_name: app_name()
         ) %>
       </.typography>
 
-      <.typography tag="p" size="2xs" color="deemphasized">
-        <a
-          href={locale_path(assigns, "/families/new")}
-          class="hover:underline hover:text-main transition-colors"
-        >
-          <%= gettext("Want to set up your own family space?") %>
-        </a>
-      </.typography>
+      <%= if Application.get_env(:famichat, :registration_open, false) do %>
+        <.typography tag="p" size="2xs" color="deemphasized">
+          <a
+            href={locale_path(assigns, "/families/new")}
+            class="hover:underline hover:text-main transition-colors"
+          >
+            <%= gettext("Want to set up your own family space?") %>
+          </a>
+        </.typography>
+      <% end %>
     </div>
   </div>
 </div>

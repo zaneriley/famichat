@@ -143,7 +143,7 @@ msgstr ""
 
 #: lib/famichat_web/live/admin/setup_live.html.heex:199
 #, elixir-autogen, elixir-format
-msgid "Each family member needs their own invite link — Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
+msgid "Each family member needs their own invite link — %{app_name} is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
 msgstr ""
 
 #: lib/famichat_web/live/live_helpers.ex:39
@@ -153,12 +153,12 @@ msgstr ""
 
 #: lib/famichat_web/components/navigation.ex:46
 #, elixir-autogen, elixir-format
-msgid "Famichat home"
+msgid "%{app_name} home"
 msgstr ""
 
 #: lib/famichat_web/live/auth/invite_live.html.heex:39
 #, elixir-autogen, elixir-format
-msgid "Famichat is invite-only. There's no public sign-up — that's the point."
+msgid "%{app_name} is invite-only. There's no public sign-up — that's the point."
 msgstr ""
 
 #: lib/famichat_web/live/admin/setup_live.html.heex:323
@@ -179,7 +179,7 @@ msgstr ""
 #: lib/famichat_web/live/auth/login_live.html.heex:56
 #: lib/famichat_web/live/home_live.html.heex:30
 #, elixir-autogen, elixir-format
-msgid "Getting started? Ask the person who told you about Famichat to send you an invite link."
+msgid "Getting started? Ask the person who told you about %{app_name} to send you an invite link."
 msgstr ""
 
 #: lib/famichat_web/live/admin/setup_live.html.heex:11
@@ -273,7 +273,7 @@ msgstr ""
 
 #: lib/famichat_web/live/home_live.html.heex:17
 #, elixir-autogen, elixir-format
-msgid "Open Famichat"
+msgid "Open %{app_name}"
 msgstr ""
 
 #: lib/famichat_web/live/auth/invite_live.ex:323
@@ -341,7 +341,7 @@ msgstr ""
 
 #: lib/famichat_web/live/auth/login_live.html.heex:7
 #, elixir-autogen, elixir-format
-msgid "Sign in to Famichat"
+msgid "Sign in to %{app_name}"
 msgstr ""
 
 #: lib/famichat_web/live/auth/login_live.html.heex:35
@@ -578,7 +578,7 @@ msgstr ""
 #: lib/famichat_web/live/auth/family_setup_live.html.heex:134
 #: lib/famichat_web/live/auth/invite_live.html.heex:183
 #, elixir-autogen, elixir-format
-msgid "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
+msgid "Your passkey never leaves your device. %{app_name} never sees your fingerprint or face."
 msgstr ""
 
 #: lib/famichat_web/live/home_live.html.heex:10
@@ -1013,7 +1013,7 @@ msgstr ""
 #: lib/famichat_web/controllers/error_html/404.html.heex:17
 #: lib/famichat_web/controllers/error_html/410.html.heex:20
 #, elixir-autogen, elixir-format
-msgid "Return to Famichat"
+msgid "Return to %{app_name}"
 msgstr ""
 
 #: lib/famichat_web/live/home_live.html.heex:183
@@ -1113,7 +1113,7 @@ msgstr ""
 
 #: lib/famichat_web/live/auth/login_live.html.heex:47
 #, elixir-autogen, elixir-format
-msgid "If this keeps happening, your passkey might not be on this device. Try a different device, or ask the person who set up Famichat to help you get back in."
+msgid "If this keeps happening, your passkey might not be on this device. Try a different device, or ask the person who set up %{app_name} to help you get back in."
 msgstr ""
 
 #: lib/famichat_web/live/home_live.html.heex:482

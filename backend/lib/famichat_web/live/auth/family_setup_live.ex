@@ -10,7 +10,7 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
     1. :check — SSR-only spinner
     2. :invalid — expired/used/missing token
     3. :register — username form; calls complete_family_setup/2
-    4. :passkey — WebAuthn ceremony (PasskeyRegister hook)
+    4. :passkey — WebAuthn ceremony (PasskeyAdminSetup hook)
     5. :success — 1.5s then redirect to / (session cookie is set by the
        passkey_register fetch() call; redirect picks it up)
   """
@@ -167,7 +167,11 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
   end
 
   @impl true
-  def handle_event("register-error", %{"code" => code, "message" => msg}, socket)
+  def handle_event(
+        "register-error",
+        %{"code" => code, "message" => msg},
+        socket
+      )
       when code in @recoverable_codes do
     Logger.info("[FamilySetupLive] Recoverable passkey error (#{code}): #{msg}")
 
@@ -193,11 +197,19 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
       {:noreply, assign(socket, :step, :success)}
     else
       {:noreply,
-       assign(socket, :error, {:fatal, gettext("A passkey conflict occurred. Please reload.")})}
+       assign(
+         socket,
+         :error,
+         {:fatal, gettext("A passkey conflict occurred. Please reload.")}
+       )}
     end
   end
 
-  def handle_event("register-error", %{"code" => _code, "message" => msg}, socket) do
+  def handle_event(
+        "register-error",
+        %{"code" => _code, "message" => msg},
+        socket
+      ) do
     {:noreply, assign(socket, :error, {:fatal, msg})}
   end
 
@@ -217,7 +229,10 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
   end
 
   defp error_message(:expired),
-    do: gettext("This setup link has expired. Ask the person who sent it to generate a new one.")
+    do:
+      gettext(
+        "This setup link has expired. Ask the person who sent it to generate a new one."
+      )
 
   defp error_message(:used),
     do: gettext("This setup link has already been used.")

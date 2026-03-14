@@ -33,7 +33,9 @@ defmodule Famichat.Auth.PendingUserReaper do
   def handle_info(:sweep, state) do
     case PendingUserCleanup.run() do
       {:ok, count} when count > 0 ->
-        Logger.info("[PendingUserReaper] Cleaned up #{count} abandoned pending user(s)")
+        Logger.info(
+          "[PendingUserReaper] Cleaned up #{count} abandoned pending user(s)"
+        )
 
       _ ->
         :ok

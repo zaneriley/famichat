@@ -3,7 +3,6 @@ import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";
 import topbar from "topbar";
 
-import ThemeSwitcherHook from "./hooks/theme_switcher_hook";
 import MessageChannelHook from "./hooks/message_channel_hook";
 import PasskeyLoginHook from "./hooks/passkey_login_hook";
 import PasskeyRegisterHook from "./hooks/passkey_register_hook";
@@ -42,7 +41,6 @@ window.addEventListener("error", (event) => {
 
 // Define hooks before using them
 const Hooks = {
-  ThemeSwitcher: ThemeSwitcherHook,
   MessageChannel: MessageChannelHook,
   PasskeyLogin: PasskeyLoginHook,
   PasskeyRegister: PasskeyRegisterHook,

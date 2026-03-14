@@ -123,13 +123,13 @@ defmodule Famichat.Repo.Migrations.BackfillMessageSeqAndSummaries do
 
   defp restore_partial_unique_index do
     drop_if_exists index(:messages, [:conversation_id, :message_seq],
-      name: :messages_conversation_id_message_seq_index
-    )
+                     name: :messages_conversation_id_message_seq_index
+                   )
 
     create unique_index(:messages, [:conversation_id, :message_seq],
-      name: :messages_conversation_id_message_seq_index,
-      where: "message_seq IS NOT NULL"
-    )
+             name: :messages_conversation_id_message_seq_index,
+             where: "message_seq IS NOT NULL"
+           )
   end
 
   defp clear_backfilled_data do

@@ -116,10 +116,14 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
         {:noreply, assign(socket, :error, :family_name_too_long)}
 
       {:error, :not_community_admin} ->
-        {:noreply, assign(socket, step: :unauthorized, error: :not_community_admin)}
+        {:noreply,
+         assign(socket, step: :unauthorized, error: :not_community_admin)}
 
       {:error, reason} ->
-        Logger.warning("[CommunityAdminLive] create_family error: #{inspect(reason)}")
+        Logger.warning(
+          "[CommunityAdminLive] create_family error: #{inspect(reason)}"
+        )
+
         {:noreply, assign(socket, :error, :unexpected)}
     end
   end
@@ -201,7 +205,10 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
     do: gettext("Family name must be 100 characters or fewer.")
 
   defp error_message(:not_community_admin),
-    do: gettext("You need to be an admin of at least one family space to access this page.")
+    do:
+      gettext(
+        "You need to be an admin of at least one family space to access this page."
+      )
 
   defp error_message(:not_authenticated),
     do: gettext("Please sign in to access this page.")

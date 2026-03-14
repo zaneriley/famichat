@@ -1,143 +1,194 @@
 #!/usr/bin/env bash
 
-set -eo pipefail
+set -euo pipefail
 
-APP_NAME="${1}"
-MODULE_NAME="${2}"
+CURRENT_APP_NAME="famichat"
+CURRENT_MODULE_NAME="Famichat"
+CURRENT_APP_NAME_UPPER="${CURRENT_APP_NAME^^}"
 
-FIND_APP_NAME="portfolio"
-FIND_MODULE_NAME="Portfolio"
-FIND_FRAMEWORK="phoenix"
+DRY_RUN=0
+ASSUME_YES=0
 
-if [ -z "${APP_NAME}" ] || [ -z "${MODULE_NAME}" ]; then
-    echo "You must supply both an app and module name, example: ${0} myapp MyApp"
-    exit 1
-fi
+usage() {
+  cat <<'EOF'
+Usage:
+  backend/bin/rename-project [--dry-run] [--yes] <new_app_name> <NewModuleName>
 
-if [ "${APP_NAME}" = "${FIND_APP_NAME}" ]; then
-    echo "Your new app name must be different than the current app name"
-    exit 1
-fi
+Examples:
+  backend/bin/rename-project familychat Familychat
+  backend/bin/rename-project --dry-run kinchat Kinchat
 
-cat << EOF
-When renaming your project you'll need to re-create a new database.
+What it does:
+  - Renames paths containing famichat / Famichat
+  - Rewrites text files across the repo from famichat / Famichat / FAMICHAT
+  - Leaves Docker volumes and git history alone
 
-This can easily be done with Docker, but before this script does it
-please agree that it's ok for this script to delete your current
-project's database(s) by removing any associated Docker volumes.
-
+What it does not do:
+  - Rename the repo root directory
+  - Reset your database
+  - Reinitialize git
 EOF
-
-while true; do
-    read -p "Run docker compose down -v (y/n)? " -r yn
-    case "${yn}" in
-        [Yy]* )
-          printf "\n--------------------------------------------------------\n"
-          docker compose down -v
-          printf -- "--------------------------------------------------------\n"
-
-          break;;
-        [Nn]* ) exit;;
-        * ) echo "";;
-    esac
-done
-
-# -----------------------------------------------------------------------------
-# The core of the script which renames a few things.
-# -----------------------------------------------------------------------------
-
-# Function to safely rename files or directories
-safe_mv() {
-    local src="$1"
-    local dest="$2"
-    if [ -e "$src" ]; then
-        mv "$src" "$dest"
-        echo "Renamed '$src' to '$dest'."
-    else
-        echo "Skipped renaming '$src' as it does not exist."
-    fi
 }
 
-# Function to safely replace content in files
-safe_replace() {
-    local file="$1"
-    local find="$2"
-    local replace="$3"
-    if [ -f "$file" ]; then
-        sed -i "s/${find}/${replace}/g" "$file"
-        echo "Updated content in '$file'."
-    else
-        echo "Skipped updating '$file' as it does not exist."
-    fi
+log() {
+  printf '%s\n' "$1"
 }
 
-# Change to the backend directory where our Phoenix app lives
-cd "$(dirname "$0")/.."
+fail() {
+  printf 'rename-project: %s\n' "$1" >&2
+  exit 1
+}
 
-# Perform renaming operations for files and directories
-safe_mv "lib/${FIND_APP_NAME}.ex" "lib/${APP_NAME}.ex"
-safe_mv "lib/${FIND_APP_NAME}_web.ex" "lib/${APP_NAME}_web.ex"
-safe_mv "lib/${FIND_APP_NAME}" "lib/${APP_NAME}"
-safe_mv "lib/${FIND_APP_NAME}_web" "lib/${APP_NAME}_web"
-safe_mv "test/${FIND_APP_NAME}" "test/${APP_NAME}"
-safe_mv "test/${FIND_APP_NAME}_web" "test/${APP_NAME}_web"
-
-# Update content in key files
-find . -type f -name "*.ex" -o -name "*.exs" -o -name "*.eex" -o -name "*.heex" -o -name "*.leex" | while read -r file; do
-    safe_replace "$file" "${FIND_APP_NAME}" "${APP_NAME}"
-    safe_replace "$file" "${FIND_MODULE_NAME}" "${MODULE_NAME}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --yes)
+      ASSUME_YES=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      fail "unknown option: $1"
+      ;;
+    *)
+      break
+      ;;
+  esac
 done
 
-# Update mix.exs specifically
-if [ -f "mix.exs" ]; then
-    safe_replace "mix.exs" "app: :${FIND_APP_NAME}" "app: :${APP_NAME}"
-    safe_replace "mix.exs" "module: ${FIND_MODULE_NAME}" "module: ${MODULE_NAME}"
+if [[ $# -ne 2 ]]; then
+  usage
+  exit 1
 fi
 
-# -----------------------------------------------------------------------------
+NEW_APP_NAME="$1"
+NEW_MODULE_NAME="$2"
+NEW_APP_NAME_UPPER="${NEW_APP_NAME^^}"
 
-cat << EOF
+[[ "$NEW_APP_NAME" =~ ^[a-z][a-z0-9_]*$ ]] || fail "app name must match ^[a-z][a-z0-9_]*$"
+[[ "$NEW_MODULE_NAME" =~ ^[A-Z][A-Za-z0-9]*$ ]] || fail "module name must match ^[A-Z][A-Za-z0-9]*$"
+[[ "$NEW_APP_NAME" != "$CURRENT_APP_NAME" ]] || fail "new app name must differ from ${CURRENT_APP_NAME}"
+[[ "$NEW_MODULE_NAME" != "$CURRENT_MODULE_NAME" ]] || fail "new module name must differ from ${CURRENT_MODULE_NAME}"
 
---------------------------------------------------------
-Your project has been renamed successfully!
---------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-EOF
+prune_expr=(
+  -name .git -o
+  -name .tmp -o
+  -name _build -o
+  -name deps -o
+  -name node_modules -o
+  -name target -o
+  -path "*/priv/static/*"
+)
 
-function init_git_repo {
-  [ -d .git/ ] && rm -rf .git/
-
-  cat << EOF
-
---------------------------------------------------------
-$(git init)
---------------------------------------------------------
-EOF
-
-  git symbolic-ref HEAD refs/heads/main
+text_files() {
+  find "${PROJECT_ROOT}" \
+    \( "${prune_expr[@]}" \) -prune -o \
+    -type f -print
 }
 
-while true; do
-    read -p "Do you want to init a new local git repo (y/n)? " -r yn
-    case "${yn}" in
-        [Yy]* ) init_git_repo; break;;
-        [Nn]* ) break;;
-        * ) echo "";;
-    esac
-done
+rename_candidates() {
+  find "${PROJECT_ROOT}" -mindepth 1 -depth \
+    \( "${prune_expr[@]}" \) -prune -o \
+    \( -name "*${CURRENT_APP_NAME}*" -o -name "*${CURRENT_MODULE_NAME}*" -o -name "*${CURRENT_APP_NAME_UPPER}*" \) \
+    -print
+}
 
-cat << EOF
+is_text_file() {
+  local file="$1"
+  grep -Iq . "$file"
+}
 
-We're done here. Everything worked!
+replace_in_file() {
+  local file="$1"
+  local find="$2"
+  local replace="$3"
 
-If you're happy with your new project's name you can delete this
-script by running: rm bin/rename-project
+  if ! grep -q --fixed-strings "$find" "$file"; then
+    return 0
+  fi
 
-Or you can keep it around in case you decide to change your project's
-name later on after developing it for a bit. You can re-run this
-script as many times as you want until you're happy.
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "update ${file#$PROJECT_ROOT/}: ${find} -> ${replace}"
+    return 0
+  fi
 
-Check out the rest of the README on GitHub to wrap things up:
+  FIND="$find" REPLACE="$replace" perl -0pi -e 's/\Q$ENV{FIND}\E/$ENV{REPLACE}/g' "$file"
+}
 
-https://github.com/nickjj/docker-${FIND_FRAMEWORK}-example#start-and-setup-the-project
-EOF
+rename_path() {
+  local path="$1"
+  local relative_path="${path#$PROJECT_ROOT/}"
+  local target_relative="$relative_path"
+  local target
+
+  target_relative="${target_relative//${CURRENT_MODULE_NAME}/${NEW_MODULE_NAME}}"
+  target_relative="${target_relative//${CURRENT_APP_NAME_UPPER}/${NEW_APP_NAME_UPPER}}"
+  target_relative="${target_relative//${CURRENT_APP_NAME}/${NEW_APP_NAME}}"
+  target="${PROJECT_ROOT}/${target_relative}"
+
+  if [[ "$relative_path" == "$target_relative" ]]; then
+    return 0
+  fi
+
+  if [[ -e "$target" ]]; then
+    fail "refusing to overwrite existing path: ${target_relative}"
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "rename ${relative_path} -> ${target_relative}"
+    return 0
+  fi
+
+  mv "$path" "$target"
+}
+
+log "Rename plan"
+log "  repo root: ${PROJECT_ROOT}"
+log "  app name: ${CURRENT_APP_NAME} -> ${NEW_APP_NAME}"
+log "  module:   ${CURRENT_MODULE_NAME} -> ${NEW_MODULE_NAME}"
+
+if [[ "$DRY_RUN" -eq 0 && "$ASSUME_YES" -eq 0 ]]; then
+  printf 'Proceed? [y/N] '
+  read -r answer
+  case "$answer" in
+    [Yy]|[Yy][Ee][Ss]) ;;
+    *)
+      log "Aborted."
+      exit 1
+      ;;
+  esac
+fi
+
+while IFS= read -r path; do
+  rename_path "$path"
+done < <(rename_candidates)
+
+while IFS= read -r file; do
+  if ! is_text_file "$file"; then
+    continue
+  fi
+
+  replace_in_file "$file" "$CURRENT_MODULE_NAME" "$NEW_MODULE_NAME"
+  replace_in_file "$file" "$CURRENT_APP_NAME_UPPER" "$NEW_APP_NAME_UPPER"
+  replace_in_file "$file" "$CURRENT_APP_NAME" "$NEW_APP_NAME"
+done < <(text_files)
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  log "Dry run complete."
+else
+  log "Rename complete."
+  log "Review the diff before committing."
+fi

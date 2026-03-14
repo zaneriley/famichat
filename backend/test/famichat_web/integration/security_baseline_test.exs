@@ -36,7 +36,9 @@ defmodule FamichatWeb.Integration.SecurityBaselineTest do
       %{resp_conn: conn}
     end
 
-    test "CSP header is present and enforcing (not report-only)", %{resp_conn: conn} do
+    test "CSP header is present and enforcing (not report-only)", %{
+      resp_conn: conn
+    } do
       # Bug bash 2026-03-09: dev.exs had report_only: true, and nothing
       # prevented that from leaking to prod. CSP in report-only mode provides
       # zero protection — it only logs violations.
@@ -51,7 +53,9 @@ defmodule FamichatWeb.Integration.SecurityBaselineTest do
              "content-security-policy-report-only is set — CSP is report-only, not enforcing"
     end
 
-    test "CSP script-src does not contain unsafe-eval outside dev", %{resp_conn: conn} do
+    test "CSP script-src does not contain unsafe-eval outside dev", %{
+      resp_conn: conn
+    } do
       # Bug bash 2026-03-09: the CSP plug included 'unsafe-eval' in script-src
       # in all environments. unsafe-eval allows arbitrary JS execution, which
       # defeats the purpose of CSP against XSS.
@@ -96,6 +100,7 @@ defmodule FamichatWeb.Integration.SecurityBaselineTest do
       # strict-transport-security with 2-year max-age.
       [hsts] = get_resp_header(conn, "strict-transport-security")
       assert hsts =~ "max-age="
+
       {max_age, _} =
         hsts
         |> String.split(";")
@@ -103,6 +108,7 @@ defmodule FamichatWeb.Integration.SecurityBaselineTest do
         |> String.trim()
         |> String.replace("max-age=", "")
         |> Integer.parse()
+
       # OWASP recommends at least 1 year (31536000 seconds).
       assert max_age >= 31_536_000
     end
@@ -121,7 +127,8 @@ defmodule FamichatWeb.Integration.SecurityBaselineTest do
              "strip_server_header not found in endpoint.ex source — " <>
                "Cowboy's `server` header will leak in production"
 
-      assert endpoint_source =~ "delete_resp_header" and endpoint_source =~ ~s("server"),
+      assert endpoint_source =~ "delete_resp_header" and
+               endpoint_source =~ ~s("server"),
              "strip_server_header does not delete the 'server' header"
     end
   end
@@ -148,7 +155,8 @@ defmodule FamichatWeb.Integration.SecurityBaselineTest do
       env = Application.get_env(:famichat, :environment)
 
       if env != :dev do
-        annotations = Application.get_env(:phoenix_live_view, :debug_heex_annotations)
+        annotations =
+          Application.get_env(:phoenix_live_view, :debug_heex_annotations)
 
         refute annotations == true,
                "debug_heex_annotations is true in #{env} environment — " <>
@@ -184,7 +192,8 @@ defmodule FamichatWeb.Integration.SecurityBaselineTest do
       env = Application.get_env(:famichat, :environment)
 
       if env != :dev do
-        endpoint_config = Application.get_env(:famichat, FamichatWeb.Endpoint) || []
+        endpoint_config =
+          Application.get_env(:famichat, FamichatWeb.Endpoint) || []
 
         refute Keyword.get(endpoint_config, :debug_errors, false),
                "debug_errors is true in #{env} — " <>

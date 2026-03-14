@@ -227,7 +227,11 @@ defmodule Famichat.Chat.ConversationService do
             {:error, :participant_creation_failed}
           end
         end)
-        |> Ecto.Multi.run(:summary, fn repo, %{create: conversation, existing: existing} ->
+        |> Ecto.Multi.run(:summary, fn repo,
+                                       %{
+                                         create: conversation,
+                                         existing: existing
+                                       } ->
           if existing do
             # Conversation already existed, summary should already exist too.
             {:ok, :skipped}

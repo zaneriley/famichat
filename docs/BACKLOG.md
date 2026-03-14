@@ -1,6 +1,6 @@
 # Famichat Backlog
 
-**Last updated:** 2026-03-11
+**Last updated:** 2026-03-14
 
 Single prioritized index of every known issue, gap, debt item, and planned work. If it is not in this file, it is not tracked. Agent research, `.tmp/` files, handoff docs — those are source material. Findings get promoted to a one-liner here or they rot.
 
@@ -124,6 +124,8 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Remove `pull_repository()` call and dead content-repo code from `docker-entrypoint-web` — container crashes on every production startup → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
 - [x] Remove `config :famichat, :cache, disabled: true` from prod.exs — all rate limits silently unenforced in production → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
 - [x] Fix CORS: remove CORSPlug for L1 or make origin configurable via env var — hardcoded localhost blocks browser requests from production domain → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
+- [ ] Fix Dockerfile `../run` → `./run` on line 36 — Docker build fails on asset compilation; operator cannot deploy → .tmp/2026-03-14-deploy-scan/ci-github.md | P0-dogfood | agent:deploy-scan
+- [ ] Auto-create 1:1 conversation when second family member joins — both users stuck on empty home page with no way to message → .tmp/2026-03-14-deploy-scan/first-boot.md | P0-dogfood | agent:deploy-scan
 
 ## Blocks confidence (P1)
 <!-- Can dogfood, but these make us nervous -->
@@ -217,6 +219,12 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [ ] Add logging configuration to docker-compose.production.yml — no log rotation; logs fill disk → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Add CSP report-uri logging endpoint for operator-visible violation diagnostics — CSP violations invisible without DevTools; operators can't diagnose from docker logs → .tmp/2026-03-11-security-config/round-1/consensus.md | P2-debt | agent:consensus
 - [x] Remove dead CSP_SCHEME/CSP_HOST/CSP_PORT from `.env.production.example` — unused since CSP derives from endpoint config; creates false confidence → .tmp/2026-03-11-compose-and-env/round-1/consensus.md | P2-debt | agent:consensus
+- [ ] Move or delete `backend/.github/workflows/ci.yml` — dead workflow never executed by GitHub Actions; full test suite not running in CI → .tmp/2026-03-14-deploy-scan/ci-github.md | P2-debt | agent:deploy-scan
+- [ ] Remove `excoveralls` dep from mix.exs — no Coveralls integration exists; dead dependency inflates compile → .tmp/2026-03-14-deploy-scan/ci-github.md | P2-debt | agent:deploy-scan
+- [ ] Remove dead modules (TestBroadcastController, ThemeSwitcher, ast_renderer.ex, Authenticators shim) — orphaned code with zero references | P2-debt | agent:deploy-scan
+- [ ] Remove ThemeSwitcherHook import from app.js — references nonexistent JS file | P2-debt | agent:deploy-scan
+- [ ] Remove dead Content module config from config.exs, dev.exs, prod.exs, test.exs — ghost config for deleted modules | P2-debt | agent:deploy-scan
+- [ ] Document optional env vars (URL_STATIC_HOST, DNS_CLUSTER_QUERY, POSTGRES_POOL) in .env.production.example — operators can't discover tuning options → .tmp/2026-03-14-deploy-scan/env-config.md | P2-debt | agent:deploy-scan
 
 ## Someday/maybe (P3)
 <!-- Documentation and guidance items — infra will change; don't invest in docs until it stabilizes -->

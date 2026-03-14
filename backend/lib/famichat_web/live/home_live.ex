@@ -25,7 +25,15 @@ defmodule FamichatWeb.HomeLive do
          {:ok, user} <- Identity.fetch_user(user_id) do
       case FamilyContext.resolve(user_id, candidate_family_id) do
         {:ok, family, source} ->
-          mount_with_family(socket, user, device_id, token, params, family, source)
+          mount_with_family(
+            socket,
+            user,
+            device_id,
+            token,
+            params,
+            family,
+            source
+          )
 
         {:error, :no_family} ->
           mount_without_family(socket, user, device_id, token, params)
@@ -42,7 +50,10 @@ defmodule FamichatWeb.HomeLive do
     show_family_switcher = length(all_memberships) > 1
 
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Famichat.PubSub, "family:#{family.id}:member_joined")
+      Phoenix.PubSub.subscribe(
+        Famichat.PubSub,
+        "family:#{family.id}:member_joined"
+      )
     end
 
     {:ok, conversations} = get_user_conversations(user.id, family.id)
@@ -76,7 +87,10 @@ defmodule FamichatWeb.HomeLive do
 
         result_socket =
           base_socket
-          |> assign(conversation_id: conversation.id, conversation_type: conv_type)
+          |> assign(
+            conversation_id: conversation.id,
+            conversation_type: conv_type
+          )
           |> load_messages(conversation.id, user.id)
           |> assign_page_metadata(page_title)
 
@@ -286,7 +300,8 @@ defmodule FamichatWeb.HomeLive do
         {:error, _reason} ->
           {:noreply,
            assign(socket,
-             error_message: gettext("Something went wrong connecting. Try refreshing.")
+             error_message:
+               gettext("Something went wrong connecting. Try refreshing.")
            )}
       end
     end
@@ -350,19 +365,27 @@ defmodule FamichatWeb.HomeLive do
             {:noreply,
              socket
              |> assign(error_message: nil)
-             |> put_system_notice(gettext("Revoked device %{device}.", device: target))}
+             |> put_system_notice(
+               gettext("Revoked device %{device}.", device: target)
+             )}
 
           {:error, :not_found} ->
             {:noreply,
              assign(
                socket,
-               error_message: gettext("Device %{device} not found for this user.", device: target)
+               error_message:
+                 gettext("Device %{device} not found for this user.",
+                   device: target
+                 )
              )}
 
           {:error, reason} ->
             {:noreply,
              assign(socket,
-               error_message: gettext("Device revoke failed: %{reason}", reason: inspect(reason))
+               error_message:
+                 gettext("Device revoke failed: %{reason}",
+                   reason: inspect(reason)
+                 )
              )}
         end
     end
@@ -503,7 +526,8 @@ defmodule FamichatWeb.HomeLive do
        socket,
        channel_joined: false,
        topic: nil,
-       error_message: gettext("Something went wrong connecting. Try refreshing.")
+       error_message:
+         gettext("Something went wrong connecting. Try refreshing.")
      )}
   end
 
@@ -583,7 +607,8 @@ defmodule FamichatWeb.HomeLive do
       is_nil(user) or is_nil(family) ->
         {:noreply,
          assign(socket,
-           error_message: gettext("You must be in a family to generate an invite.")
+           error_message:
+             gettext("You must be in a family to generate an invite.")
          )}
 
       true ->
@@ -604,7 +629,9 @@ defmodule FamichatWeb.HomeLive do
             Logger.warning("[HomeLive] issue_invite error: #{inspect(reason)}")
 
             {:noreply,
-             assign(socket, error_message: gettext("Could not generate invite link."))}
+             assign(socket,
+               error_message: gettext("Could not generate invite link.")
+             )}
         end
     end
   end
@@ -667,7 +694,8 @@ defmodule FamichatWeb.HomeLive do
         {:error, _reason} ->
           {:noreply,
            assign(socket,
-             error_message: gettext("Something went wrong connecting. Try refreshing.")
+             error_message:
+               gettext("Something went wrong connecting. Try refreshing.")
            )}
       end
     end
@@ -746,7 +774,10 @@ defmodule FamichatWeb.HomeLive do
             |> load_messages(conversation_id, user_id)
 
           {:error, reason} ->
-            Logger.warning("[HomeLive] Failed to inject welcome message: #{inspect(reason)}")
+            Logger.warning(
+              "[HomeLive] Failed to inject welcome message: #{inspect(reason)}"
+            )
+
             assign(socket, pending_welcome_message: nil)
         end
     end
@@ -772,7 +803,10 @@ defmodule FamichatWeb.HomeLive do
   end
 
   defp load_is_admin(user_id, family_id) do
-    case Repo.get_by(HouseholdMembership, user_id: user_id, family_id: family_id) do
+    case Repo.get_by(HouseholdMembership,
+           user_id: user_id,
+           family_id: family_id
+         ) do
       %{role: :admin} -> true
       _ -> false
     end
@@ -917,9 +951,14 @@ defmodule FamichatWeb.HomeLive do
 
   defp sender_name_for_payload(payload, assigns) do
     cond do
-      payload["user_id"] == assigns.user_id -> "Me"
-      is_binary(payload["sender_name"]) and payload["sender_name"] != "" -> payload["sender_name"]
-      true -> "Family Member"
+      payload["user_id"] == assigns.user_id ->
+        "Me"
+
+      is_binary(payload["sender_name"]) and payload["sender_name"] != "" ->
+        payload["sender_name"]
+
+      true ->
+        "Family Member"
     end
   end
 
@@ -935,7 +974,8 @@ defmodule FamichatWeb.HomeLive do
   defp message_error_text("pending_proposals"),
     do: gettext("Setting things up. This should only take a moment.")
 
-  defp message_error_text(_reason), do: gettext("Something went wrong. Try refreshing.")
+  defp message_error_text(_reason),
+    do: gettext("Something went wrong. Try refreshing.")
 
   defp security_action_for_reason("recovery_required"),
     do: "recover_conversation_security_state"

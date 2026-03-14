@@ -15,7 +15,9 @@ defmodule FamichatWeb.Plugs.ValidateFamilySetupToken do
   """
 
   import Plug.Conn
-  import Phoenix.Controller, only: [put_layout: 2, put_root_layout: 2, put_view: 2, render: 2]
+
+  import Phoenix.Controller,
+    only: [put_layout: 2, put_root_layout: 2, put_view: 2, render: 2]
 
   alias Famichat.Auth.Onboarding
 

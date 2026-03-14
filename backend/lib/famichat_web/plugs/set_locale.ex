@@ -162,7 +162,9 @@ defmodule FamichatWeb.Plugs.SetLocale do
   """
   @spec extract_preferred_locale(Plug.Conn.t()) :: locale()
   def extract_preferred_locale(conn) do
-    session_locale = Plug.Conn.get_session(conn, FamichatWeb.SessionKeys.user_locale())
+    session_locale =
+      Plug.Conn.get_session(conn, FamichatWeb.SessionKeys.user_locale())
+
     accept_language = get_preferred_language(conn)
 
     cond do

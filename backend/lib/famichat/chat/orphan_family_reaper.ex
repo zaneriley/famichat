@@ -33,7 +33,9 @@ defmodule Famichat.Chat.OrphanFamilyReaper do
   def handle_info(:sweep, state) do
     case OrphanFamilyCleanup.run() do
       {:ok, count} when count > 0 ->
-        Logger.info("[OrphanFamilyReaper] Cleaned up #{count} orphan family/families")
+        Logger.info(
+          "[OrphanFamilyReaper] Cleaned up #{count} orphan family/families"
+        )
 
       _ ->
         :ok

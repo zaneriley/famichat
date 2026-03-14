@@ -25,7 +25,8 @@ defmodule FamichatWeb.SessionController do
     access_token = get_session(conn, SessionKeys.access_token())
 
     with true <- is_binary(device_id) and is_binary(access_token),
-         {:ok, %{user_id: user_id}} <- Sessions.verify_access_token(access_token) do
+         {:ok, %{user_id: user_id}} <-
+           Sessions.verify_access_token(access_token) do
       case Sessions.revoke_device(user_id, device_id) do
         {:ok, :revoked} ->
           :ok

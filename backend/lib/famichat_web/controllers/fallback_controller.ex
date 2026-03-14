@@ -51,7 +51,10 @@ defmodule FamichatWeb.FallbackController do
     case conn.path_info do
       [maybe_locale | _rest] ->
         supported = FamichatWeb.Plugs.LocaleRedirection.supported_locales()
-        if maybe_locale in supported, do: maybe_locale, else: fallback_locale(conn)
+
+        if maybe_locale in supported,
+          do: maybe_locale,
+          else: fallback_locale(conn)
 
       _ ->
         fallback_locale(conn)

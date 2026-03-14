@@ -20,11 +20,6 @@ config :famichat, environment: :test
 config :famichat,
   content_base_path: "test/support/fixtures"
 
-config :famichat, Famichat.Content.FileSystemWatcher,
-  paths: [
-    Application.get_env(:famichat, :content_base_path)
-  ]
-
 config :famichat, :admin_basic_auth,
   username: "test-admin",
   password: "test-secret"

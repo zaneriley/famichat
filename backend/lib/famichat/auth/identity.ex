@@ -408,7 +408,10 @@ defmodule Famichat.Auth.Identity do
   end
 
   defp verify_family_membership(user_id, family_id) do
-    case Repo.get_by(HouseholdMembership, user_id: user_id, family_id: family_id) do
+    case Repo.get_by(HouseholdMembership,
+           user_id: user_id,
+           family_id: family_id
+         ) do
       nil -> {:error, :not_a_member}
       _m -> :ok
     end

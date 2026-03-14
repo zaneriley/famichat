@@ -43,9 +43,9 @@ defmodule FamichatWeb.Navigation do
     <nav role="banner" class="flex items-center justify-between p-md">
       <.link
         navigate={Routes.home_path(@socket, :index, @user_locale)}
-        aria-label={gettext("Famichat home")}
+        aria-label={gettext("%{app_name} home", app_name: app_name())}
       >
-        <.typography tag="span" size="1xl" font="cardinal">Famichat</.typography>
+        <.typography tag="span" size="1xl" font="cardinal"><%= app_name() %></.typography>
       </.link>
       <div class="flex flex-wrap items-center gap-md justify-end">
         <nav aria-label={gettext("Language switcher")}>

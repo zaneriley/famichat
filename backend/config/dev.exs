@@ -52,13 +52,9 @@ config :logger, :console,
 config :phoenix, :stacktrace_depth, 20
 config :phoenix, :plug_init_mode, :runtime
 
-config :famichat, Famichat.Content.FileManagement.Watcher,
-  paths: ["priv/content"]
-
 # Include HEEx debug annotations as HTML comments in rendered markup.
 config :phoenix_live_view, :debug_heex_annotations, true
 
 config :famichat, :admin_basic_auth,
   username: System.get_env("ADMIN_SPIKE_USER", "admin"),
   password: System.get_env("ADMIN_SPIKE_PASS", "famichat-dev")
-

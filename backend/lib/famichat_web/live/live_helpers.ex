@@ -31,14 +31,18 @@ defmodule FamichatWeb.LiveHelpers do
   """
 
   import Phoenix.Component
+  import FamichatWeb.AppName, only: [app_name: 0]
   import FamichatWeb.Gettext
   import Ecto.Query, only: [from: 2]
 
   require Logger
 
-  @default_title gettext("Famichat")
   @default_description gettext("Private, self-hosted messaging for families.")
-  @supported_locales Application.compile_env(:famichat, :supported_locales, ~w(en ja))
+  @supported_locales Application.compile_env(
+                       :famichat,
+                       :supported_locales,
+                       ~w(en ja)
+                     )
   @default_locale Application.compile_env(:famichat, :default_locale, "en")
 
   def on_mount(:default, params, session, socket) do
@@ -123,7 +127,7 @@ defmodule FamichatWeb.LiveHelpers do
 
   def assign_page_metadata(socket, title \\ nil, description \\ nil) do
     assign(socket,
-      page_title: title || socket.assigns[:page_title] || @default_title,
+      page_title: title || socket.assigns[:page_title] || default_title(),
       page_description:
         description || socket.assigns[:page_description] || @default_description
     )
@@ -131,10 +135,12 @@ defmodule FamichatWeb.LiveHelpers do
 
   defp assign_default_page_metadata(socket) do
     assign(socket,
-      page_title: @default_title,
+      page_title: default_title(),
       page_description: @default_description
     )
   end
+
+  defp default_title, do: app_name()
 
   defp maybe_persist_locale_change(socket, resolved_locale) do
     user_id = socket.assigns[:current_user_id]
@@ -153,7 +159,6 @@ defmodule FamichatWeb.LiveHelpers do
         socket
 
       true ->
-
         Task.start(fn ->
           try do
             case Famichat.Repo.get(Famichat.Accounts.User, user_id) do

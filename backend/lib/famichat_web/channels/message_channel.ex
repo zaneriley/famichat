@@ -579,7 +579,9 @@ defmodule FamichatWeb.MessageChannel do
 
           message_id ->
             case from(m in Message,
-                   where: m.id == ^message_id and m.conversation_id == ^conversation_id,
+                   where:
+                     m.id == ^message_id and
+                       m.conversation_id == ^conversation_id,
                    select: m.message_seq
                  )
                  |> Repo.one() do

@@ -1,6 +1,6 @@
 <%= if is_nil(@user_id) do %>
   <div class="flex h-screen flex-col items-center justify-center gap-md">
-    <.typography tag="h1" size="2xl" color="main">Famichat</.typography>
+    <.typography tag="h1" size="2xl" color="main"><%= app_name() %></.typography>
     <.typography tag="p" size="md" color="deemphasized">
       <%= if @auth_error,
         do:
@@ -14,7 +14,7 @@
       class="ac-primary-button px-md py-2xs rounded-full"
     >
       <.typography tag="span" size="md" color="callout">
-        <%= gettext("Open Famichat") %>
+        <%= gettext("Open %{app_name}", app_name: app_name()) %>
       </.typography>
     </a>
   </div>
@@ -22,12 +22,15 @@
   <%= if @no_family do %>
     <%!-- No family membership — guide the user --%>
     <div class="flex h-screen flex-col items-center justify-center gap-lg p-2xl">
-      <.typography tag="h1" size="2xl" color="main">Famichat</.typography>
+      <.typography tag="h1" size="2xl" color="main"><%= app_name() %></.typography>
       <.typography tag="p" size="md" color="deemphasized">
         <%= gettext("You are not part of any family yet.") %>
       </.typography>
       <.typography tag="p" size="sm" color="deemphasized">
-        <%= gettext("Getting started? Ask the person who told you about Famichat to send you an invite link.") %>
+        <%= gettext(
+          "Getting started? Ask the person who told you about %{app_name} to send you an invite link.",
+          app_name: app_name()
+        ) %>
       </.typography>
       <button
         type="button"
@@ -61,8 +64,15 @@
                     <%= f.name %>
                   </span>
                 <% else %>
-                  <form method="post" action={"/" <> (@user_locale || "en") <> "/families/switch"}>
-                    <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+                  <form
+                    method="post"
+                    action={"/" <> (@user_locale || "en") <> "/families/switch"}
+                  >
+                    <input
+                      type="hidden"
+                      name="_csrf_token"
+                      value={Plug.CSRFProtection.get_csrf_token()}
+                    />
                     <input type="hidden" name="family_id" value={f.id} />
                     <button
                       type="submit"
@@ -160,7 +170,10 @@
           <% end %>
 
           <%= if @show_welcome_prompt do %>
-            <div id="welcome-prompt-modal" class="mt-md rounded-lg border border-[var(--border-tactile)] bg-[var(--surface-primary)] p-md">
+            <div
+              id="welcome-prompt-modal"
+              class="mt-md rounded-lg border border-[var(--border-tactile)] bg-[var(--surface-primary)] p-md"
+            >
               <.typography tag="h2" size="md" color="main">
                 <%= gettext("Welcome them!") %>
               </.typography>
@@ -168,17 +181,25 @@
                 <%= gettext("Add a message so they see you're waiting.") %>
               </.typography>
 
-              <form phx-submit="submit-welcome-message" class="mt-sm flex flex-col gap-sm">
+              <form
+                phx-submit="submit-welcome-message"
+                class="mt-sm flex flex-col gap-sm"
+              >
                 <textarea
                   name="message"
-                  placeholder={gettext("e.g., Hi! So glad you're here. Talk soon?")}
+                  placeholder={
+                    gettext("e.g., Hi! So glad you're here. Talk soon?")
+                  }
                   class="ac-text-input min-h-[80px] resize-none"
                   autocomplete="off"
                   maxlength="500"
                 ></textarea>
 
                 <div class="flex gap-sm">
-                  <button type="submit" class="ac-primary-button flex-1 rounded-full py-2xs">
+                  <button
+                    type="submit"
+                    class="ac-primary-button flex-1 rounded-full py-2xs"
+                  >
                     <.typography tag="span" size="sm" color="callout">
                       <%= gettext("Save message") %>
                     </.typography>
@@ -249,12 +270,18 @@
                 <li>
                   <.link
                     href={build_localized_path(@current_path, "en")}
-                    aria-current={if @user_locale == "en", do: "page", else: "false"}
+                    aria-current={
+                      if @user_locale == "en", do: "page", else: "false"
+                    }
                   >
                     <.typography
                       tag="span"
                       size="1xs"
-                      color={if @user_locale == "en", do: "main", else: "deemphasized"}
+                      color={
+                        if @user_locale == "en",
+                          do: "main",
+                          else: "deemphasized"
+                      }
                     >
                       EN
                     </.typography>
@@ -263,12 +290,18 @@
                 <li>
                   <.link
                     href={build_localized_path(@current_path, "ja")}
-                    aria-current={if @user_locale == "ja", do: "page", else: "false"}
+                    aria-current={
+                      if @user_locale == "ja", do: "page", else: "false"
+                    }
                   >
                     <.typography
                       tag="span"
                       size="1xs"
-                      color={if @user_locale == "ja", do: "main", else: "deemphasized"}
+                      color={
+                        if @user_locale == "ja",
+                          do: "main",
+                          else: "deemphasized"
+                      }
                     >
                       JA
                     </.typography>
@@ -465,21 +498,28 @@
               </.typography>
               <.typography tag="p" size="sm" color="deemphasized">
                 <%= if @is_admin do %>
-                  <%= gettext("You'll be the first to see each other's messages here.") %>
+                  <%= gettext(
+                    "You'll be the first to see each other's messages here."
+                  ) %>
                 <% else %>
                   <%= case @family_members do
                     [other] ->
-                      gettext("%{name} set this up for you. Say something — they're waiting.",
+                      gettext(
+                        "%{name} set this up for you. Say something — they're waiting.",
                         name: other.username
                       )
 
                     _ ->
-                      gettext("This space was set up for you. Say something — they're waiting.")
+                      gettext(
+                        "This space was set up for you. Say something — they're waiting."
+                      )
                   end %>
                 <% end %>
               </.typography>
               <.typography tag="p" size="2xs" color="deemphasized" class="mt-sm">
-                <%= gettext("Messages here don't show when they've been read — just write naturally.") %>
+                <%= gettext(
+                  "Messages here don't show when they've been read — just write naturally."
+                ) %>
               </.typography>
             </div>
           <% end %>

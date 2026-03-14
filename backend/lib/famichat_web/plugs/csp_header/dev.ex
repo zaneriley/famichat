@@ -4,7 +4,8 @@ defmodule FamichatWeb.Plugs.CSPHeader.Dev do
   """
 
   @spec script_src(String.t()) :: String.t()
-  def script_src(all_hosts), do: "'self' #{all_hosts} 'unsafe-inline' 'unsafe-eval'"
+  def script_src(all_hosts),
+    do: "'self' #{all_hosts} 'unsafe-inline' 'unsafe-eval'"
 
   @spec frame_src() :: String.t()
   def frame_src, do: "'self'"

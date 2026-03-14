@@ -1,6 +1,6 @@
 # Famichat NOW
 
-**Last updated:** 2026-03-11
+**Last updated:** 2026-03-14
 
 Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [ADR 012](decisions/012-spa-wasm-client-architecture.md).
 
@@ -8,9 +8,15 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-All P0 dogfood blockers closed. P1 confidence items resolved (1b02ab3). Deploying to homelab via Docker Compose + Cloudflare Tunnel. Dogfooding the operator experience — every friction point we hit becomes documentation for future self-hosters.
+Two new P0 deploy blockers found (Dockerfile path, missing auto-conversation). REGISTRATION_OPEN config flag added. Dead code audit identified 11 removable files/deps. Deploying to homelab via Docker Compose + Cloudflare Tunnel.
 
 ---
+
+## What just happened (2026-03-14)
+
+- **Deploy readiness scan** — 5-agent audit of Docker build, CI/GitHub, env config, first-boot UX, and Cloudflare Tunnel compatibility. Found 2 new P0 blockers: Dockerfile `../run` path bug (asset build fails) and no auto-conversation creation after second member joins (home page empty). Cloudflare Tunnel secure cookie and check_origin concerns verified as false positives (browser sees HTTPS; Phoenix checks Origin header against configured list, not conn properties). 6 new P2 items promoted to BACKLOG.md.
+- **REGISTRATION_OPEN config flag** — gates `/families/new` in production. Defaults false in prod (invite-only), true in dev. Checked at LiveView mount + login template. Zero new routes or controllers. 5 files modified: config.exs, runtime.exs, family_new_live.ex, login_live.html.heex, .env.production.example.
+- **Dead code audit** — 5-agent sweep found 5 dead files (TestBroadcastController, ThemeSwitcher, ast_renderer.ex, Authenticators shim, `backend/.github/workflows/ci.yml`), dead JS import (ThemeSwitcherHook from nonexistent file), dead config blocks (Content modules in 4 config files), dead deps (excoveralls, likely bcrypt_elixir/timex/uuid), orphaned mix.lock entries (ex_rated, ex2ms). Cleanup agents spawned.
 
 ## What just happened (2026-03-11)
 
@@ -141,6 +147,8 @@ Deploy to homelab via Docker Compose + Cloudflare Tunnel. This IS the product ex
 - [x] Remove `pull_repository()` from `docker-entrypoint-web` — calls nonexistent function; container crashes on boot
 - [x] Remove `config :famichat, :cache, disabled: true` from `prod.exs` — disables all rate limits in production
 - [x] Fix or remove CORSPlug — hardcoded to `localhost:3000`; blocks requests from production domain
+- [ ] Fix Dockerfile `../run` → `./run` on line 36 — asset build step references nonexistent path
+- [ ] Auto-create 1:1 conversation on second member join — home page is empty after both users register
 
 ### 2. Post-deploy browser walkthrough
 Run the full CUJ against the deployed instance: operator bootstrap → invite generation → spouse onboarding → message exchange. Catch deploy-specific issues: env var misconfiguration, WebSocket upgrade behind Cloudflare, passkey RP ID matching.

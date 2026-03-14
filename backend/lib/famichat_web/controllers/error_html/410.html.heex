@@ -10,14 +10,13 @@
       <%= gettext("Your invite link has expired or has already been used.") %>
     </p>
     <p>
-      <%= gettext("Ask the person who sent you the invite to send a new one. They can generate a fresh link anytime.") %>
+      <%= gettext(
+        "Ask the person who sent you the invite to send a new one. They can generate a fresh link anytime."
+      ) %>
     </p>
     <p>
-      <a
-        href={"/#{@conn.assigns[:user_locale] || "en"}/"}
-        class="pb-6 block"
-      >
-        <%= gettext("Return to Famichat") %>
+      <a href={"/#{@conn.assigns[:user_locale] || "en"}/"} class="pb-6 block">
+        <%= gettext("Return to %{app_name}", app_name: app_name()) %>
       </a>
     </p>
 

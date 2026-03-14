@@ -38,25 +38,33 @@ defmodule FamichatWeb.Plugs.PutRemoteIp do
   # Parse CIDRs at compile time. Helper functions aren't available yet in module
   # attribute context, so we inline the parsing here.
   @trusted_cidrs (
-    proxies =
-      Application.compile_env(:famichat, __MODULE__, [])
-      |> Keyword.get(:trusted_proxies, @default_trusted_proxies)
+                   proxies =
+                     Application.compile_env(:famichat, __MODULE__, [])
+                     |> Keyword.get(:trusted_proxies, @default_trusted_proxies)
 
-    Enum.map(proxies, fn cidr_string ->
-      {ip_str, bits} =
-        case String.split(cidr_string, "/") do
-          [ip, b] -> {ip, String.to_integer(b)}
-          [ip] -> {ip, nil}
-        end
+                   Enum.map(proxies, fn cidr_string ->
+                     {ip_str, bits} =
+                       case String.split(cidr_string, "/") do
+                         [ip, b] -> {ip, String.to_integer(b)}
+                         [ip] -> {ip, nil}
+                       end
 
-      {:ok, ip} = ip_str |> String.trim() |> String.to_charlist() |> :inet.parse_address()
-      total = if tuple_size(ip) == 4, do: 32, else: 128
-      prefix = bits || total
-      shift = total - prefix
-      mask = Bitwise.bsl(1, total) - 1 - (Bitwise.bsl(1, shift) - 1)
-      {ip, mask, total}
-    end)
-  )
+                     {:ok, ip} =
+                       ip_str
+                       |> String.trim()
+                       |> String.to_charlist()
+                       |> :inet.parse_address()
+
+                     total = if tuple_size(ip) == 4, do: 32, else: 128
+                     prefix = bits || total
+                     shift = total - prefix
+
+                     mask =
+                       Bitwise.bsl(1, total) - 1 - (Bitwise.bsl(1, shift) - 1)
+
+                     {ip, mask, total}
+                   end)
+                 )
 
   def init(opts), do: opts
 
@@ -126,7 +134,7 @@ defmodule FamichatWeb.Plugs.PutRemoteIp do
   defp normalize_ip(ip), do: ip
 
   defp ip_in_cidr?(ip, net, mask, bits) do
-    (if tuple_size(ip) == 4, do: 32, else: 128) == bits and
+    if(tuple_size(ip) == 4, do: 32, else: 128) == bits and
       ip_to_integer(ip) |> Bitwise.band(mask) ==
         ip_to_integer(net) |> Bitwise.band(mask)
   end

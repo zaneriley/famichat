@@ -155,7 +155,12 @@ defmodule Famichat.Auth.Onboarding do
         |> Repo.transaction()
 
       case result do
-        {:ok, %{user: user, family: family, passkey_token: %IssuedToken{raw: register_token}}} ->
+        {:ok,
+         %{
+           user: user,
+           family: family,
+           passkey_token: %IssuedToken{raw: register_token}
+         }} ->
           :telemetry.execute(
             [:famichat, :auth, :onboarding, :bootstrap_admin_created],
             %{count: 1},
@@ -208,7 +213,9 @@ defmodule Famichat.Auth.Onboarding do
              | term()}
   def create_family_self_service(family_name, opts \\ %{}) do
     name = if is_binary(family_name), do: String.trim(family_name), else: ""
-    rate_key = Map.get(opts, :remote_ip) || Map.get(opts, "remote_ip") || "unknown"
+
+    rate_key =
+      Map.get(opts, :remote_ip) || Map.get(opts, "remote_ip") || "unknown"
 
     with {:ok, normalized_name} <- validate_family_name(name),
          :ok <-
@@ -403,7 +410,9 @@ defmodule Famichat.Auth.Onboarding do
             payload =
               token.payload
               |> sanitize_invite_payload()
-              |> maybe_put_inviter_username(Map.get(token.payload, "inviter_id"))
+              |> maybe_put_inviter_username(
+                Map.get(token.payload, "inviter_id")
+              )
 
             reg_token_result =
               sign_invite_registration_token(%{
@@ -411,7 +420,8 @@ defmodule Famichat.Auth.Onboarding do
                 "family_id" =>
                   token.payload["household_id"] || token.payload["family_id"],
                 "role" => token.payload["role"],
-                "email_ciphertext" => Map.get(token.payload, "email_ciphertext"),
+                "email_ciphertext" =>
+                  Map.get(token.payload, "email_ciphertext"),
                 "email_fingerprint" =>
                   Map.get(token.payload, "email_fingerprint"),
                 "inviter_id" => Map.get(token.payload, "inviter_id")
@@ -582,7 +592,11 @@ defmodule Famichat.Auth.Onboarding do
           | {:error,
              :user_not_found | :already_registered | :invalid_user_state}
   def reissue_passkey_token(user_id) do
-    with :ok <- RateLimit.check(@passkey_reissue_bucket, user_id, limit: 5, interval: 300),
+    with :ok <-
+           RateLimit.check(@passkey_reissue_bucket, user_id,
+             limit: 5,
+             interval: 300
+           ),
          {:ok, user} <- Identity.fetch_user(user_id),
          :ok <- assert_reissuable_user_state(user),
          :ok <- assert_no_active_passkey(user_id),
@@ -665,7 +679,11 @@ defmodule Famichat.Auth.Onboarding do
              | :family_name_too_long
              | Ecto.Changeset.t()
              | term()}
-  def create_family_with_setup_link(community_admin_id, family_name, _opts \\ %{}) do
+  def create_family_with_setup_link(
+        community_admin_id,
+        family_name,
+        _opts \\ %{}
+      ) do
     with {:ok, normalized_name} <- validate_family_name(family_name),
          {:ok, _admin_user} <- assert_community_admin(community_admin_id),
          :ok <-
@@ -881,7 +899,10 @@ defmodule Famichat.Auth.Onboarding do
   admin panel to re-send a setup link when the original has expired or been
   revoked, without creating a duplicate family.
   """
-  @spec issue_family_setup_link_for_existing_family(Ecto.UUID.t(), Ecto.UUID.t()) ::
+  @spec issue_family_setup_link_for_existing_family(
+          Ecto.UUID.t(),
+          Ecto.UUID.t()
+        ) ::
           {:ok, %{setup_url_token: String.t()}}
           | {:error, :not_community_admin | :family_not_found | term()}
   def issue_family_setup_link_for_existing_family(community_admin_id, family_id) do
@@ -1182,12 +1203,14 @@ defmodule Famichat.Auth.Onboarding do
 
     Repo.exists?(
       from m in HouseholdMembership,
-        join: u in User, on: u.id == m.user_id,
-        join: p in Passkey, on: p.user_id == u.id,
+        join: u in User,
+        on: u.id == m.user_id,
+        join: p in Passkey,
+        on: p.user_id == u.id,
         where:
           m.family_id == ^family_id and
             m.role == :admin and
-            is_nil(p.revoked_at)
+            is_nil(p.disabled_at)
     )
   end
 
@@ -1260,7 +1283,9 @@ defmodule Famichat.Auth.Onboarding do
             {:ok, user}
 
           {:error, %Ecto.Changeset{} = cs} ->
-            if username_taken?(cs), do: {:error, :username_taken}, else: {:error, cs}
+            if username_taken?(cs),
+              do: {:error, :username_taken},
+              else: {:error, cs}
         end
     end
   end

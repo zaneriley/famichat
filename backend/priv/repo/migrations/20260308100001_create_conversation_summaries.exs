@@ -4,9 +4,9 @@ defmodule Famichat.Repo.Migrations.CreateConversationSummaries do
   def up do
     create table(:conversation_summaries, primary_key: false) do
       add :conversation_id,
-        references(:conversations, on_delete: :delete_all, type: :binary_id),
-        primary_key: true,
-        null: false
+          references(:conversations, on_delete: :delete_all, type: :binary_id),
+          primary_key: true,
+          null: false
 
       add :conversation_type, :string, null: false
       add :member_count, :integer, null: false, default: 0

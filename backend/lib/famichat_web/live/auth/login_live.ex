@@ -8,7 +8,8 @@ defmodule FamichatWeb.AuthLive.LoginLive do
   def mount(_params, session, socket) do
     token = session["access_token"]
 
-    if is_binary(token) and match?({:ok, _}, Sessions.verify_access_token(token)) do
+    if is_binary(token) and
+         match?({:ok, _}, Sessions.verify_access_token(token)) do
       {:ok, push_navigate(socket, to: locale_path(socket, "/"))}
     else
       {:ok,
@@ -30,10 +31,20 @@ defmodule FamichatWeb.AuthLive.LoginLive do
   end
 
   @impl true
-  def handle_event("passkey-error", %{"code" => code} = params, socket) when is_binary(code) do
-    Logger.warning("[LoginLive] passkey-error: #{code} — #{Map.get(params, "message", "")}")
+  def handle_event("passkey-error", %{"code" => code} = params, socket)
+      when is_binary(code) do
+    Logger.warning(
+      "[LoginLive] passkey-error: #{code} — #{Map.get(params, "message", "")}"
+    )
+
     count = socket.assigns.error_count + 1
-    {:noreply, assign(socket, error: normalize_passkey_error(code), loading: false, error_count: count)}
+
+    {:noreply,
+     assign(socket,
+       error: normalize_passkey_error(code),
+       loading: false,
+       error_count: count
+     )}
   end
 
   # Fallback for events that carry only a message and no code (e.g. legacy hooks).
@@ -41,7 +52,13 @@ defmodule FamichatWeb.AuthLive.LoginLive do
   def handle_event("passkey-error", %{"message" => msg}, socket) do
     Logger.warning("[LoginLive] passkey-error (no code): #{msg}")
     count = socket.assigns.error_count + 1
-    {:noreply, assign(socket, error: normalize_passkey_error(msg), loading: false, error_count: count)}
+
+    {:noreply,
+     assign(socket,
+       error: normalize_passkey_error(msg),
+       loading: false,
+       error_count: count
+     )}
   end
 
   @impl true
@@ -69,19 +86,31 @@ defmodule FamichatWeb.AuthLive.LoginLive do
 
   # User cancelled or timed out the biometric/passkey prompt
   defp error_message(:cancelled),
-    do: gettext("Sign-in was cancelled or timed out. Tap the button and follow your device's prompt.")
+    do:
+      gettext(
+        "Sign-in was cancelled or timed out. Tap the button and follow your device's prompt."
+      )
 
   # Browser blocked the request (wrong origin, insecure context, etc.)
   defp error_message(:security_error),
-    do: gettext("Something went wrong connecting securely. Try a different browser or check your URL.")
+    do:
+      gettext(
+        "Something went wrong connecting securely. Try a different browser or check your URL."
+      )
 
   # Browser lacks WebAuthn support
   defp error_message(:not_supported),
-    do: gettext("Your browser doesn't support passkeys. Try Safari, Chrome, or Edge.")
+    do:
+      gettext(
+        "Your browser doesn't support passkeys. Try Safari, Chrome, or Edge."
+      )
 
   # Authenticator already registered / conflicting state
   defp error_message(:invalid_state),
-    do: gettext("Something went wrong with your passkey. Try refreshing the page.")
+    do:
+      gettext(
+        "Something went wrong with your passkey. Try refreshing the page."
+      )
 
   # Server could not verify the passkey credential
   defp error_message(:invalid_credentials),
@@ -105,12 +134,17 @@ defmodule FamichatWeb.AuthLive.LoginLive do
 
   # Network connectivity issue
   defp error_message(:network_error),
-    do: gettext("Something went wrong connecting. Check your connection and try again.")
+    do:
+      gettext(
+        "Something went wrong connecting. Check your connection and try again."
+      )
 
   # Catch-all
   defp error_message(:unknown),
     do: gettext("Something went wrong signing in. Try again.")
 
   defp error_message(msg) when is_binary(msg), do: msg
-  defp error_message(_), do: gettext("Something went wrong signing in. Try again.")
+
+  defp error_message(_),
+    do: gettext("Something went wrong signing in. Try again.")
 end

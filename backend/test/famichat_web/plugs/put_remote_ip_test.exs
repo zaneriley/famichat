@@ -53,7 +53,10 @@ defmodule FamichatWeb.Plugs.PutRemoteIpTest do
       conn =
         build_conn()
         |> Map.put(:remote_ip, {127, 0, 0, 1})
-        |> put_req_header("x-forwarded-for", "198.51.100.7, 10.0.0.1, 192.168.1.1")
+        |> put_req_header(
+          "x-forwarded-for",
+          "198.51.100.7, 10.0.0.1, 192.168.1.1"
+        )
 
       # 192.168.1.1 and 10.0.0.1 are trusted, so pick 198.51.100.7
       assert PutRemoteIp.resolve_client_ip(conn) == "198.51.100.7"

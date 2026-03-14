@@ -185,6 +185,7 @@ defmodule Famichat.Auth.Sessions do
           {:ok, %{user_id: Ecto.UUID.t(), device_id: String.t()}}
           | {:error, term()}
   def verify_access_token(nil), do: {:error, :no_token}
+
   def verify_access_token(token) when is_binary(token) do
     with {:ok, payload} <- Tokens.verify(@access_kind, token),
          {:ok, device} <- DeviceStore.fetch(payload["device_id"]),

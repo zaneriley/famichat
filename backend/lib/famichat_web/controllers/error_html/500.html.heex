@@ -2,8 +2,7 @@
 <html lang="en">
   <head>
     <.live_title>
-      <%= assigns[:page_title] ||
-        "Zane Riley | Product Designer (Tokyo) | 10+ Years Experience" %>
+      <%= assigns[:page_title] || app_name() %>
     </.live_title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -73,11 +72,11 @@
       >
         /********************************************** <br />
         <a href="/" class="" aria-label="Return to homepage">
-          Famichat
+          <%= app_name() %>
         </a>
 
         <h1>ERROR 500 <br /> INTERNAL SERVER ERROR</h1>
-        * SYSTEM: Zane's Design Famichat <br />
+        * SYSTEM: <%= app_name() %> <br />
         * STATUS: [SOMETHING WENT WRONG, BUT DON'T PANIC] <br />
         ***********************************************/ <br /> <br />
         GREETINGS,<br /> <br /> THIS TERMINAL REGRETS TO INFORM YOU <br />

@@ -104,12 +104,17 @@ defmodule FamichatWeb.AdminLive.SetupLive do
     end
   rescue
     e in [Ecto.ConstraintError, DBConnection.ConnectionError] ->
-      Logger.error("[SetupLive] mount_connected crashed: #{Exception.message(e)}")
+      Logger.error(
+        "[SetupLive] mount_connected crashed: #{Exception.message(e)}"
+      )
 
       {:ok,
        socket
        |> assign(:step, :mount_error)
-       |> assign(:error_message, gettext("Something went wrong loading this page."))}
+       |> assign(
+         :error_message,
+         gettext("Something went wrong loading this page.")
+       )}
   end
 
   defp setup_socket(socket, step) do

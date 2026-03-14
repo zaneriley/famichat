@@ -197,7 +197,8 @@
         </.typography>
         <.typography tag="p" size="md" color="deemphasized">
           <%= gettext(
-            "Each family member needs their own invite link \u2014 Famichat is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two."
+            "Each family member needs their own invite link \u2014 %{app_name} is private, so only people you invite can join. Generate a link, send it however works for your family (text message, email, whatever), and they can join in a minute or two.",
+            app_name: app_name()
           ) %>
         </.typography>
       </div>

@@ -120,7 +120,7 @@
             </.typography>
             <button
               id="passkey-register-btn"
-              phx-hook="PasskeyRegister"
+              phx-hook="PasskeyAdminSetup"
               data-passkey-register-token={@passkey_register_token}
               data-username={@username}
               type="button"
@@ -132,7 +132,8 @@
             </button>
             <.typography tag="p" size="2xs" color="deemphasized">
               <%= gettext(
-                "Your passkey never leaves your device. Famichat never sees your fingerprint or face."
+                "Your passkey never leaves your device. %{app_name} never sees your fingerprint or face.",
+                app_name: app_name()
               ) %>
             </.typography>
           </div>

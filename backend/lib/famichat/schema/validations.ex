@@ -20,7 +20,8 @@ defmodule Famichat.Schema.Validations do
     * `:min` - minimum length (default `nil`, no minimum)
     * `:count` - length counting strategy, `:graphemes` or `:bytes` (default `:graphemes`)
   """
-  @spec validate_string_field(Ecto.Changeset.t(), atom(), keyword()) :: Ecto.Changeset.t()
+  @spec validate_string_field(Ecto.Changeset.t(), atom(), keyword()) ::
+          Ecto.Changeset.t()
   def validate_string_field(changeset, field, opts \\ []) do
     required = Keyword.get(opts, :required, true)
     max = Keyword.get(opts, :max, @default_max_length)
@@ -36,7 +37,9 @@ defmodule Famichat.Schema.Validations do
     |> validate_length(field, length_opts)
   end
 
-  defp maybe_validate_required(changeset, field, true), do: validate_required(changeset, [field])
+  defp maybe_validate_required(changeset, field, true),
+    do: validate_required(changeset, [field])
+
   defp maybe_validate_required(changeset, _field, false), do: changeset
 
   defp trim_field(changeset, field) do

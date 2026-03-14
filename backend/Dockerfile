@@ -17,16 +17,11 @@ RUN apt-get update \
   && groupmod -g "${GID}" node && usermod -u "${UID}" -g "${GID}" node \
   && mkdir -p /node_modules && chown node:node -R /node_modules /app
 
-# Install Playwright
-RUN npx playwright install --with-deps
-
 USER node
 
 # Copy package.json and yarn files and install dependencies
 COPY --chown=node:node assets/package.json assets/*yarn* ./
 RUN yarn install && yarn cache clean
-
-RUN npx playwright install
 
 ARG NODE_ENV="production"
 ENV NODE_ENV="${NODE_ENV}" \
@@ -38,7 +33,7 @@ COPY --chown=node:node . ..
 
 # Conditionally build assets based on NODE_ENV
 RUN if [ "${NODE_ENV}" != "development" ]; then \
-  ../run yarn:build:js && ../run yarn:build:css; else mkdir -p /app/priv/static; fi
+  /app/run yarn:build:js && /app/run yarn:build:css; else mkdir -p /app/priv/static; fi
 
 ###############################################################################
 
@@ -142,7 +137,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     inotify-tools \
-    git \
   && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man \
   && apt-get clean \
   # Create elixir user and group and set ownership

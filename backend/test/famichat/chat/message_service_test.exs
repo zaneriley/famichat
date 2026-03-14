@@ -104,9 +104,10 @@ defmodule Famichat.Chat.MessageServiceTest do
       assert msg4.id == m4.id
     end
 
-    test "returns invalid pagination when after cursor is not a positive integer", %{
-      conversation: conv
-    } do
+    test "returns invalid pagination when after cursor is not a positive integer",
+         %{
+           conversation: conv
+         } do
       assert {:error, {:invalid_pagination, changeset}} =
                MessageService.get_conversation_messages(conv.id,
                  after: "not-a-uuid"
@@ -115,10 +116,11 @@ defmodule Famichat.Chat.MessageServiceTest do
       assert {"is invalid", _} = Keyword.fetch!(changeset.errors, :after)
     end
 
-    test "after cursor with message_seq beyond conversation range returns empty", %{
-      conversation: conv,
-      user: user
-    } do
+    test "after cursor with message_seq beyond conversation range returns empty",
+         %{
+           conversation: conv,
+           user: user
+         } do
       # With integer message_seq cursors, there is no cross-conversation
       # validation. A message_seq value that exceeds the conversation's range
       # simply returns no results (the WHERE clause filters everything out).

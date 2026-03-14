@@ -22,6 +22,7 @@ defmodule FamichatWeb.Router do
     plug :fetch_live_flash
     plug :put_root_layout, {FamichatWeb.Layouts, :root}
     plug :protect_from_forgery
+
     plug :put_secure_browser_headers, %{
       "strict-transport-security" => "max-age=63072000; includeSubDomains"
     }
