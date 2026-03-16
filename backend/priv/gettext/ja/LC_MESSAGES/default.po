@@ -198,6 +198,11 @@ msgstr "うまくいかない場合は、ページを更新するか別のブラ
 msgid "Invite a member"
 msgstr "家族を招待する"
 
+#: lib/famichat_web/live/home_live.html.heex:138
+#, elixir-autogen, elixir-format
+msgid "Invite a family member"
+msgstr "家族を招待する"
+
 #: lib/famichat_web/live/admin/setup_live.html.heex:236
 #: lib/famichat_web/live/home_live.html.heex:146
 #, elixir-autogen, elixir-format
@@ -213,6 +218,11 @@ msgstr "招待リンクをクリップボードにコピーしました"
 #, elixir-autogen, elixir-format
 msgid "Invite link ready to send."
 msgstr "招待リンクが準備できました。送りましょう。"
+
+#: lib/famichat_web/live/auth/invite_live.ex:177
+#, elixir-autogen, elixir-format
+msgid "Invite not valid"
+msgstr "招待リンクを確認できませんでした"
 
 #: lib/famichat_web/live/home_live.html.heex:86
 #, elixir-autogen, elixir-format

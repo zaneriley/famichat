@@ -161,6 +161,14 @@ defmodule FamichatWeb.AuthLive.FamilySetupLive do
   end
 
   @impl true
+  def handle_event("go-back", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:step, :register)
+     |> assign(:error, nil)}
+  end
+
+  @impl true
   def handle_event("register-success", _params, socket) do
     Process.send_after(self(), :redirect_home, 1500)
     {:noreply, assign(socket, :step, :success)}

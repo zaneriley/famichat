@@ -217,6 +217,14 @@
               </form>
             </div>
           <% end %>
+
+          <%= if @welcome_saved do %>
+            <div role="status" aria-live="polite">
+              <.typography tag="p" size="2xs" color="deemphasized">
+                <%= gettext("Message saved.") %>
+              </.typography>
+            </div>
+          <% end %>
         <% end %>
 
         <%= if @error_message do %>

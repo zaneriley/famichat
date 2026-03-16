@@ -174,7 +174,7 @@ defmodule FamichatWeb.AuthLive.InviteLive do
     |> assign(:payload, %{})
     |> assign(:username, "")
     |> assign(:error, error_atom)
-    |> assign_page_metadata("Invite not valid")
+    |> assign_page_metadata(gettext("Invite not valid"))
   end
 
   @impl true

@@ -161,7 +161,8 @@ defmodule FamichatWeb.HomeLive do
       dev_mode: Application.get_env(:famichat, :environment) == :dev,
       show_welcome_prompt: false,
       welcome_message: "",
-      pending_welcome_message: nil
+      pending_welcome_message: nil,
+      welcome_saved: false
     )
   end
 
@@ -252,7 +253,8 @@ defmodule FamichatWeb.HomeLive do
        dev_mode: false,
        show_welcome_prompt: false,
        welcome_message: "",
-       pending_welcome_message: nil
+       pending_welcome_message: nil,
+       welcome_saved: false
      )
      |> stream(:messages, [], reset: true)
      |> push_navigate(to: locale_path(socket, "/login"))}
@@ -637,9 +639,12 @@ defmodule FamichatWeb.HomeLive do
     if message == "" do
       {:noreply, assign(socket, show_welcome_prompt: false)}
     else
+      Process.send_after(self(), :reset_welcome_saved, 2000)
+
       {:noreply,
        socket
        |> assign(show_welcome_prompt: false)
+       |> assign(welcome_saved: true)
        |> assign(pending_welcome_message: message)}
     end
   end
@@ -739,6 +744,11 @@ defmodule FamichatWeb.HomeLive do
           {:noreply, socket}
       end
     end
+  end
+
+  @impl true
+  def handle_info(:reset_welcome_saved, socket) do
+    {:noreply, assign(socket, :welcome_saved, false)}
   end
 
   @impl true

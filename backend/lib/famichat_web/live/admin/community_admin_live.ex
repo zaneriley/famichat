@@ -126,6 +126,17 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
         {:noreply,
          assign(socket, step: :unauthorized, error: :not_community_admin)}
 
+      {:error, %Ecto.Changeset{} = changeset} ->
+        if changeset.errors[:name] do
+          {:noreply, assign(socket, :error, :family_name_taken)}
+        else
+          Logger.warning(
+            "[CommunityAdminLive] create_family changeset error: #{inspect(changeset.errors)}"
+          )
+
+          {:noreply, assign(socket, :error, :unexpected)}
+        end
+
       {:error, reason} ->
         Logger.warning(
           "[CommunityAdminLive] create_family error: #{inspect(reason)}"
@@ -230,6 +241,9 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
 
   defp error_message(:family_name_too_long),
     do: gettext("Family name must be 100 characters or fewer.")
+
+  defp error_message(:family_name_taken),
+    do: gettext("A family with that name already exists.")
 
   defp error_message(:not_community_admin),
     do: gettext("This page is only accessible to the bootstrap admin.")

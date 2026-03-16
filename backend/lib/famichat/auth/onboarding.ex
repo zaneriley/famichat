@@ -954,6 +954,20 @@ defmodule Famichat.Auth.Onboarding do
            ) do
       community_id = Famichat.Accounts.CommunityScope.default_id()
 
+      # Revoke any existing unexpired, unconsumed setup tokens for this family
+      # before minting a new one. This ensures at most one live setup token
+      # exists per family at any time.
+      now = DateTime.utc_now()
+
+      from(t in Famichat.Accounts.UserToken,
+        where:
+          t.kind == "family_setup" and
+            is_nil(t.used_at) and
+            t.expires_at > ^now and
+            fragment("?->>'family_id' = ?", t.payload, ^family.id)
+      )
+      |> Repo.update_all(set: [used_at: now])
+
       case Tokens.issue(:family_setup, %{
              "family_id" => family.id,
              "family_name" => family.name,
