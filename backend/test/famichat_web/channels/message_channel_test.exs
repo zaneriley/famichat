@@ -1528,7 +1528,7 @@ defmodule FamichatWeb.MessageChannelTest do
       |> Conversation.create_changeset(conversation_attrs)
       |> Repo.insert!()
 
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    now = DateTime.utc_now(:microsecond)
 
     participant_rows =
       Enum.map(participant_ids, fn participant_id ->
@@ -1552,7 +1552,7 @@ defmodule FamichatWeb.MessageChannelTest do
     user_agent = Keyword.get(opts, :user_agent, "test-agent")
     ip = Keyword.get(opts, :ip, "127.0.0.1")
     trust? = Keyword.get(opts, :trust?, true)
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    now = DateTime.utc_now(:microsecond)
 
     trusted_until =
       if trust? do

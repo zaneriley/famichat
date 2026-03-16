@@ -1,6 +1,6 @@
 ---
 name: harness
-description: Read review findings, identify recurring LLM mistakes, and propose or implement harness improvements (skill prompts, hooks, CI checks) to prevent them.
+description: Read review findings, identify recurring mistake patterns, and implement automated enforcement (CI checks, lint rules, hooks) to prevent them. Skill prompt updates are a last resort.
 argument-hint: "[path to .tmp/<round>/ directory]"
 ---
 
@@ -62,24 +62,30 @@ For each qualifying category, check whether an automated check already exists:
 
 ## Step 4: Propose or Apply
 
-### Output types (ordered by leverage, lowest risk first)
+### Output types (ordered by leverage, highest first)
 
-**1. Skill prompt updates** — APPLY DIRECTLY
-Add constraints to existing `.agents/skills/*/SKILL.md` files. Example: adding "run `./run docs:boundary-check` before declaring done" to `/implement`.
+The goal is enforcement that does not depend on the LLM having read instructions. Prompt updates are context bloat — they rely on agent compliance and grow the instruction surface indefinitely. Prefer solutions the LLM cannot ignore.
 
-This is the highest-leverage, lowest-risk harness. The cost of a wrong skill prompt update is near zero (agents run an extra check that doesn't help). The cost of a missing one is repeated review findings.
+**1. CI workflow additions** — APPLY if grep is straightforward; otherwise PROPOSE
+New steps in `.github/workflows/lint.yml`. These block merges unconditionally — no agent compliance required. A failing CI step is absolute. A prompt instruction is a suggestion.
 
-**2. Project instruction updates** — APPLY DIRECTLY
-Add instructions to `AGENTS.md` that all agents see regardless of which skill is running.
+- Use `rg` for pattern-based checks (missing registrations, banned strings, naming violations)
+- Use `mix credo` custom rules for Elixir structural checks
+- Always assess false-positive risk before applying
 
-**3. agents hooks** — PROPOSE ONLY
-Hooks in `.agents/hooks/` that run pre/post tool execution. These add latency and may break tool execution. Propose with risk assessment. Do not implement without user approval.
+**2. Custom lint / Credo rules** — PROPOSE ONLY
+When a pattern is too structural for a simple grep (e.g., "every `:string` field in a changeset must have `validate_length`"). These run at compile time and travel with the codebase. More work to write, zero ongoing maintenance cost.
 
-**4. CI workflow additions** — PROPOSE ONLY
-New steps in `.github/workflows/lint.yml`. These block merges if they fail. Propose with false-positive assessment.
+**3. Claude Code hooks** — PROPOSE ONLY
+Hooks in `.claude/hooks/` that run on tool events (e.g., pre-Write, post-Edit). These catch mistakes at the moment they happen, before commit. They add latency but are automatic. Propose with risk assessment.
 
-**5. Mix tasks / custom lints** — PROPOSE ONLY IF GREP IS INSUFFICIENT
-Only when a pattern is too complex for a simple ripgrep rule.
+**4. Skill-scoped prompt updates** — APPLY DIRECTLY, but only when no automated check is feasible
+Add to `.agents/skills/*/SKILL.md` only. Use for checks that require human judgment, context-specific knowledge, or are inherently interactive (e.g., "test the admin panel as a non-admin"). Do NOT use for things a grep can catch.
+
+A skill prompt update must include the exact command the agent should run. "Run `rg 'phx-hook' lib | …`" is acceptable. "Be careful with hooks" is not.
+
+**5. AGENTS.md additions** — LAST RESORT ONLY
+AGENTS.md is loaded into every agent's context window on every invocation, forever, regardless of whether the rule is relevant. Every line added is a permanent tax on all future work. Add to AGENTS.md only when: (1) no automated check is feasible, AND (2) the rule applies broadly enough that paying the global context cost is justified. If the rule is only relevant to one skill or task type, update that skill's SKILL.md instead.
 
 **Never propose:** Git hooks (friction for human developer, agents may not trigger them).
 
@@ -112,14 +118,16 @@ Structure the output as:
 
 ## Escalation Ladder
 
-If a mistake category persists across rounds despite a skill prompt update, escalate:
+Start at the lowest level where a check is feasible. If the mistake recurs despite a check at the current level, move up.
 
-1. **Skill prompt instruction** — relies on agent compliance
-2. **Project-level instruction (AGENTS.md)** — broader reach, same compliance model
-3. **agents hook** — automated enforcement, does not rely on agent compliance
-4. **CI check** — automated, blocks merge
+1. **CI check** — automated, blocks merge, zero agent compliance required
+2. **Claude Code hook** — catches the mistake at the moment it happens, before commit
+3. **Project-level instruction (AGENTS.md)** — all agents see it, but relies on compliance
+4. **Skill prompt instruction** — narrowest reach, relies on agent compliance
 
-Each `/harness` invocation proposes one escalation level per category. The user decides whether to apply.
+For a new category, ask: "Can I write a grep that catches this?" If yes, start at level 1. If the pattern requires code understanding (not grep), start at level 2 or 3. Only fall back to a skill prompt if nothing automated is feasible.
+
+Each `/harness` invocation targets one level per category. The user decides whether to apply.
 
 ## Prevention Hierarchy
 
@@ -135,10 +143,10 @@ When evaluating proposals: a custom Credo rule is almost always better than a sm
 ## Scope Limits
 
 - Max **3 finding categories** per invocation. Pick the highest-leverage ones.
-- Max **1 CI change** proposed per invocation.
-- Max **1 new file** proposed per invocation.
-- Always start with skill prompt updates before proposing anything heavier.
-- Always surface existing checks before creating new ones.
+- Max **1 new CI step** applied per invocation (propose additional ones if needed).
+- Max **1 new file** created per invocation.
+- Always surface existing automated checks before creating new ones.
+- Only write skill prompt or AGENTS.md updates when no automated check is feasible for the category.
 
 ## Rules
 

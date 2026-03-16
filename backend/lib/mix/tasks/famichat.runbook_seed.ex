@@ -114,8 +114,7 @@ defmodule Mix.Tasks.Famichat.RunbookSeed do
   defp ensure_no_invalid_options!(invalid) do
     invalid_list =
       invalid
-      |> Enum.map(&format_invalid_option/1)
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", &format_invalid_option/1)
 
     Mix.raise("unrecognized options: #{invalid_list}")
   end
@@ -176,8 +175,7 @@ defmodule Mix.Tasks.Famichat.RunbookSeed do
         %{
           environment: to_string(Application.get_env(:famichat, :environment)),
           generated_at:
-            DateTime.utc_now()
-            |> DateTime.truncate(:second)
+            DateTime.utc_now(:second)
             |> DateTime.to_iso8601(),
           family: %{
             id: family.id,

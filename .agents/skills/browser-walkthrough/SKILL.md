@@ -351,7 +351,15 @@ Step 5: Document the post-creation state
 Step 6: Sign in as "zane" (the original admin)
 - Navigate to /en/login, passkey sign-in
 
-Step 7: Navigate to http://localhost:9000/en/admin
+Step 6b: ROLE CHECK — Test admin panel access as a non-admin user
+- Open a new tab
+- Navigate to /en/login and sign in as "parker" (the invited non-admin user from Agent 2, if available)
+- Navigate to /en/admin
+- EXPECTED: 403, redirect to home page (/en/), or "not authorized" — NOT the admin panel
+- If the admin panel loads for parker (shows families, add-family button), record this as P0: "Admin panel not gated by role check — any authenticated user has admin access"
+- Navigate back to the zane tab (or sign out of parker and back in as zane) before continuing
+
+Step 7: Navigate to http://localhost:9000/en/admin (as zane)
 - EXPECTED: Admin panel showing at least "Riley Family"
 - EXHAUSTIVE: Test every element (family list, add family button, any links)
 

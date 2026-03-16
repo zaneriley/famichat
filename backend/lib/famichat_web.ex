@@ -28,6 +28,7 @@ defmodule FamichatWeb do
       Famichat.Auth.RateLimit,
       Famichat.Auth.Recovery,
       Famichat.Auth.Sessions,
+      Famichat.Auth.Tokens,
       Famichat.Chat
     ],
     exports: [Endpoint]

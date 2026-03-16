@@ -218,7 +218,7 @@ defmodule Mix.Tasks.Famichat.BackfillSnapshotMacs do
         ),
         set: [
           snapshot_mac: mac,
-          updated_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+          updated_at: DateTime.utc_now(:microsecond)
         ]
       )
 

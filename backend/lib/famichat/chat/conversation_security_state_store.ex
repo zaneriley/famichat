@@ -313,7 +313,7 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
   end
 
   defp do_upsert(conversation_id, encoded_attrs, nil) do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    now = DateTime.utc_now(:microsecond)
 
     insert_attrs =
       encoded_attrs
@@ -337,7 +337,7 @@ defmodule Famichat.Chat.ConversationSecurityStateStore do
   end
 
   defp do_upsert(conversation_id, encoded_attrs, expected_lock_version) do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    now = DateTime.utc_now(:microsecond)
     next_lock_version = expected_lock_version + 1
 
     {updated_count, rows} =

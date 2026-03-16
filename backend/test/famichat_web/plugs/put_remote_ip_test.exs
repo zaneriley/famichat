@@ -85,7 +85,7 @@ defmodule FamichatWeb.Plugs.PutRemoteIpTest do
       # 127.0.0.1 = 0x7F000001 → high=0x7F00, low=0x0001
       conn =
         build_conn()
-        |> Map.put(:remote_ip, {0, 0, 0, 0, 0, 65535, 0x7F00, 0x0001})
+        |> Map.put(:remote_ip, {0, 0, 0, 0, 0, 65_535, 0x7F00, 0x0001})
         |> put_req_header("x-forwarded-for", "198.51.100.7")
 
       # Should normalize to 127.0.0.1 (trusted), then parse X-Forwarded-For

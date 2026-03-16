@@ -127,7 +127,7 @@ defmodule FamichatWeb.Plugs.PutRemoteIp do
 
   # Normalize IPv4-mapped IPv6 addresses (::ffff:a.b.c.d) to pure IPv4 tuples.
   # This ensures CIDR checks work correctly when proxies report IPv4-mapped IPv6.
-  defp normalize_ip({0, 0, 0, 0, 0, 65535, high, low}) do
+  defp normalize_ip({0, 0, 0, 0, 0, 65_535, high, low}) do
     {high >>> 8, high &&& 0xFF, low >>> 8, low &&& 0xFF}
   end
 

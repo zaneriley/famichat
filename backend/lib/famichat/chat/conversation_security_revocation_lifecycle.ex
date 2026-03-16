@@ -22,16 +22,14 @@ defmodule Famichat.Chat.ConversationSecurityRevocationLifecycle do
   def stage_client_revocation(client_id, revocation_ref, attrs)
       when is_binary(client_id) and is_binary(revocation_ref) and is_map(attrs) do
     with :ok <- validate_revocation_ref(revocation_ref),
-         {:ok, user_id} <- user_id_for_client(client_id),
-         {:ok, result} <-
-           stage_subject_revocation(
-             :client,
-             client_id,
-             user_id,
-             revocation_ref,
-             attrs
-           ) do
-      {:ok, result}
+         {:ok, user_id} <- user_id_for_client(client_id) do
+      stage_subject_revocation(
+        :client,
+        client_id,
+        user_id,
+        revocation_ref,
+        attrs
+      )
     end
   end
 
@@ -45,16 +43,14 @@ defmodule Famichat.Chat.ConversationSecurityRevocationLifecycle do
 
   def stage_user_revocation(user_id, revocation_ref, attrs)
       when is_binary(user_id) and is_binary(revocation_ref) and is_map(attrs) do
-    with :ok <- validate_revocation_ref(revocation_ref),
-         {:ok, result} <-
-           stage_subject_revocation(
-             :user,
-             user_id,
-             user_id,
-             revocation_ref,
-             attrs
-           ) do
-      {:ok, result}
+    with :ok <- validate_revocation_ref(revocation_ref) do
+      stage_subject_revocation(
+        :user,
+        user_id,
+        user_id,
+        revocation_ref,
+        attrs
+      )
     end
   end
 
@@ -78,9 +74,8 @@ defmodule Famichat.Chat.ConversationSecurityRevocationLifecycle do
            ConversationSecurityRevocationStore.load_by_ref(
              conversation_id,
              revocation_ref
-           ),
-         {:ok, completed} <- complete_record(record, attrs) do
-      {:ok, completed}
+           ) do
+      complete_record(record, attrs)
     end
   end
 
@@ -108,9 +103,8 @@ defmodule Famichat.Chat.ConversationSecurityRevocationLifecycle do
            ConversationSecurityRevocationStore.load_by_ref(
              conversation_id,
              revocation_ref
-           ),
-         {:ok, failed} <- fail_record(record, attrs) do
-      {:ok, failed}
+           ) do
+      fail_record(record, attrs)
     end
   end
 
@@ -140,59 +134,57 @@ defmodule Famichat.Chat.ConversationSecurityRevocationLifecycle do
       revocation_reason: revocation_reason
     }
 
-    cond do
-      conversation_count > sync_fanout_limit ->
-        # TODO(mls-revocation): hand off to an async worker (for example Oban)
-        # instead of failing when fanout exceeds the synchronous safety limit.
-        {:error, :async_required,
-         %{
-           reason: :fanout_limit_exceeded,
-           conversation_count: conversation_count,
-           sync_fanout_limit: sync_fanout_limit
-         }}
+    if conversation_count > sync_fanout_limit do
+      # TODO(mls-revocation): hand off to an async worker (for example Oban)
+      # instead of failing when fanout exceeds the synchronous safety limit.
+      {:error, :async_required,
+       %{
+         reason: :fanout_limit_exceeded,
+         conversation_count: conversation_count,
+         sync_fanout_limit: sync_fanout_limit
+       }}
+    else
+      case Repo.transaction(fn ->
+             Enum.reduce_while(
+               conversation_ids,
+               initial_summary(),
+               fn conversation_id, acc ->
+                 case stage_for_conversation(
+                        conversation_id,
+                        revocation_ref,
+                        stage_attrs,
+                        proposal_ref
+                      ) do
+                   {:ok, summary_update} ->
+                     {:cont, merge_summary(acc, summary_update)}
 
-      true ->
-        case Repo.transaction(fn ->
-               Enum.reduce_while(
-                 conversation_ids,
-                 initial_summary(),
-                 fn conversation_id, acc ->
-                   case stage_for_conversation(
-                          conversation_id,
-                          revocation_ref,
-                          stage_attrs,
-                          proposal_ref
-                        ) do
-                     {:ok, summary_update} ->
-                       {:cont, merge_summary(acc, summary_update)}
-
-                     {:error, code, details} ->
-                       Repo.rollback(
-                         {code,
-                          Map.put(details, :conversation_id, conversation_id)}
-                       )
-                   end
+                   {:error, code, details} ->
+                     Repo.rollback(
+                       {code,
+                        Map.put(details, :conversation_id, conversation_id)}
+                     )
                  end
-               )
-             end) do
-          {:ok, summary} ->
-            {:ok,
-             %{
-               revocation_ref: revocation_ref,
-               subject_type: subject_type,
-               subject_id: subject_id,
-               user_id: user_id,
-               conversation_count: conversation_count,
-               conversation_ids: conversation_ids,
-               started_count: summary.started_count,
-               existing_count: summary.existing_count,
-               pending_commit_count: summary.pending_commit_count,
-               completed_count: summary.completed_count
-             }}
+               end
+             )
+           end) do
+        {:ok, summary} ->
+          {:ok,
+           %{
+             revocation_ref: revocation_ref,
+             subject_type: subject_type,
+             subject_id: subject_id,
+             user_id: user_id,
+             conversation_count: conversation_count,
+             conversation_ids: conversation_ids,
+             started_count: summary.started_count,
+             existing_count: summary.existing_count,
+             pending_commit_count: summary.pending_commit_count,
+             completed_count: summary.completed_count
+           }}
 
-          {:error, {code, details}} ->
-            {:error, code, details}
-        end
+        {:error, {code, details}} ->
+          {:error, code, details}
+      end
     end
   end
 

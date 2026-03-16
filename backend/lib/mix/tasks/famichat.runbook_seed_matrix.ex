@@ -159,8 +159,7 @@ defmodule Mix.Tasks.Famichat.RunbookSeedMatrix do
   defp ensure_no_invalid_options!(invalid) do
     invalid_list =
       invalid
-      |> Enum.map(&format_invalid_option/1)
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", &format_invalid_option/1)
 
     Mix.raise("unrecognized options: #{invalid_list}")
   end
@@ -236,8 +235,7 @@ defmodule Mix.Tasks.Famichat.RunbookSeedMatrix do
            {:ok, third_session} <- start_session(third, "third"),
            {:ok, outsider_session} <- start_session(outsider, "outsider") do
         now =
-          DateTime.utc_now()
-          |> DateTime.truncate(:second)
+          DateTime.utc_now(:second)
           |> DateTime.to_iso8601()
 
         %{

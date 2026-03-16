@@ -285,7 +285,7 @@
         </button>
 
         <a
-          href={locale_path(@socket, "/")}
+          href={locale_path(assigns, "/")}
           class="ac-secondary-button w-full text-center"
         >
           <.typography tag="span" size="md" color="deemphasized">
@@ -307,7 +307,7 @@
 
       <div class="flex flex-col gap-md">
         <a
-          href={locale_path(@socket, "/login")}
+          href={locale_path(assigns, "/login")}
           class="ac-primary-button w-full text-center"
         >
           <.typography tag="span" size="md" color="main">

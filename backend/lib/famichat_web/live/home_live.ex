@@ -354,40 +354,38 @@ defmodule FamichatWeb.HomeLive do
   def handle_event("revoke-target-device", _params, socket) do
     target = socket.assigns.revoke_target |> to_string() |> String.trim()
 
-    cond do
-      target == "" ->
-        {:noreply,
-         assign(socket, error_message: gettext("Enter a device id to revoke."))}
+    if target == "" do
+      {:noreply,
+       assign(socket, error_message: gettext("Enter a device id to revoke."))}
+    else
+      case Sessions.revoke_device(socket.assigns.user_id, target) do
+        {:ok, :revoked} ->
+          {:noreply,
+           socket
+           |> assign(error_message: nil)
+           |> put_system_notice(
+             gettext("Revoked device %{device}.", device: target)
+           )}
 
-      true ->
-        case Sessions.revoke_device(socket.assigns.user_id, target) do
-          {:ok, :revoked} ->
-            {:noreply,
-             socket
-             |> assign(error_message: nil)
-             |> put_system_notice(
-               gettext("Revoked device %{device}.", device: target)
-             )}
+        {:error, :not_found} ->
+          {:noreply,
+           assign(
+             socket,
+             error_message:
+               gettext("Device %{device} not found for this user.",
+                 device: target
+               )
+           )}
 
-          {:error, :not_found} ->
-            {:noreply,
-             assign(
-               socket,
-               error_message:
-                 gettext("Device %{device} not found for this user.",
-                   device: target
-                 )
-             )}
-
-          {:error, reason} ->
-            {:noreply,
-             assign(socket,
-               error_message:
-                 gettext("Device revoke failed: %{reason}",
-                   reason: inspect(reason)
-                 )
-             )}
-        end
+        {:error, reason} ->
+          {:noreply,
+           assign(socket,
+             error_message:
+               gettext("Device revoke failed: %{reason}",
+                 reason: inspect(reason)
+               )
+           )}
+      end
     end
   end
 
@@ -420,15 +418,13 @@ defmodule FamichatWeb.HomeLive do
   def handle_event("recover-conversation-security-state", _params, socket) do
     recovery_ref = socket.assigns.recovery_ref |> to_string() |> String.trim()
 
-    cond do
-      recovery_ref == "" ->
-        {:noreply,
-         assign(socket,
-           error_message: "Enter a recovery ref before recovering."
-         )}
-
-      true ->
-        case Chat.recover_conversation_security_state(
+    if recovery_ref == "" do
+      {:noreply,
+       assign(socket,
+         error_message: "Enter a recovery ref before recovering."
+       )}
+    else
+      case Chat.recover_conversation_security_state(
                socket.assigns.conversation_id,
                recovery_ref,
                %{
@@ -603,36 +599,34 @@ defmodule FamichatWeb.HomeLive do
     user = socket.assigns[:current_user]
     family = socket.assigns[:family]
 
-    cond do
-      is_nil(user) or is_nil(family) ->
-        {:noreply,
-         assign(socket,
-           error_message:
-             gettext("You must be in a family to generate an invite.")
-         )}
+    if is_nil(user) or is_nil(family) do
+      {:noreply,
+       assign(socket,
+         error_message:
+           gettext("You must be in a family to generate an invite.")
+       )}
+    else
+      case Onboarding.issue_invite(user.id, nil, %{
+             household_id: family.id,
+             role: "member"
+           }) do
+        {:ok, %{invite: invite_token}} ->
+          invite_url =
+            "#{FamichatWeb.Endpoint.url()}/#{socket.assigns[:user_locale] || "en"}/invites/#{invite_token}"
 
-      true ->
-        case Onboarding.issue_invite(user.id, nil, %{
-               household_id: family.id,
-               role: "member"
-             }) do
-          {:ok, %{invite: invite_token}} ->
-            invite_url =
-              "#{FamichatWeb.Endpoint.url()}/#{socket.assigns[:user_locale] || "en"}/invites/#{invite_token}"
+          {:noreply,
+           socket
+           |> assign(invite_url: invite_url, error_message: nil)
+           |> assign(show_welcome_prompt: true, welcome_message: "")}
 
-            {:noreply,
-             socket
-             |> assign(invite_url: invite_url, error_message: nil)
-             |> assign(show_welcome_prompt: true, welcome_message: "")}
+        {:error, reason} ->
+          Logger.warning("[HomeLive] issue_invite error: #{inspect(reason)}")
 
-          {:error, reason} ->
-            Logger.warning("[HomeLive] issue_invite error: #{inspect(reason)}")
-
-            {:noreply,
-             assign(socket,
-               error_message: gettext("Could not generate invite link.")
-             )}
-        end
+          {:noreply,
+           assign(socket,
+             error_message: gettext("Could not generate invite link.")
+           )}
+      end
     end
   end
 

@@ -58,6 +58,20 @@ jobs:
             exit 1
           fi
 
+      - name: Check all phx-hook names are registered in app.js
+        working-directory: backend
+        run: |
+          hooks_in_templates=$(rg 'phx-hook="([^"]+)"' lib --only-matching --no-filename \
+            | sed 's/phx-hook="//;s/"//' | sort -u)
+          failed=0
+          for hook in $hooks_in_templates; do
+            if ! grep -qE "^\s+$hook\s*:" assets/js/app.js; then
+              echo "ERROR: phx-hook=\"$hook\" used in templates but not registered in assets/js/app.js"
+              failed=1
+            fi
+          done
+          [ $failed -eq 0 ] && echo "All phx-hook names registered." || exit 1
+
       - name: Run full lint suite
         working-directory: backend
         run: ./run ci:lint

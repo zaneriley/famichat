@@ -17,11 +17,12 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
 
   require Logger
 
+  alias Famichat.Accounts.User
   alias Famichat.Auth.Onboarding
   alias Famichat.Chat.Family
   alias Famichat.Repo
 
-  import Ecto.Query
+  import Ecto.Query, only: [from: 2]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -170,11 +171,9 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
   end
 
   defp check_admin_status(user_id) do
-    alias Famichat.Accounts.HouseholdMembership
-
     Repo.exists?(
-      from(m in HouseholdMembership,
-        where: m.user_id == ^user_id and m.role == :admin
+      from(u in User,
+        where: u.id == ^user_id and u.community_admin == true and u.status == :active
       )
     )
   end
@@ -205,10 +204,7 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
     do: gettext("Family name must be 100 characters or fewer.")
 
   defp error_message(:not_community_admin),
-    do:
-      gettext(
-        "You need to be an admin of at least one family space to access this page."
-      )
+    do: gettext("This page is only accessible to the bootstrap admin.")
 
   defp error_message(:not_authenticated),
     do: gettext("Please sign in to access this page.")

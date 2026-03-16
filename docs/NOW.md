@@ -1,6 +1,6 @@
 # Famichat NOW
 
-**Last updated:** 2026-03-14
+**Last updated:** 2026-03-16
 
 Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [ADR 012](decisions/012-spa-wasm-client-architecture.md).
 
@@ -8,13 +8,19 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-Two new P0 deploy blockers found (Dockerfile path, missing auto-conversation). REGISTRATION_OPEN config flag added. Dead code audit identified 11 removable files/deps. Deploying to homelab via Docker Compose + Cloudflare Tunnel.
+6 new P0 blockers found in 2026-03-16 browser walkthrough: admin panel ungated (any user reaches `/en/admin`), auth bypass in invite flow (session set before passkey), Admin Controls shown to all users, username length unvalidated (206-char name persisted), setup invite-gen crash, token not invalidated after `:pending` user creation. Also: `db:reset` volume name bug fixed; `WEBAUTHN_ORIGIN` dev default fixed (was hardcoded to `:9000`, app runs on `:8002`).
 
 ---
 
+## What just happened (2026-03-16)
+
+- **Browser walkthrough (fresh install)** — 6-agent QA pass against a clean DB. Found 6 P0s, 12 P1s, 8 P2s. Critical security findings: `/en/admin` has no role check (any authenticated user is a community admin), `invites/complete` sets a session cookie before the WebAuthn ceremony (auth bypass — abandoned ceremony = silent login with no passkey), "Admin Controls" accordion (Revoke Device, Reset Security State) visible to all users. Username `validate_length` missing at all entry points — admin account created with 206-char name. Setup invite-gen button crashes LiveView. Invite token not invalidated after `:pending` user creation. All findings promoted to BACKLOG.md.
+- **`WEBAUTHN_ORIGIN` dev default fixed** — was hardcoded to `http://localhost:9000`; app runs on `:8002`. Fixed to derive from `PORT` env var (`runtime.exs`). Passkeys now work in all real browsers at dev URL.
+- **`db:reset` fixed (3 bugs)** — volume name used `$(basename pwd)` = `backend` but Compose project name is `famichat` (from `COMPOSE_PROJECT_NAME` in `.env`); `docker compose stop` leaves stopped containers referencing the volume, blocking `volume rm` (fixed to `docker compose rm -f --stop`); migrations ran after waiting for web health, but web crashes on pending migrations — chicken-and-egg (fixed to run migrations via one-off container before waiting for web health).
+
 ## What just happened (2026-03-14)
 
-- **Deploy readiness scan** — 5-agent audit of Docker build, CI/GitHub, env config, first-boot UX, and Cloudflare Tunnel compatibility. Found 2 new P0 blockers: Dockerfile `../run` path bug (asset build fails) and no auto-conversation creation after second member joins (home page empty). Cloudflare Tunnel secure cookie and check_origin concerns verified as false positives (browser sees HTTPS; Phoenix checks Origin header against configured list, not conn properties). 6 new P2 items promoted to BACKLOG.md.
+- **Deploy readiness scan** — 5-agent audit of Docker build, CI/GitHub, env config, first-boot UX, and Cloudflare Tunnel compatibility. Dockerfile `../run` → `/app/run` fixed (8fd6ead). Auto-conversation "missing" was a false positive — `schedule_direct_conversation_creation` already exists in onboarding.ex:1293 and is called from `complete_registration`. Cloudflare Tunnel secure cookie and check_origin concerns also verified as false positives. 6 P2 items promoted to BACKLOG.md; all resolved in same commit.
 - **REGISTRATION_OPEN config flag** — gates `/families/new` in production. Defaults false in prod (invite-only), true in dev. Checked at LiveView mount + login template. Zero new routes or controllers. 5 files modified: config.exs, runtime.exs, family_new_live.ex, login_live.html.heex, .env.production.example.
 - **Dead code audit** — 5-agent sweep found 5 dead files (TestBroadcastController, ThemeSwitcher, ast_renderer.ex, Authenticators shim, `backend/.github/workflows/ci.yml`), dead JS import (ThemeSwitcherHook from nonexistent file), dead config blocks (Content modules in 4 config files), dead deps (excoveralls, likely bcrypt_elixir/timex/uuid), orphaned mix.lock entries (ex_rated, ex2ms). Cleanup agents spawned.
 
@@ -77,7 +83,16 @@ Two new P0 deploy blockers found (Dockerfile path, missing auto-conversation). R
 
 ## Current blockers
 
-No P0 blockers remain. The following P1 items are tracked in BACKLOG.md but do not block L1 2-person dogfood:
+**6 P0 blockers found in 2026-03-16 browser walkthrough — must fix before handing URL to family:**
+
+- `/en/admin` has no role check — any authenticated user reaches the full community admin panel
+- `invites/complete` sets session cookie before passkey completes — auth bypass; abandoned ceremony = silent login with no passkey
+- Invite/setup token not invalidated after `:pending` user creation — token reusable with different username
+- "Admin Controls" (Revoke Device, Reset Security State) shown to all users on home page
+- Username `validate_length` missing at all entry points — 206-char names accepted and persisted
+- LiveView crash on "Generate invite link" in setup post-passkey step — first-run admin cannot issue invite from setup
+
+The following P1 items are tracked in BACKLOG.md but do not block L1 2-person dogfood:
 
 ### P1 — Signed-in app is still first-membership-wins
 
@@ -95,9 +110,9 @@ L1 target: 2-person dogfood (operator + spouse), single family, text messaging o
 
 | Gate | Status | Notes |
 |---|---|---|
-| Operator bootstraps instance | PASS | `/setup` → passkey → auto-auth → home (verified in browser) |
-| Operator invites spouse | PASS | Invite generation from home, 72h TTL, warm copy |
-| Spouse completes onboarding | PASS | Invite → username → passkey → auto-auth → conversation |
+| Operator bootstraps instance | PARTIAL | Setup → passkey → auto-auth → home works. Invite generation from setup crashes (P0). Passkey now works in real browsers (WEBAUTHN_ORIGIN fix 2026-03-16). |
+| Operator invites spouse | PARTIAL | Invite generation from home works. Token not invalidated post-user-creation (P0). Auth bypass found (P0). |
+| Spouse completes onboarding | PARTIAL | Auth bypass: session set before passkey; user can skip passkey entirely (P0). |
 | Both users can exchange messages | PASS | Channel join, send, receive, browser notifications |
 | Japanese locale works end-to-end | PASS | Locale persisted to DB, 22 errors.po translated, 0 fuzzy flags |
 | Instance deploys with env vars only | PASS | .env.production.example, runtime.exs guards raise on missing secrets |
@@ -147,8 +162,8 @@ Deploy to homelab via Docker Compose + Cloudflare Tunnel. This IS the product ex
 - [x] Remove `pull_repository()` from `docker-entrypoint-web` — calls nonexistent function; container crashes on boot
 - [x] Remove `config :famichat, :cache, disabled: true` from `prod.exs` — disables all rate limits in production
 - [x] Fix or remove CORSPlug — hardcoded to `localhost:3000`; blocks requests from production domain
-- [ ] Fix Dockerfile `../run` → `./run` on line 36 — asset build step references nonexistent path
-- [ ] Auto-create 1:1 conversation on second member join — home page is empty after both users register
+- [x] Fix Dockerfile `../run` → `/app/run` on line 36 — asset build step referenced nonexistent path (8fd6ead)
+- [-] Auto-create 1:1 conversation on second member join — false positive: already implemented in onboarding.ex:1293
 
 ### 2. Post-deploy browser walkthrough
 Run the full CUJ against the deployed instance: operator bootstrap → invite generation → spouse onboarding → message exchange. Catch deploy-specific issues: env var misconfiguration, WebSocket upgrade behind Cloudflare, passkey RP ID matching.

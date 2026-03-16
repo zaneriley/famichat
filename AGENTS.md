@@ -69,6 +69,11 @@ These rules exist because agents repeatedly committed broken code that was never
 - Run `cd backend && ./run docs:boundary-check` after any change that touches schemas or context modules. Zero violations is the gate.
 - Naming must match `docs/ia-lexicon.md`. Use `family` not `household`, `passkey` not `credential`, `community` not `server`. The lexicon is the canonical source.
 
+### LiveView Authorization
+
+- **Any LiveView whose path contains `admin` must verify role on `on_mount`, not just authentication.** Passing `:ensure_authenticated` is not sufficient. Add an explicit check: `if current_user.role != :community_admin, do: redirect(to: ~p"/en/")`. Being the developer means you are always the admin — tests with non-admin users are the only way to catch this gap.
+- **Conditionally rendered destructive UI (Admin Controls, revoke, reset) must use the same role check.** A `<%= if @current_user.role == :community_admin do %>` guard is required. Never condition on `current_user` presence alone.
+
 ### LiveView State Survival
 
 - **Assign-only state is lost on WebSocket reconnect.** Any state that must survive a network interruption (mobile sleep, tab backgrounding, flaky connection) must be stored in one of: session (via `put_session`), URL params (via `push_patch`), or the database.

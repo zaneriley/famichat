@@ -14,25 +14,20 @@ defmodule Famichat.Communities do
 
   import Ecto.Query, warn: false
 
-  alias Famichat.Accounts.{Community, CommunityScope, User}
+  alias Famichat.Accounts.{Community, User}
   alias Famichat.Chat.{Conversation, Family}
   alias Famichat.Repo
 
-  @spec current_community!() :: Community.t()
-  def current_community! do
-    case first_community() do
-      %Community{} = community ->
-        community
+  @doc """
+  Returns the singleton operator-owned community, creating it with default
+  values on first access.
 
-      nil ->
-        %Community{}
-        |> Community.changeset(%{
-          id: CommunityScope.default_id(),
-          name: CommunityScope.default_name()
-        })
-        |> Repo.insert!()
-    end
-  end
+  Delegates to `Famichat.Accounts.current_community!/0`, which owns the
+  implementation to avoid a dependency cycle between `Famichat.Communities`
+  and `Famichat.Chat`.
+  """
+  @spec current_community!() :: Community.t()
+  defdelegate current_community!(), to: Famichat.Accounts
 
   @spec backfill_nil_community_ids!() ::
           %{
@@ -50,13 +45,6 @@ defmodule Famichat.Communities do
       families_updated: backfill(Family, community.id),
       conversations_updated: backfill(Conversation, community.id)
     }
-  end
-
-  defp first_community do
-    Community
-    |> order_by([community], asc: community.inserted_at, asc: community.id)
-    |> limit(1)
-    |> Repo.one()
   end
 
   defp backfill(schema, community_id) do

@@ -19,9 +19,7 @@ defmodule FamichatWeb.AuthLive.FamilyNewLive do
 
   @impl true
   def mount(_params, session, socket) do
-    unless Application.get_env(:famichat, :registration_open, false) do
-      {:ok, push_navigate(socket, to: locale_path(socket, "/login"))}
-    else
+    if Application.get_env(:famichat, :registration_open, false) do
       remote_ip = Map.get(session, "remote_ip", "unknown")
 
       {:ok,
@@ -31,6 +29,8 @@ defmodule FamichatWeb.AuthLive.FamilyNewLive do
        |> assign(:error, nil)
        |> assign(:remote_ip, remote_ip)
        |> assign_page_metadata(gettext("Set up your family space"))}
+    else
+      {:ok, push_navigate(socket, to: locale_path(socket, "/login"))}
     end
   end
 

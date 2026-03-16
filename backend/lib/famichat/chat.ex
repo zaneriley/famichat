@@ -9,14 +9,13 @@ defmodule Famichat.Chat do
     deps: [
       Famichat,
       Famichat.Accounts,
-      Famichat.Communities,
       Famichat.Auth.Households,
       Famichat.Auth.Identity
     ]
 
   import Ecto.Query, warn: false
   alias Famichat.Repo
-  alias Famichat.Communities
+  alias Famichat.Accounts
   alias Famichat.Chat.Family
   alias Famichat.Accounts.User
   alias Famichat.Auth.Households
@@ -176,14 +175,14 @@ defmodule Famichat.Chat do
             community_id
 
           _ ->
-            explicit || Communities.current_community!().id
+            explicit || Accounts.current_community!().id
         end
 
       is_binary(explicit) ->
         explicit
 
       true ->
-        Communities.current_community!().id
+        Accounts.current_community!().id
     end
   end
 
@@ -191,7 +190,7 @@ defmodule Famichat.Chat do
     if Map.has_key?(attrs, :community_id) or Map.has_key?(attrs, "community_id") do
       attrs
     else
-      Map.put(attrs, :community_id, Communities.current_community!().id)
+      Map.put(attrs, :community_id, Accounts.current_community!().id)
     end
   end
 

@@ -1,6 +1,6 @@
 # Famichat Backlog
 
-**Last updated:** 2026-03-14
+**Last updated:** 2026-03-16
 
 Single prioritized index of every known issue, gap, debt item, and planned work. If it is not in this file, it is not tracked. Agent research, `.tmp/` files, handoff docs — those are source material. Findings get promoted to a one-liner here or they rot.
 
@@ -124,8 +124,14 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Remove `pull_repository()` call and dead content-repo code from `docker-entrypoint-web` — container crashes on every production startup → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
 - [x] Remove `config :famichat, :cache, disabled: true` from prod.exs — all rate limits silently unenforced in production → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
 - [x] Fix CORS: remove CORSPlug for L1 or make origin configurable via env var — hardcoded localhost blocks browser requests from production domain → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P0-dogfood | agent:consensus
-- [ ] Fix Dockerfile `../run` → `./run` on line 36 — Docker build fails on asset compilation; operator cannot deploy → .tmp/2026-03-14-deploy-scan/ci-github.md | P0-dogfood | agent:deploy-scan
-- [ ] Auto-create 1:1 conversation when second family member joins — both users stuck on empty home page with no way to message → .tmp/2026-03-14-deploy-scan/first-boot.md | P0-dogfood | agent:deploy-scan
+- [x] Fix Dockerfile `../run` → `/app/run` on line 36 — Docker build fails on asset compilation; operator cannot deploy → .tmp/2026-03-14-deploy-scan/ci-github.md | P0-dogfood | agent:deploy-scan (8fd6ead)
+- [-] Auto-create 1:1 conversation when second family member joins — false positive: `schedule_direct_conversation_creation` already exists in onboarding.ex:1293 and is called from `complete_registration` at line 541 → backend/lib/famichat/auth/onboarding.ex:1293 | agent:deploy-scan
+- [x] Fix LiveView crash on "Generate invite link" in setup post-passkey step — first-run admin cannot issue invite from setup; must navigate away → .tmp/2026-03-16-browser-walkthrough/agent-1-bootstrap.md | P0-dogfood | browser-walkthrough-2026-03-16 (root: mount_connected redirected to /login on WS reconnect after passkey; fixed with fetch_admin_awaiting_first_invite/0 + locale_path render fix; 10 new tests)
+- [-] Gate session creation in `invites/complete` behind passkey completion — Playwright artifact: complete_invite never issues a session cookie; session is only created in passkey_register after WebAuthn completes; verified in auth_controller.ex | P0-dogfood | browser-walkthrough-2026-03-16
+- [ ] Pending-user-before-passkey architectural gap — :pending user exists between complete_invite and passkey_register; find_or_create_pending_user makes this idempotent so token reuse is blocked, but user record without credential is debt → .tmp/2026-03-16-browser-walkthrough/agent-2-invite-flow.md | P2-debt | browser-walkthrough-2026-03-16
+- [x] Add community-admin role check to CommunityAdminLive (`/en/admin`) — any authenticated user can view all families and generate setup links → .tmp/2026-03-16-browser-walkthrough/agent-3-family-creation.md | P0-dogfood | browser-walkthrough-2026-03-16 (added community_admin boolean to users; migration 20260316120000; assert_community_admin checks community_admin==true AND status==:active)
+- [-] Remove or gate "Admin Controls" (Revoke/Reset Security State) in HomeLive for non-admin users — HomeLive gates this accordion on @dev_mode (not @is_admin); hidden in production by design; verified in home_live.html.heex | P0-dogfood | browser-walkthrough-2026-03-16
+- [x] Add `validate_length` on username in `User.changeset` at all entry points (setup, invite, family-start) — 206-char username accepted and persisted throughout session → .tmp/2026-03-16-browser-walkthrough/agent-1-bootstrap.md | P0-dogfood | browser-walkthrough-2026-03-16 (validate_bootstrap_username now rejects >50 chars; SetupLive handles :username_too_long with clear error message)
 
 ## Blocks confidence (P1)
 <!-- Can dogfood, but these make us nervous -->
@@ -183,6 +189,18 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Add WEBAUTHN_ORIGIN https:// scheme warning to runtime.exs — http:// origin causes opaque passkey failure with no server-side diagnostic → .tmp/2026-03-11-config-ux/round-1/consensus.md | P1-confidence | agent:consensus
 - [x] Batch missing-required-var errors into single raise in runtime.exs — operator restarts container 12 times fixing one var at a time → .tmp/2026-03-11-config-ux/round-1/consensus.md | P1-confidence | agent:consensus
 - [x] Fix empty POSTGRES_PASSWORD bypass in runtime.exs (`{:prod, ""}` guard) — operator with unset password gets running system with empty DB password → .tmp/2026-03-11-compose-and-env/round-1/consensus.md | P1-confidence | agent:consensus
+- [ ] Register `Clipboard` LiveView hook in `app.js` — all "Copy link" buttons broken sitewide; console error: unknown hook "Clipboard" → .tmp/2026-03-16-browser-walkthrough/agent-3-family-creation.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Add clipboard write confirmation ("Copied!") to all copy buttons — no visual feedback; user cannot tell if copy succeeded → .tmp/2026-03-16-browser-walkthrough/agent-1-bootstrap.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Deduplicate invite token generation; show existing-token state on panel — each click mints a new 72-hr token with no warning about prior valid tokens → .tmp/2026-03-16-browser-walkthrough/agent-2-invite-flow.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Add success feedback to "Save message" welcome prompt button — dismisses silently; operator cannot confirm message was saved → .tmp/2026-03-16-browser-walkthrough/agent-2-invite-flow.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Translate browser `<title>` on invite error page to current locale — tab title shows English "Invite not valid" when page body is Japanese → .tmp/2026-03-16-browser-walkthrough/agent-4-locale-errors.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Preserve locale prefix on authenticated post-login redirects — `/ja/login` → `/en/admin` instead of `/ja/admin`; URL locale and UI locale diverge → .tmp/2026-03-16-browser-walkthrough/agent-4-locale-errors.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Fix duplicate paragraph on invite error page — h1 text repeated verbatim as `<p>`; raw fallback message leaking into template → .tmp/2026-03-16-browser-walkthrough/agent-4-locale-errors.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Fix unstyled bare-HTML 404 for `/en/families/start/<invalid-token>` — no CSS or app chrome; completely different treatment from all other error pages → .tmp/2026-03-16-browser-walkthrough/agent-4-locale-errors.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Add "Go back" to passkey step in `FamilySetupLive` — user trapped with no escape if ceremony hangs; `InviteLive` has this, `FamilySetupLive` does not → .tmp/2026-03-16-browser-walkthrough/agent-5-link-basher.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Translate "Invite a family member" button label in Japanese locale — sole untranslated string on home page when `/ja/` active → .tmp/2026-03-16-browser-walkthrough/agent-1-bootstrap.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Show specific error on duplicate family name in `/en/admin` add-family form — generic "Something went wrong" gives operator no actionable guidance → .tmp/2026-03-16-browser-walkthrough/agent-5-link-basher.md | P1-confidence | browser-walkthrough-2026-03-16
+- [ ] Fix `TypeError: Cannot read properties of undefined (reading 'size')` on `/admin/message` load — fires on mount before user interaction; breaks all JS on the page → .tmp/2026-03-16-browser-walkthrough/agent-5-link-basher.md | P1-confidence | browser-walkthrough-2026-03-16
 
 ## Known debt (P2)
 <!-- Tracked, not blocking, will matter at scale or for public launch -->
@@ -206,7 +224,7 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [ ] Add photo sharing for 1:1 conversations — half of couple communication is visual; punted to next cycle → .tmp/2026-03-09-mlp-ux/consensus.md | P2-debt | agent:consensus
 - [x] Remove Playwright from Docker assets stage — 300MB+ browser binaries add 5-10 min to build → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Strip unnecessary packages from prod Dockerfile stage — 100MB+ build tools in prod image → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
-- [ ] Remove dead `github_webhook` dep from mix.exs and config.exs — dead dependency inflates compile surface → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
+- [x] Remove dead `github_webhook` dep from mix.exs and config.exs — dead dependency inflates compile surface → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus (8fd6ead)
 - [x] Remove dead content-repo env vars from `.env.production.example` — operators confused by irrelevant config → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Remove `/api/v1/hello` route and HelloController — dev artifact in production API → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Establish green CI baseline with `--exclude` tags for known-broken tests — red CI masks new regressions → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
@@ -219,12 +237,20 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [ ] Add logging configuration to docker-compose.production.yml — no log rotation; logs fill disk → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Add CSP report-uri logging endpoint for operator-visible violation diagnostics — CSP violations invisible without DevTools; operators can't diagnose from docker logs → .tmp/2026-03-11-security-config/round-1/consensus.md | P2-debt | agent:consensus
 - [x] Remove dead CSP_SCHEME/CSP_HOST/CSP_PORT from `.env.production.example` — unused since CSP derives from endpoint config; creates false confidence → .tmp/2026-03-11-compose-and-env/round-1/consensus.md | P2-debt | agent:consensus
-- [ ] Move or delete `backend/.github/workflows/ci.yml` — dead workflow never executed by GitHub Actions; full test suite not running in CI → .tmp/2026-03-14-deploy-scan/ci-github.md | P2-debt | agent:deploy-scan
-- [ ] Remove `excoveralls` dep from mix.exs — no Coveralls integration exists; dead dependency inflates compile → .tmp/2026-03-14-deploy-scan/ci-github.md | P2-debt | agent:deploy-scan
-- [ ] Remove dead modules (TestBroadcastController, ThemeSwitcher, ast_renderer.ex, Authenticators shim) — orphaned code with zero references | P2-debt | agent:deploy-scan
-- [ ] Remove ThemeSwitcherHook import from app.js — references nonexistent JS file | P2-debt | agent:deploy-scan
-- [ ] Remove dead Content module config from config.exs, dev.exs, prod.exs, test.exs — ghost config for deleted modules | P2-debt | agent:deploy-scan
+- [x] Move or delete `backend/.github/workflows/ci.yml` — dead workflow never executed by GitHub Actions; full test suite not running in CI → .tmp/2026-03-14-deploy-scan/ci-github.md | P2-debt | agent:deploy-scan (8fd6ead)
+- [x] Remove `excoveralls` dep from mix.exs — no Coveralls integration exists; dead dependency inflates compile → .tmp/2026-03-14-deploy-scan/ci-github.md | P2-debt | agent:deploy-scan (8fd6ead)
+- [x] Remove dead modules (TestBroadcastController, ThemeSwitcher, ast_renderer.ex, Authenticators shim) — orphaned code with zero references | P2-debt | agent:deploy-scan (8fd6ead)
+- [x] Remove ThemeSwitcherHook import from app.js — references nonexistent JS file | P2-debt | agent:deploy-scan (8fd6ead)
+- [x] Remove dead Content module config from config.exs, dev.exs, prod.exs, test.exs — ghost config for deleted modules | P2-debt | agent:deploy-scan (8fd6ead)
 - [ ] Document optional env vars (URL_STATIC_HOST, DNS_CLUSTER_QUERY, POSTGRES_POOL) in .env.production.example — operators can't discover tuning options → .tmp/2026-03-14-deploy-scan/env-config.md | P2-debt | agent:deploy-scan
+- [ ] Fix "Test Family family." redundant suffix in families/start heading — template appends "family." unconditionally; collides when name already contains "Family" → .tmp/2026-03-16-browser-walkthrough/agent-3-family-creation.md | P2-debt | browser-walkthrough-2026-03-16
+- [ ] Fix "Resend setup link" button overflowing card boundary in `/en/admin` — button clipped outside viewport on long family names → .tmp/2026-03-16-browser-walkthrough/agent-3-family-creation.md | P2-debt | browser-walkthrough-2026-03-16
+- [ ] Fix `/api/` and `/api` bare paths returning HTML 404 — falls through to browser catch-all; violates contract that `/api/*` never returns HTML → .tmp/2026-03-16-browser-walkthrough/agent-6-api-basher.md | P2-debt | browser-walkthrough-2026-03-16
+- [ ] Fix "Famichat home" header link from `/en/admin` dropping authenticated session — click causes LiveView disconnect and redirects to login → .tmp/2026-03-16-browser-walkthrough/agent-5-link-basher.md | P2-debt | browser-walkthrough-2026-03-16
+- [ ] Fix Type dropdown in `/admin/message` resetting to "self" when Encrypt Messages toggled — unrelated controls share state; dropdown reverts on checkbox change → .tmp/2026-03-16-browser-walkthrough/agent-5-link-basher.md | P2-debt | browser-walkthrough-2026-03-16
+- [ ] Fix `TypeError: null.getAttribute` crash in LiveView pushInput on `/admin/message` Type change — changing dropdown triggers JS crash after mount error → .tmp/2026-03-16-browser-walkthrough/agent-5-link-basher.md | P2-debt | browser-walkthrough-2026-03-16
+- [ ] Confirm `Plug.Debugger` / `debug_errors: true` absent in production config — dev returns 66 KB stacktrace + internal file paths on `Accept: text/html` to any API endpoint → .tmp/2026-03-16-browser-walkthrough/agent-6-api-basher.md | P2-debt | browser-walkthrough-2026-03-16
+- [ ] Normalize 401 error codes across auth endpoints — plug-level returns `"unauthorized"`, controller-level returns `"invalid_token"`; inconsistent API contract → .tmp/2026-03-16-browser-walkthrough/agent-6-api-basher.md | P2-debt | browser-walkthrough-2026-03-16
 
 ## Someday/maybe (P3)
 <!-- Documentation and guidance items — infra will change; don't invest in docs until it stabilizes -->
@@ -256,6 +282,8 @@ Items move DOWN in severity (P0 → P1 → P2) as blockers are resolved. Items n
 - [x] Decide: remove `cache: disabled: true` entirely from prod.exs, not decouple rate limiting — RESOLVED: `Famichat.Cache` is only backing auth rate limiting, so preserving the dead flag adds coupling without user value → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | agent:consensus
 - [ ] Decide: which reverse proxy to recommend for non-Cloudflare self-hosters? (Caddy, Nginx, Traefik) — operators without Cloudflare need TLS termination guidance → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | agent:consensus
 - [ ] Decide: release cadence — ad-hoc for dogfood, sprint-aligned for L2+? — determines Watchtower polling and operator expectations → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | agent:consensus
+- [ ] Decide: is `POST /api/v1/auth/otp/request` complete or a dead route? — endpoint rejects all parameter shapes; may be incomplete implementation or future-flow placeholder → .tmp/2026-03-16-browser-walkthrough/agent-6-api-basher.md | agent:consensus
+- [ ] Decide: does WebAuthn ceremony hang reproduce in a real browser? — CDP virtual authenticator artifact in Playwright; if confirmed in Firefox/Chrome, elevates to P0-dogfood → .tmp/2026-03-16-browser-walkthrough/triage.md | agent:consensus
 - [x] Decide: should `./run setup` prompt for optional customizations or keep minimal? — RESOLVED: no new surface; warm errors in runtime.exs only for L1; wizard/check-config deferred to P2 → .tmp/2026-03-11-config-ux/round-1/consensus.md | agent:consensus
 
 ## Cut / Won't do

@@ -228,8 +228,10 @@ webauthn_origin =
       raise "WEBAUTHN_ORIGIN is required in production"
 
     {_, nil} ->
-      # Dev/test default. DO NOT use in production.
-      "http://localhost:9000"
+      # Dev/test default. Derives from PORT so it matches whatever port the
+      # app is actually running on. DO NOT use in production.
+      port = System.get_env("PORT", "4000")
+      "http://localhost:#{port}"
 
     {_, value} ->
       value

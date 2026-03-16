@@ -99,6 +99,7 @@ defmodule Famichat.Auth.Onboarding do
           | {:error, :admin_exists}
           | {:error, :invalid_input}
           | {:error, :username_required}
+          | {:error, :username_too_long}
           | {:error, Ecto.Changeset.t()}
   def bootstrap_admin(username, opts \\ %{}) do
     with {:ok, normalized_username} <- validate_bootstrap_username(username) do
@@ -141,6 +142,7 @@ defmodule Famichat.Auth.Onboarding do
 
           %User{}
           |> User.changeset(user_attrs)
+          |> Ecto.Changeset.put_change(:community_admin, true)
           |> Repo.insert()
         end)
         |> Ecto.Multi.run(:membership, fn _repo,
@@ -271,8 +273,8 @@ defmodule Famichat.Auth.Onboarding do
       is_nil(normalized) or String.trim(normalized) == "" ->
         {:error, :username_required}
 
-      String.length(normalized) < 1 ->
-        {:error, :invalid_input}
+      String.length(normalized) > 50 ->
+        {:error, :username_too_long}
 
       true ->
         {:ok, normalized}
@@ -636,6 +638,43 @@ defmodule Famichat.Auth.Onboarding do
     end
   end
 
+  @doc """
+  Detects the "passkey registered, first invite not yet sent" state during the
+  first-run admin bootstrap flow.
+
+  Conditions: exactly one user exists in the DB, that user has `community_admin:
+  true`, they have at least one active (non-revoked) passkey, and they have at
+  least one household membership.
+
+  This is the state reached after the admin completes the passkey ceremony but
+  before they click "Generate invite link". On a WebSocket reconnect at that
+  point, `fetch_incomplete_bootstrap/0` returns `{:error, :not_found}` (because
+  the passkey now exists), causing SetupLive to redirect to /login and boot the
+  admin away. This function lets `mount_connected` detect and resume the
+  `:issue_invite` step instead.
+
+  Returns `{:ok, user, family}` when the admin is in this state.
+  Returns `{:error, :not_found}` in all other cases.
+
+  Used exclusively by SetupLive.
+  """
+  @spec fetch_admin_awaiting_first_invite() ::
+          {:ok, User.t(), Family.t()} | {:error, :not_found}
+  def fetch_admin_awaiting_first_invite do
+    count = Repo.one(from(u in User, select: count(u.id)))
+
+    with 1 <- count,
+         %User{community_admin: true} = user <-
+           Repo.one(from(u in User, where: u.community_admin == true, limit: 1))
+           |> Repo.preload(memberships: :family),
+         true <- Passkeys.has_active_passkey?(user.id),
+         [%{family: %Family{} = family} | _] <- user.memberships do
+      {:ok, user, family}
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Family Setup (post-bootstrap family creation)
   # ---------------------------------------------------------------------------
@@ -658,7 +697,7 @@ defmodule Famichat.Auth.Onboarding do
   ## Parameters
 
     - `community_admin_id` — UUID of the authenticated community admin user.
-      Must have at least one `:admin` household membership (MLP check).
+      Must have `community_admin: true` on the users row (set only by bootstrap).
     - `family_name` — string, 1-100 chars. Will be the family's display name.
     - `opts` — optional map. Currently unused; reserved for future extension.
 
@@ -685,7 +724,7 @@ defmodule Famichat.Auth.Onboarding do
         _opts \\ %{}
       ) do
     with {:ok, normalized_name} <- validate_family_name(family_name),
-         {:ok, _admin_user} <- assert_community_admin(community_admin_id),
+         :ok <- assert_community_admin(community_admin_id),
          :ok <-
            RateLimit.check(@family_create_bucket, community_admin_id,
              limit: 5,
@@ -906,7 +945,7 @@ defmodule Famichat.Auth.Onboarding do
           {:ok, %{setup_url_token: String.t()}}
           | {:error, :not_community_admin | :family_not_found | term()}
   def issue_family_setup_link_for_existing_family(community_admin_id, family_id) do
-    with {:ok, _admin} <- assert_community_admin(community_admin_id),
+    with :ok <- assert_community_admin(community_admin_id),
          {:ok, family} <- fetch_family(family_id),
          :ok <-
            RateLimit.check(@family_setup_reissue_bucket, community_admin_id,
@@ -1228,32 +1267,15 @@ defmodule Famichat.Auth.Onboarding do
 
   defp validate_family_name(_), do: {:error, :family_name_required}
 
-  # For MLP: community admin = user with at least one household admin
-  # membership. A formal community_admin role column on users is a future
-  # hardening step for L3.
   defp assert_community_admin(user_id) do
-    alias Famichat.Accounts.HouseholdMembership
-
-    case Identity.fetch_user(user_id) do
-      {:ok, %User{status: :active} = user} ->
-        has_any_admin =
-          Repo.exists?(
-            from(m in HouseholdMembership,
-              where: m.user_id == ^user_id and m.role == :admin
-            )
-          )
-
-        if has_any_admin do
-          {:ok, user}
-        else
-          {:error, :not_community_admin}
-        end
-
-      {:ok, _user} ->
-        {:error, :not_community_admin}
-
-      error ->
-        error
+    if Repo.exists?(
+         from(u in User,
+           where: u.id == ^user_id and u.community_admin == true and u.status == :active
+         )
+       ) do
+      :ok
+    else
+      {:error, :not_community_admin}
     end
   end
 

@@ -32,7 +32,8 @@ defmodule Famichat.Accounts.User do
           confirmed_at: DateTime.t() | nil,
           last_login_at: DateTime.t() | nil,
           enrollment_required_since: DateTime.t() | nil,
-          registration_token_id: Ecto.UUID.t() | nil
+          registration_token_id: Ecto.UUID.t() | nil,
+          community_admin: boolean() | nil
         }
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -58,6 +59,7 @@ defmodule Famichat.Accounts.User do
 
     field :last_active_family_id, :binary_id
     field :locale, :string
+    field :community_admin, :boolean, default: false
 
     has_many :memberships, HouseholdMembership
     has_many :families, through: [:memberships, :family]

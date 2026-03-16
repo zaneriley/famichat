@@ -193,8 +193,7 @@ defmodule Famichat.Auth.Passkeys.QueryPlanTest do
       """,
       params
     ).rows
-    |> Enum.map(&List.first/1)
-    |> Enum.join("\n")
+    |> Enum.map_join("\n", &List.first/1)
   end
 
   defp dump_uuid(uuid) when is_binary(uuid), do: Ecto.UUID.dump!(uuid)

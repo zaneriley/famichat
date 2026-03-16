@@ -8,7 +8,23 @@ config :famichat, Famichat.Repo, pool: Ecto.Adapters.SQL.Sandbox
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id, :changeset],
+  metadata: [
+    :request_id,
+    :changeset,
+    :topic,
+    :reason,
+    :conversation_id,
+    :revocation_ref,
+    :error_code,
+    :details,
+    :device_id,
+    :timeout_ms,
+    :summary,
+    :conversation_count,
+    :error,
+    :invite_error,
+    :code
+  ],
   level: :warning
 
 config :famichat, Famichat.Mailer, adapter: Swoosh.Adapters.Test

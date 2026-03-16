@@ -39,10 +39,8 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
          :ok <- validate_stage_payload(payload, conversation_id, operation),
          {:ok, staged_epoch} <- staged_epoch(payload, state.epoch),
          pending_commit <-
-           build_pending_commit(operation, staged_epoch, payload),
-         {:ok, persisted} <-
-           persist_state(state, %{pending_commit: pending_commit}) do
-      {:ok, persisted}
+           build_pending_commit(operation, staged_epoch, payload) do
+      persist_state(state, %{pending_commit: pending_commit})
     end
   end
 
@@ -78,15 +76,13 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
          :ok <- validate_merge_payload(payload, conversation_id),
          {:ok, next_state, next_epoch} <-
            resolve_merge_payload(state, payload, merge_epoch),
-         seal_active_revocations? = pending_remove_operation?(pending_commit),
-         {:ok, persisted} <-
-           persist_merged_state_and_complete_revocations(
-             state,
-             next_state,
-             next_epoch,
-             seal_active_revocations?
-           ) do
-      {:ok, persisted}
+         seal_active_revocations? = pending_remove_operation?(pending_commit) do
+      persist_merged_state_and_complete_revocations(
+        state,
+        next_state,
+        next_epoch,
+        seal_active_revocations?
+      )
     end
   end
 
@@ -105,9 +101,8 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
       if is_map(state.pending_commit) do
         request = build_request(state, attrs)
 
-        with {:ok, _payload} <- MLS.clear_pending_commit(request),
-             {:ok, persisted} <- persist_state(state, %{pending_commit: nil}) do
-          {:ok, persisted}
+        with {:ok, _payload} <- MLS.clear_pending_commit(request) do
+          persist_state(state, %{pending_commit: nil})
         end
       else
         {:ok, state}
@@ -336,8 +331,7 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
       "operation" => Atom.to_string(operation),
       "staged_epoch" => staged_epoch,
       "staged_at" =>
-        DateTime.utc_now()
-        |> DateTime.truncate(:second)
+        DateTime.utc_now(:second)
         |> DateTime.to_iso8601(),
       "merge_hint" => extract_merge_hint(payload)
     }
@@ -487,9 +481,8 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
              Atom.to_string(operation),
              :stage_pending_commit,
              :invalid_stage_operation_hint
-           ),
-         :ok <- validate_stage_status_hint(payload, operation) do
-      :ok
+           ) do
+      validate_stage_status_hint(payload, operation)
     end
   end
 
@@ -541,16 +534,14 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
              false,
              :merge_pending_commit,
              :invalid_pending_commit_hint
-           ),
-         :ok <-
-           validate_optional_boolean(
-             payload,
-             :merged,
-             true,
-             :merge_pending_commit,
-             :invalid_merged_hint
            ) do
-      :ok
+      validate_optional_boolean(
+        payload,
+        :merged,
+        true,
+        :merge_pending_commit,
+        :invalid_merged_hint
+      )
     end
   end
 

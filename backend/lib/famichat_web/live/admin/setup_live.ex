@@ -61,49 +61,71 @@ defmodule FamichatWeb.AdminLive.SetupLive do
   end
 
   defp mount_connected(socket) do
-    count = Repo.one(from(u in User, select: count(u.id)))
+    # fetch_incomplete_bootstrap/0 handles count == 0 internally — it guards
+    # with `with 1 <- count` and returns {:error, :not_found} for zero users.
+    # fetch_admin_awaiting_first_invite/0 does the same. So we avoid an upfront
+    # count query and only fall back to a count in the rare fully-bootstrapped
+    # branch (count > 1 case).
+    case Onboarding.fetch_incomplete_bootstrap() do
+      {:ok, user, family} ->
+        # User created but passkey not yet registered — let them retry the ceremony.
+        case Onboarding.reissue_passkey_token(user.id) do
+          {:ok, token} ->
+            {:ok,
+             socket
+             |> setup_socket(:register_passkey)
+             |> assign(:passkey_register_token, token)
+             |> assign(:admin_user_id, user.id)
+             |> assign(:family_id, family.id)
+             |> assign(:username, user.username)}
 
-    if count > 0 do
-      # A user exists. Check if setup is incomplete (user created but no passkey)
-      # so the admin can retry the passkey ceremony instead of being locked out.
-      case Onboarding.fetch_incomplete_bootstrap() do
-        {:ok, user, family} ->
-          case Onboarding.reissue_passkey_token(user.id) do
-            {:ok, token} ->
-              {:ok,
-               socket
-               |> setup_socket(:register_passkey)
-               |> assign(:passkey_register_token, token)
-               |> assign(:admin_user_id, user.id)
-               |> assign(:family_id, family.id)
-               |> assign(:username, user.username)}
+          {:error, :already_registered} ->
+            # Passkey exists after all — bootstrap is complete.
+            {:ok,
+             socket
+             |> setup_socket(:already_bootstrapped)
+             |> push_navigate(to: locale_path(socket, "/login"))}
 
-            {:error, :already_registered} ->
-              # Passkey exists after all — bootstrap is complete.
+          {:error, _reason} ->
+            {:ok,
+             socket
+             |> setup_socket(:already_bootstrapped)
+             |> push_navigate(to: locale_path(socket, "/login"))}
+        end
+
+      {:error, :not_found} ->
+        # The user has a passkey, so fetch_incomplete_bootstrap/0 saw
+        # has_active_passkey? == true and returned :not_found. But if exactly
+        # one community_admin user exists with a passkey and a family, they
+        # are in the ":issue_invite" step — passkey just registered but first
+        # invite not yet generated. Resume that step instead of booting them
+        # to /login (which was the P0 reconnect-redirect bug).
+        case Onboarding.fetch_admin_awaiting_first_invite() do
+          {:ok, user, family} ->
+            {:ok,
+             socket
+             |> setup_socket(:issue_invite)
+             |> assign(:admin_user_id, user.id)
+             |> assign(:family_id, family.id)
+             |> assign(:username, user.username)}
+
+          {:error, :not_found} ->
+            # Neither incomplete bootstrap nor awaiting invite. Determine whether
+            # this is a fresh install (count == 0) or a fully-bootstrapped instance.
+            count = Repo.one(from(u in User, select: count(u.id)))
+
+            if count == 0 do
+              {:ok, setup_socket(socket, :bootstrap)}
+            else
               {:ok,
                socket
                |> setup_socket(:already_bootstrapped)
                |> push_navigate(to: locale_path(socket, "/login"))}
-
-            {:error, _reason} ->
-              {:ok,
-               socket
-               |> setup_socket(:already_bootstrapped)
-               |> push_navigate(to: locale_path(socket, "/login"))}
-          end
-
-        {:error, :not_found} ->
-          # Bootstrap is fully complete.
-          {:ok,
-           socket
-           |> setup_socket(:already_bootstrapped)
-           |> push_navigate(to: locale_path(socket, "/login"))}
-      end
-    else
-      {:ok, setup_socket(socket, :bootstrap)}
+            end
+        end
     end
   rescue
-    e in [Ecto.ConstraintError, DBConnection.ConnectionError] ->
+    e in [Ecto.ConstraintError, DBConnection.ConnectionError, Postgrex.Error] ->
       Logger.error(
         "[SetupLive] mount_connected crashed: #{Exception.message(e)}"
       )
@@ -169,6 +191,9 @@ defmodule FamichatWeb.AdminLive.SetupLive do
 
       {:error, :invalid_input} ->
         {:noreply, assign(socket, :error, :username_too_short)}
+
+      {:error, :username_too_long} ->
+        {:noreply, assign(socket, :error, :username_too_long)}
 
       {:error, reason} ->
         Logger.warning(
@@ -321,13 +346,17 @@ defmodule FamichatWeb.AdminLive.SetupLive do
   end
 
   defp incomplete_bootstrap_available? do
-    match?({:ok, _, _}, Onboarding.fetch_incomplete_bootstrap())
+    match?({:ok, _, _}, Onboarding.fetch_incomplete_bootstrap()) or
+      match?({:ok, _, _}, Onboarding.fetch_admin_awaiting_first_invite())
   end
 
   defp error_message(:username_required), do: gettext("Please enter your name.")
 
   defp error_message(:username_too_short),
     do: gettext("Your name needs to be at least 1 character.")
+
+  defp error_message(:username_too_long),
+    do: gettext("Your name must be 50 characters or fewer.")
 
   defp error_message(:unexpected),
     do: gettext("Something went wrong \u2014 please try again.")
