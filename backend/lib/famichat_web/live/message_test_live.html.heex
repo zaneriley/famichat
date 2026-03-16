@@ -122,50 +122,6 @@
   data-auth-token={@auth_token || "guest-token"}
   style="font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;"
 >
-  <!-- Debug Scripts -->
-  <script>
-    // More detailed debug for LiveView connection issues
-    console.log("[MessageTest] LiveView debug info", {
-      isWindowDefined: typeof window !== 'undefined',
-      hasPhoenixObj: typeof window.Phoenix !== 'undefined',
-      hasLiveSocket: typeof window.liveSocket !== 'undefined',
-      protocol: window.location.protocol,
-      host: window.location.host,
-      pathname: window.location.pathname
-    });
-
-    // Check if all required JavaScript files are loaded
-    document.addEventListener('DOMContentLoaded', () => {
-      const scripts = Array.from(document.getElementsByTagName('script'))
-        .map(script => script.src)
-        .filter(src => src.length > 0);
-
-      console.log("[MessageTest] Loaded scripts:", scripts);
-
-      // Check LiveSocket initialization
-      if (window.liveSocket) {
-        console.log("[MessageTest] LiveSocket details:", {
-          isConnected: window.liveSocket.isConnected(),
-          connectorsSize: window.liveSocket.connectors.size,
-          main: window.liveSocket.main ? "Exists" : "Missing"
-        });
-      }
-    });
-
-    console.log("[MessageTest] LiveView mounted", {
-      liveSocket: window.liveSocket ? "Connected" : "Not connected",
-      phxVersion: window.Phoenix ? window.Phoenix.version : "Unknown"
-    });
-
-    // Log all LiveView events
-    document.addEventListener("phx:update", (e) => {
-      console.log("[MessageTest] LiveView updated", {
-        type: e.type,
-        target: e.target.id || e.target.tagName,
-        timestamp: new Date().toISOString()
-      });
-    });
-  </script>
   <!-- Main content: Split into left and right panels -->
   <div class="flex flex-col h-full">
     <!-- Header -->
@@ -217,19 +173,19 @@
 
             <label class="text-2xs flex items-center mr-1xsxs text-[#825d29] font-medium">
               Type:
-              <select
-                id="conversation-type"
-                class="ml-2 rounded-2xl border-2 border-[#cea569] px-3 py-2 bg-[#fdf6e3] text-[#5c5c3d] focus:ring-2 focus:ring-[#94c561] focus:border-[#94c561] outline-none ac-card"
-                value={@conversation_type}
-                phx-change="update-conversation-type"
-                data-channel-joined={@channel_joined}
-                onchange="console.log('[MessageTest] Conversation type changed', { value: this.value })"
-              >
-                <option value="self">🏠 self</option>
-                <option value="direct">💬 direct</option>
-                <option value="group">👥 group</option>
-                <option value="family">👨‍👩‍👧‍👦 family</option>
-              </select>
+              <form phx-change="update-conversation-type">
+                <select
+                  id="conversation-type"
+                  name="value"
+                  class="ml-2 rounded-2xl border-2 border-[#cea569] px-3 py-2 bg-[#fdf6e3] text-[#5c5c3d] focus:ring-2 focus:ring-[#94c561] focus:border-[#94c561] outline-none ac-card"
+                  data-channel-joined={@channel_joined}
+                >
+                  <option value="self" selected={@conversation_type == "self"}>🏠 self</option>
+                  <option value="direct" selected={@conversation_type == "direct"}>💬 direct</option>
+                  <option value="group" selected={@conversation_type == "group"}>👥 group</option>
+                  <option value="family" selected={@conversation_type == "family"}>👨‍👩‍👧‍👦 family</option>
+                </select>
+              </form>
             </label>
 
             <label class="text-2xs flex items-center mr-1xsxs text-[#825d29] font-medium">
@@ -594,36 +550,4 @@
       </div>
     </div>
   </div>
-  <!-- Debug LiveView Events -->
-  <script>
-    window.addEventListener('phx:hook:events', e => {
-      console.log('[MessageTest] Phoenix hook event', e.detail);
-    });
-
-    // LiveView Lifecycle events
-    window.addEventListener('phx:page-loading-start', info =>
-      console.log('[MessageTest] LiveView page loading started', info.detail));
-    window.addEventListener('phx:page-loading-stop', info =>
-      console.log('[MessageTest] LiveView page loading stopped', info.detail));
-    window.addEventListener('phx:error', info =>
-      console.error('[MessageTest] LiveView error', info.detail));
-
-    // Inspect socket related info
-    console.log('[MessageTest] Socket inspection', {
-      phoenixSocket: window.liveSocket?.socket?.isConnected?.() || false,
-      channels: window.liveSocket?.channels?.length || 0,
-      pendingDiffs: window.liveSocket?.pendingDiffs || false
-    });
-
-    // Auto-scroll to bottom of messages container when new messages arrive
-    const scrollToBottom = () => {
-      const container = document.getElementById('messages-scroll-container');
-      if (container) {
-        container.scrollTop = container.scrollHeight;
-      }
-    };
-
-    window.addEventListener('phx:update', scrollToBottom);
-    document.addEventListener('DOMContentLoaded', scrollToBottom);
-  </script>
 </div>

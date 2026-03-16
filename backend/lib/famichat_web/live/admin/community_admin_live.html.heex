@@ -170,12 +170,12 @@
           <button
             type="button"
             id="copy-setup-url"
-            phx-hook="Clipboard"
-            data-clipboard-target="#setup-url"
+            phx-hook="CopyToClipboard"
+            data-copy-value={@setup_url}
             class="ac-secondary-button w-full"
           >
             <.typography tag="span" size="md" color="deemphasized">
-              <%= gettext("Copy link") %>
+              <%= if @copied, do: gettext("Copied!"), else: gettext("Copy link") %>
             </.typography>
           </button>
         </div>

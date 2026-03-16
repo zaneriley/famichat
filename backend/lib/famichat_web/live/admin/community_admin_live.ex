@@ -36,7 +36,9 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
        |> assign(:error, nil)
        |> assign(:setup_url, nil)
        |> assign(:created_family, nil)
-       |> assign(:family_name, "")}
+       |> assign(:family_name, "")
+       |> assign(:copied, false)
+       |> assign(:copy_failed, false)}
     end
   end
 
@@ -61,6 +63,8 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
            |> assign(:setup_url, nil)
            |> assign(:created_family, nil)
            |> assign(:family_name, "")
+           |> assign(:copied, false)
+           |> assign(:copy_failed, false)
            |> assign_page_metadata(gettext("Your families"))}
 
         false ->
@@ -68,6 +72,8 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
            socket
            |> assign(:step, :unauthorized)
            |> assign(:error, :not_community_admin)
+           |> assign(:copied, false)
+           |> assign(:copy_failed, false)
            |> assign_page_metadata(gettext("Not authorized"))}
       end
     end
@@ -155,6 +161,28 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
 
         {:noreply, assign(socket, :error, :unexpected)}
     end
+  end
+
+  @impl true
+  def handle_event("copied", _params, socket) do
+    Process.send_after(self(), :reset_copied, 2000)
+    {:noreply, socket |> assign(:copied, true) |> assign(:copy_failed, false)}
+  end
+
+  @impl true
+  def handle_event("copy-failed", _params, socket) do
+    Process.send_after(self(), :reset_copy_failed, 4000)
+    {:noreply, assign(socket, :copy_failed, true)}
+  end
+
+  @impl true
+  def handle_info(:reset_copied, socket) do
+    {:noreply, assign(socket, :copied, false)}
+  end
+
+  @impl true
+  def handle_info(:reset_copy_failed, socket) do
+    {:noreply, assign(socket, :copy_failed, false)}
   end
 
   @impl true
