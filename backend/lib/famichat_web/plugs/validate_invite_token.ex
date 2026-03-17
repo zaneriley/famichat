@@ -20,7 +20,7 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
   import Plug.Conn
 
   import Phoenix.Controller,
-    only: [put_layout: 2, put_root_layout: 2, put_view: 2, render: 2]
+    only: [put_layout: 2, put_view: 2, render: 2]
 
   alias Famichat.Auth.Onboarding
 
@@ -66,7 +66,6 @@ defmodule FamichatWeb.Plugs.ValidateInviteToken do
     conn
     |> assign(:user_locale, locale)
     |> put_status(status)
-    |> put_root_layout(false)
     |> put_layout(false)
     |> put_view(FamichatWeb.ErrorHTML)
     |> render("#{status}.html")
