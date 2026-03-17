@@ -1,123 +1,155 @@
+
+
+
 # Famichat
 
-Private, self-hosted messaging platform for families and neighborhoods.
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)](#status)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Project Status: Alpha](https://img.shields.io/badge/Project%20Status-Alpha-orange)](https://en.wikipedia.org/wiki/Software_release_life_cycle#Alpha)
+Famichat is a self-hosted messaging server for a closed, trusted group of people—your family or inner circle. You run the backend, generate the invite links, and keep the data on your own hardware. 
 
-## Status (2026-02-27)
+It currently handles real-time text messaging, passkey authentication, and invite-based onboarding through a web interface. 
 
-- Alpha.
-- Backend/API and cryptographic lifecycle correctness are the current focus.
-- MLS-first E2EE direction is accepted (ADR 010).
-- LiveView chat screens are a design and QA spike harness, not a final product client UX.
-- Not production-ready for broad user rollout.
+## Status: Alpha
 
-## Product Direction
+This is early software, currently run by one developer to validate the core mechanics. 
 
-1. Secure, private messaging with fail-closed behavior.
-2. Neighborhood-scale group communication with family intimacy.
-3. Canonical backend contracts that can be driven by humans, LLM tools, CLI, and alternate frontends.
-4. Fast feedback loops via repeatable QA gates and adversarial tests.
+**Important note for operators:** Famichat is not yet end-to-end encrypted. Right now, the server decrypts messages to render the interface. This means whoever controls the server and database can read the message content. 
 
-## What Works Now
+The immediate roadmap focuses entirely on fixing this by moving decryption to the client. The next release will introduce a Svelte single-page application where the OpenMLS library compiles to WebAssembly. This allows the browser to encrypt and decrypt messages locally. Once that ships, the server will become a blind relay that only stores and forwards encrypted blobs.
 
-1. Auth and session/device lifecycle APIs.
-2. Real-time messaging across self/direct/group/family conversation types.
-3. Canonical v1 messaging read/write/recover endpoints.
-4. Explicit revoked-device and recovery-required semantics.
-5. MLS-backed vertical slice with persisted conversation security state.
-6. Repeatable messaging QA gates (`qa:messaging:fast`, `qa:messaging:deep`) with artifacts.
+Until that milestone is finished, you should only invite people who explicitly trust you as the server operator.
 
-## What Is Still In Progress
 
-1. Deeper MLS lifecycle semantics for commit/update/add/remove under churn.
-2. Remaining key lifecycle hardening for production trust posture.
-3. Multi-node/state-distribution strategy.
-4. Final user-facing product UX (current LiveView is intentionally disposable).
-5. Repo-wide lint/static baseline cleanup outside the current MLS slice.
 
-## Quick Start (Local)
+## What this is not
 
-Prerequisites:
+There is no cloud service or mandatory central account. While we might explore deployment templates or other hosting conveniences later, running the server on your own infrastructure will always be a fully supported, first-class option. 
 
-- Docker and Docker Compose
-- Node.js (used by websocket probe tooling in QA runbooks)
+The application does not include public friend discovery, algorithmic feeds, engagement tracking, or default telemetry back to a central server. It is built strictly for closed, invite-only communication.
 
-Commands:
+## Features and access
 
-```bash
-cd backend
+Right now, users access Famichat through a web browser or by installing it to their home screen as a Progressive Web App (PWA). Dedicated mobile and desktop applications are planned for later development phases.
 
-# Start local stack
-docker compose up -d --remove-orphans
+### Messaging and authentication
+Text messaging happens in real time. Accounts are secured entirely by passkeys—Touch ID, Face ID, Windows Hello, or hardware keys. Because there are no passwords, you do not have to worry about securing a password database or handling reset emails for now. Other options are planned in the future, but this is the most convenient. Onboarding happens strictly through single-use invite links that expire after 72 hours.
 
-# See available task runner commands
-./run help
+### Governance and customization
+The permissions and customization options are split into three tiers so you can tailor the space to your specific group.
 
-# Focused backend verification
-./run qa:messaging:fast
-./run qa:messaging:deep
-./run docs:boundary-check
-```
+As the community admin running the server, you control the deployment and the branding. You can rename the application entirely using the `WEBAUTHN_RP_NAME` environment variable and the `backend/bin/rename-project` script. This ensures your family members see a name they recognize when their browser prompts them for a passkey. 
 
-Local manual spike routes:
+Family admins manage their specific household space. They issue the invite links and approve new devices for younger members. 
 
-1. `http://localhost:8002/admin/spike` (actor-link launcher)
-2. `http://localhost:8002/en` (throwaway chat harness over real backend paths)
+Individual users control their own display preferences, accessibility features, and notification settings.
 
-Note: Port can differ if you changed `backend/.env` (`URL_PORT`, `DOCKER_WEB_PORT_FORWARD`, or `PORT`).
+### Internationalization
+The interface supports multiple languages out of the box, currently shipping with English and Japanese. The layout is structured to support both left-to-right and right-to-left languages naturally. Adding a new language to your deployment only requires adding the corresponding translation file.
 
-## Crypto Stack
 
-```
-OpenMLS (Rust library — the actual MLS implementation)
-    │
-    ├── backend/infra/mls_nif/     ← server-side wrapper (current)
-    │   Rustler NIF in the Elixir VM. Holds group sessions in memory.
-    │   Server decrypts for LiveView rendering — known gap, not the target.
-    │
-    └── (planned) mls_wasm/        ← browser-side wrapper (Path C)
-        wasm-bindgen targeting wasm32. Keys stay on device.
-        Server becomes a dumb relay. Required before other families trust the server.
-```
 
-We didn't reimplement MLS — we wrap it. Both the NIF and the future WASM module are thin deployment wrappers around the same library. ~70% of the NIF's crypto logic transfers directly. See [SPEC.md — Security](docs/SPEC.md) for the full decision and migration plan.
 
-## Canonical API Surfaces
+## Prerequisites
 
-1. `GET /api/v1/conversations/:id/messages`
-2. `POST /api/v1/conversations/:id/messages`
-3. `POST /api/v1/conversations/:id/security/recover`
-4. `/socket` (Phoenix channel transport)
+To run Famichat, you need a Linux host with at least 1 vCPU and 1 GB of RAM. The software runs as a Docker Compose stack, which includes the backend application and a PostgreSQL 16 database.
 
-`/api/test/*` routes exist only as dev/test harness helpers and are not the product contract.
+You must have a registered domain name and a reverse proxy (such as Caddy, Nginx, or Cloudflare Tunnel) configured to handle HTTPS traffic. Passkey authentication relies on the WebAuthn API, which browsers strictly block on unencrypted HTTP connections.
 
-## Read These Docs First
+By default, the application binds to `127.0.0.1:8001`. You will need to route your reverse proxy to this port.
 
-1. [Design spec (vision, UX, auth, architecture, open questions)](docs/SPEC.md)
-2. [Messaging QA runbook](docs/runbooks/messaging-qa-runbook.md)
-3. [ADR 010: MLS-first direction](docs/decisions/010-mls-first-for-neighborhood-scale.md)
+## Deploy
 
-## Repo Structure
+1. Clone the repository and navigate to the backend directory:
+   ```bash
+   git clone https://github.com/zaneriley/famichat.git
+   cd famichat/backend
+   ```
 
-```text
-.
-├── backend/
-│   ├── run
-│   ├── lib/
-│   ├── test/
-│   └── infra/mls_nif/
-├── docs/
-│   ├── SPEC.md
-│   ├── ia-lexicon.md
-│   ├── ia-boundary-guardrails.md
-│   ├── runbooks/
-│   ├── decisions/
-│   └── archive/
-└── README.md
-```
+2. Copy the production environment template and secure the file:
+   ```bash
+   cp .env.production.example .env.production
+   chmod 0600 .env.production
+   ```
 
-## License
+3. Generate your cryptographic secrets. Run the following commands and paste each output into the corresponding variables in your `.env.production` file:
+   ```bash
+   openssl rand -base64 64   # SECRET_KEY_BASE
+   openssl rand -base64 32   # UNIQUE_CONVERSATION_KEY_SALT
+   openssl rand -base64 32   # MLS_SNAPSHOT_HMAC_KEY
+   openssl rand -base64 32   # FAMICHAT_VAULT_KEY
+   openssl rand -base64 32   # POSTGRES_PASSWORD
+   ```
 
-MIT
+4. Configure your domain variables. Passkeys are cryptographically bound to the origin they are registered on. `URL_HOST`, `WEBAUTHN_ORIGIN`, and `WEBAUTHN_RP_ID` must all match your domain exactly. If you change your domain later, all existing passkeys will fail.
+   ```
+   URL_HOST=chat.yourfamily.net
+   WEBAUTHN_ORIGIN=https://chat.yourfamily.net
+   WEBAUTHN_RP_ID=chat.yourfamily.net
+   ```
+
+5. Start the Docker Compose stack in the background:
+   ```bash
+   docker compose -f docker-compose.production.yml up -d
+   ```
+
+6. Verify the server and database are healthy:
+   ```bash
+   curl -fsS http://localhost:8001/up/databases
+   ```
+
+7. Open `https://your-domain/setup` in your browser. This route will guide you through creating the community admin account and registering your first passkey.
+
+
+
+
+## Prerequisites
+
+To run Famichat, you need a Linux host with at least 1 vCPU and 1 GB of RAM. The software runs as a Docker Compose stack, which includes the backend application and a PostgreSQL 16 database.
+
+
+To use the web app outside your network, you'll need to have a registered domain name and a reverse proxy (such as Caddy, Nginx, or Cloudflare Tunnel) configured to handle HTTPS traffic. Passkey authentication relies on the WebAuthn API, which browsers strictly block on unencrypted HTTP connections.
+
+By default, the application binds to `127.0.0.1:8001`. You will need to route your reverse proxy to this port.
+
+## Deploy
+
+1. Clone the repository and navigate to the backend directory:
+   ```bash
+   git clone https://github.com/zaneriley/famichat.git
+   cd famichat/backend
+   ```
+
+2. Copy the production environment template and secure the file:
+   ```bash
+   cp .env.production.example .env.production
+   chmod 0600 .env.production
+   ```
+
+3. Generate your cryptographic secrets. Run the following commands and paste each output into the corresponding variables in your `.env.production` file:
+   ```bash
+   openssl rand -base64 64   # SECRET_KEY_BASE
+   openssl rand -base64 32   # UNIQUE_CONVERSATION_KEY_SALT
+   openssl rand -base64 32   # MLS_SNAPSHOT_HMAC_KEY
+   openssl rand -base64 32   # FAMICHAT_VAULT_KEY
+   openssl rand -base64 32   # POSTGRES_PASSWORD
+   ```
+
+4. Configure your domain variables. Passkeys are cryptographically bound to the origin they are registered on. `URL_HOST`, `WEBAUTHN_ORIGIN`, and `WEBAUTHN_RP_ID` must all match your domain exactly. If you change your domain later, all existing passkeys will fail.
+   ```
+   URL_HOST=chat.yourfamily.net
+   WEBAUTHN_ORIGIN=https://chat.yourfamily.net
+   WEBAUTHN_RP_ID=chat.yourfamily.net
+   ```
+
+5. Start the Docker Compose stack in the background:
+   ```bash
+   docker compose -f docker-compose.production.yml up -d
+   ```
+
+6. Verify the server and database are healthy:
+   ```bash
+   curl -fsS http://localhost:8001/up/databases
+   ```
+
+7. Open `https://your-domain/setup` in your browser. This route will guide you through creating the community admin account and registering your first passkey.
