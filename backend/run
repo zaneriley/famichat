@@ -22,8 +22,59 @@ fi
 # Helper functions start with _ and aren't listed in this script's help menu.
 # -----------------------------------------------------------------------------
 
+_DOCKER_AVAILABLE=""
+
+function _docker_available {
+  # Cache the result so we only check once per ./run invocation.
+  # Set FAMICHAT_NATIVE=1 to force native mode (used in CI).
+  if [[ -n "${FAMICHAT_NATIVE:-}" ]]; then
+    return 1
+  fi
+  if [[ -z "$_DOCKER_AVAILABLE" ]]; then
+    if docker compose ps --status running -q 2>/dev/null | grep -q .; then
+      _DOCKER_AVAILABLE=1
+    else
+      _DOCKER_AVAILABLE=0
+    fi
+  fi
+  [[ "$_DOCKER_AVAILABLE" == "1" ]]
+}
+
 function _dc {
-  docker compose "${DC}" ${TTY} "${@}"
+  if _docker_available; then
+    docker compose "${DC}" ${TTY} "${@}"
+    return
+  fi
+
+  # Native mode: parse docker-compose exec flags, extract service name,
+  # then run the command directly on the host.
+  local env_args=()
+  local service=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -e)    env_args+=("$2"); shift 2 ;;
+      -T)    shift ;;  # TTY flag, not needed natively
+      web)   service=web; shift; break ;;
+      js)    service=js; shift; break ;;
+      postgres) service=postgres; shift; break ;;
+      *)     break ;;
+    esac
+  done
+
+  case "$service" in
+    js)
+      # JS tools live in assets/node_modules/.bin
+      (cd assets && PATH="node_modules/.bin:$PATH" env "${env_args[@]}" "${@}")
+      ;;
+    *)
+      if [[ ${#env_args[@]} -gt 0 ]]; then
+        env "${env_args[@]}" "${@}"
+      else
+        "${@}"
+      fi
+      ;;
+  esac
 }
 
 function _build_run_down {
@@ -154,8 +205,59 @@ function docs:boundary-check {
   echo "Docs IA/DDD boundary check passed ✅"
 }
 
+function lint:session-keys {
+  # Enforce canonical Plug session key accessors (FamichatWeb.SessionKeys).
+  if ! command -v rg >/dev/null 2>&1; then
+    echo "ripgrep (rg) is required for lint:session-keys" >&2
+    return 1
+  fi
+
+  local project_root
+  project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+  if rg -n \
+    'get_session\([^,\n]+,\s*("access_token"|"refresh_token"|"device_id"|"user_locale"|"redirect_count"|"invite_token"|:access_token|:refresh_token|:device_id|:user_locale|:redirect_count|:invite_token)\)|put_session\([^,\n]+,\s*("access_token"|"refresh_token"|"device_id"|"user_locale"|"redirect_count"|"invite_token"|:access_token|:refresh_token|:device_id|:user_locale|:redirect_count|:invite_token)\)' \
+    "${project_root}/backend/lib" "${project_root}/backend/test"; then
+    echo "Use FamichatWeb.SessionKeys for Plug session accessors." >&2
+    return 1
+  fi
+
+  echo "Session key lint passed ✅"
+}
+
+function lint:phx-hooks {
+  # Ensure every phx-hook in templates is registered in app.js.
+  if ! command -v rg >/dev/null 2>&1; then
+    echo "ripgrep (rg) is required for lint:phx-hooks" >&2
+    return 1
+  fi
+
+  local hooks_in_templates
+  hooks_in_templates=$(rg 'phx-hook="([^"]+)"' lib --only-matching --no-filename \
+    | sed 's/phx-hook="//;s/"//' | sort -u) || true
+
+  local failed=0
+  for hook in $hooks_in_templates; do
+    if ! grep -qE "^\s+$hook\s*:" assets/js/app.js; then
+      echo "ERROR: phx-hook=\"$hook\" used in templates but not registered in assets/js/app.js" >&2
+      failed=1
+    fi
+  done
+
+  if [[ "$failed" -eq 0 ]]; then
+    echo "All phx-hook names registered ✅"
+  else
+    return 1
+  fi
+}
+
 function lint:dockerfile {
-  # Lint Dockerfile
+  # Lint Dockerfile, preferring local hadolint for speed.
+  if command -v hadolint >/dev/null 2>&1; then
+    hadolint --ignore DL3008 -t style "${@}" Dockerfile
+    return
+  fi
+
   docker container run --rm -i \
     hadolint/hadolint hadolint --ignore DL3008 -t style "${@}" - < Dockerfile
 }
@@ -3180,11 +3282,11 @@ function yarn:build:css {
 }
 
 function css:lint {
-  _dc js yarn stylelint "**/*.css" --fix
+  _dc js stylelint "**/*.css" --fix
 }
 
 function css:lint:check {
-  _dc js yarn stylelint "**/*.css"
+  _dc js stylelint "**/*.css"
 }
 
 # -----------------------------------------------------------------------------
@@ -3394,11 +3496,13 @@ function ci:lint {
     shell:lint
     lint:dockerfile "${@}"
     docs:boundary-check
+    lint:session-keys
+    lint:phx-hooks
+    elixir:format:check
     elixir:lint
     rust:lint
-    elixir:format
-    js:fix "${@}"
-    css:lint
+    js:fix:check
+    css:lint:check
 }
 
 function ci:security-check {
@@ -3411,7 +3515,7 @@ function ci:setup-db {
 
 function ci:test {
     rust:test "${@}"
-    elixir:test:coverage "${@}"
+    elixir:test "${@}"
 }
 
 function ci:static-analysis {

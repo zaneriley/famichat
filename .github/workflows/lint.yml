@@ -16,24 +16,32 @@ jobs:
     name: Lint and boundary checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    env:
+      FAMICHAT_NATIVE: 1
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y curl shellcheck ripgrep
-
-      - name: Check docs boundaries
-        working-directory: backend
-        run: ./run docs:boundary-check
+      - name: Install system dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck ripgrep
 
       - name: Set up Elixir and OTP
         uses: erlef/setup-beam@v1
         with:
           elixir-version: "1.18"
           otp-version: "27"
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Cache Mix dependencies
         uses: actions/cache@v4
@@ -45,32 +53,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mix-
 
+      - name: Cache Node modules
+        uses: actions/cache@v4
+        with:
+          path: backend/assets/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('backend/assets/package-lock.json', 'backend/assets/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install Mix dependencies
         working-directory: backend
         run: mix deps.get
 
-      - name: Enforce canonical Plug session keys
-        run: |
-          if rg -n \
-            'get_session\([^,\n]+,\s*("access_token"|"refresh_token"|"device_id"|"user_locale"|"redirect_count"|"invite_token"|:access_token|:refresh_token|:device_id|:user_locale|:redirect_count|:invite_token)\)|put_session\([^,\n]+,\s*("access_token"|"refresh_token"|"device_id"|"user_locale"|"redirect_count"|"invite_token"|:access_token|:refresh_token|:device_id|:user_locale|:redirect_count|:invite_token)\)' \
-            backend/lib backend/test; then
-            echo "Use FamichatWeb.SessionKeys for Plug session accessors."
-            exit 1
-          fi
-
-      - name: Check all phx-hook names are registered in app.js
-        working-directory: backend
-        run: |
-          hooks_in_templates=$(rg 'phx-hook="([^"]+)"' lib --only-matching --no-filename \
-            | sed 's/phx-hook="//;s/"//' | sort -u)
-          failed=0
-          for hook in $hooks_in_templates; do
-            if ! grep -qE "^\s+$hook\s*:" assets/js/app.js; then
-              echo "ERROR: phx-hook=\"$hook\" used in templates but not registered in assets/js/app.js"
-              failed=1
-            fi
-          done
-          [ $failed -eq 0 ] && echo "All phx-hook names registered." || exit 1
+      - name: Install JS dependencies
+        working-directory: backend/assets
+        run: npm install
 
       - name: Run full lint suite
         working-directory: backend

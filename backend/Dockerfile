@@ -82,6 +82,7 @@ RUN mix local.hex --force && mix local.rebar --force
 
 ARG MIX_ENV="prod"
 ENV MIX_ENV="${MIX_ENV}" \
+    DOCKER_BUILD=1 \
     USER="elixir"
 
 # Copy mix files and fetch dependencies based on MIX_ENV
