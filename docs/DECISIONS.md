@@ -37,4 +37,6 @@ Resolved decisions and explicitly rejected items. Reference document — answers
 - [-] "Thinking of you" one-tap message button — user decision: that's just a poke/like; clutters minimal interface | agent:consensus
 - [-] Static /help page — user decision: the operator IS the help desk; no self-service recovery page needed at L1 | agent:consensus
 - [-] Letters at L1 — consensus: defer entirely; validate daily text use first; revisit at L2+ | agent:consensus
+- [-] Move `Chat.create_user/1` out of chat.ex — zero runtime callers; SPA will replace LiveView call sites; cost exceeds value | agent:boundary-consensus
+- [-] Replace `Auth.Onboarding`→`Chat.create_direct_conversation/2` with PubSub — already covered by "Bounded context refactor" cut above; SPA will replace call site | agent:boundary-consensus
 

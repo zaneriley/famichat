@@ -1,7 +1,7 @@
 # Famichat — Brand & Positioning Notes
 
 **Status:** Working draft. Not a launch doc. Needs dogfooding to fill in the gaps.
-**Last updated:** 2026-03-01
+**Last updated:** 2026-03-20
 
 ---
 
@@ -51,6 +51,9 @@ Real decisions from the codebase. "Good" vs "almost good" — the second column 
 | "Your device will ask to confirm it's you." | "Biometric authentication required." | Describes what actually happens, not the technology category. |
 | "Invite links are single-use and expire after 72 hours." | "For security, each invite link can only be used once." | States the fact. Doesn't lecture about why. Users are resigned, not paranoid. |
 | "Getting started? Ask the person who told you about Famichat to send you an invite link." | "You need an invitation to use Famichat. Contact your administrator." | Assumes a social relationship exists. Doesn't invoke "administrator." |
+| "Something went wrong loading Famichat. Try refreshing the page." | "Application failed to initialize. Retry." | Soft opener + casual action. SPA boot failure before any family context loads — uses product name, not ファミリー. |
+| "You've been signed out on this device. Sign in again to continue." | "Your device was revoked. Re-authenticate." | Describes the experience ("signed out"), not the mechanism ("revoked"). Casual forward action. |
+| "Something went wrong. Try refreshing the page." | "WASM worker process crashed. Restart required." | Same soft pattern as all errors. Never surfaces internal technology names. |
 
 ### 日本語 (Japanese)
 
@@ -63,6 +66,9 @@ Real decisions from the codebase. "Good" vs "almost good" — the second column 
 | "招待してくれた方に新しいリンクを送ってもらってください。" | "管理者に連絡してください。" | Same pattern as EN: relational ("the person who invited you") not role-based ("administrator"). |
 | "準備中です。すぐに完了します。" | "初期化処理を実行中です。" | "準備中" (getting ready) vs "初期化処理" (initialization process). Users don't care what the system is doing internally. |
 | "お使いのブラウザはパスキーに対応していません。" | "WebAuthn APIがサポートされていません。" | Names the thing the user knows (browser, passkey) not the spec. |
+| "Famichatの読み込みで問題が発生しました。ページを更新してみてください。" | "アプリケーションの初期化に失敗しました。再試行してください。" | "問題が発生しました" (a problem occurred) is softer than "失敗しました" (failed). Uses "Famichat" (product name), not "ファミリー" — boot failure occurs before family context loads. |
+| "このデバイスからサインアウトしました。続けるには、もう一度サインインしてください。" | "デバイスが取り消されました。再認証が必要です。" | "サインアウトしました" (was signed out) vs "取り消されました" (was revoked). Relational, not technical. |
+| "エラーが発生しました。ページを更新してみてください。" | "WASMワーカープロセスがクラッシュしました。再起動が必要です。" | Same soft error pattern as all others. Never surfaces internal technology names. |
 
 ### Patterns to maintain
 

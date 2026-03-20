@@ -77,7 +77,6 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Rename `WorkerSupervisor`/`CryptoService` to canonical names in ADR 012 — stale names in active design doc cause confusion → .tmp/2026-03-20-spa-scaffold/ia-proposals/01-client-context.md | P1-confidence | agent:ia-consensus
 - [ ] Rate-limit `GET /api/v1/boot` to 10 req/min per device — endpoint issues channel token on every call → .tmp/2026-03-20-spa-scaffold/ia-proposals/02-auth-boot.md | P1-confidence | agent:ia-consensus
 - [ ] Confirm "clear messages" preserves session (does not sign user out) — confirmation body copy depends on behavior → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P1-confidence | agent:ia-consensus
-- [ ] Inject `FamichatWeb.Endpoint` via `Application.get_env` in `Auth.Tokens.Storage` — domain module depends on web layer; will fail `mix boundary.check` → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | P1-confidence | agent:boundary-consensus
 
 ## Known debt (P2)
 <!-- Not blocking; matters at scale or public launch -->
@@ -137,12 +136,6 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Add telemetry event `[:famichat, :system_channel, :session_terminated]` — revocation delivery has no monitoring → .tmp/2026-03-20-spa-scaffold/ia-proposals/03-channel-api.md | P2-debt | agent:ia-consensus
 - [ ] Add PR template checklist item for copy review on translation-touching PRs — lint can't catch tonally wrong strings → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P2-debt | agent:ia-consensus
 - [ ] Document platform detection constraint: no user-visible string may reference platform names — platform names will leak into copy without explicit constraint → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P2-debt | agent:ia-consensus
-- [ ] Move `Chat.create_user/1` and sub-functions out of `chat.ex` — sole reason Chat lists Auth as dep; Phoenix generator artifact causing Auth↔Chat bidirectional coupling (note: overlaps Cut line 397; may be cut if SPA replaces LiveView call sites first) → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | P2-debt | agent:boundary-consensus
-- [ ] Add `Chat.delete_conversation_security_state/1` to `Famichat.Chat` facade — HomeLive and MessageTestController call ConversationSecurityStateStore.delete directly from web layer → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | P2-debt | agent:boundary-consensus
-- [ ] Add `Identity.get_locale_for_user/1` to `Famichat.Auth.Identity` — three web-layer modules run identical raw Ecto queries against users.locale → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | P2-debt | agent:boundary-consensus
-- [ ] Rename `Famichat.Chat.DeviceMlsRemoval` to `ConversationSecurityDeviceRemoval` — module name encodes Mls as protocol prefix in Chat-owned module; violates ia-boundary-guardrails.md item 3 → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | P2-debt | agent:boundary-consensus
-- [ ] Replace `Auth.Onboarding`'s direct `Chat.create_direct_conversation/2` call with PubSub event — Auth controlling Chat state post-registration is architecturally inverted (note: overlaps Cut line 397; may be cut if SPA replaces call site first) → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | P2-debt | agent:boundary-consensus
-- [ ] Add custom Credo rule to flag `Famichat.Repo` usage in `famichat_web/**/*.ex` — Boundary tool silently allows web-layer Repo calls; static analysis fills the gap → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | P2-debt | agent:boundary-consensus
 
 ## Someday/maybe (P3)
 <!-- Documentation/guidance; infra will change -->

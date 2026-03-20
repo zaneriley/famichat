@@ -98,6 +98,9 @@ function docs:boundary-check {
     "${project_root}/docs/SPEC.md"
     "${project_root}/docs/ia-lexicon.md"
     "${project_root}/docs/ia-boundary-guardrails.md"
+    "${project_root}/docs/NOW.md"
+    "${project_root}/docs/BACKLOG.md"
+    "${project_root}/docs/E2EE_INTEGRATION.md"
   )
 
   local -a patterns=(
@@ -107,6 +110,11 @@ function docs:boundary-check {
     "\\bMLSStateStore\\b"
     "\\bencryption policy\\b"
     "\\bkey[- ]package inventory policy\\b"
+    "\\bCookieOrBearerAuth\\b"
+    "\\bCryptoService\\b"
+    "\\bWorkerSupervisor\\b"
+    "\\bboot[_ ]token\\b"
+    "\\bchannel_bootstrap_token\\b"
   )
 
   local -a suggestions=(
@@ -116,6 +124,11 @@ function docs:boundary-check {
     "Use Famichat.Chat.ConversationSecurityStateStore and keep protocol as data."
     "Use conversation security policy for chat-domain policy wording."
     "Use client inventory policy wording at Chat boundary docs; keep key_package terms scoped to MLS adapter/internal payload context."
+    "Use ApiAuth — names the capability, not the mechanism."
+    "Use ConversationCrypto (domain interface) or MlsWorkerApi (protocol interface)."
+    "Use CryptoWorkerManager — avoids OTP Supervisor collision."
+    "Use boot context — sessionStorage.__boot_token superseded by cookie-based auth."
+    "Use channel_token — canonical term; endpoint is POST /api/v1/auth/channel_tokens."
   )
 
   local violations=0

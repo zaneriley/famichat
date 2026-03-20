@@ -1,6 +1,6 @@
 # Famichat IA Lexicon
 
-**Last Updated**: 2026-03-08
+**Last Updated**: 2026-03-20
 **Scope**: Canonical product and engineering terms used across roadmap, architecture, and sprint docs.
 
 ---
@@ -48,6 +48,18 @@
    - An optimistic-lock write conflict where persisted state changed before the current write completed.
 4. `fail-closed recovery`
    - Recovery behavior that returns explicit errors instead of silently falling back to plaintext or stale state.
+5. `boot context`
+   - The session-scoped data payload delivered to the SPA at cold start. Contains `user_id`, `username`, `device_id`, `locale`, `active_family_id`, `active_family_name`, `channel_token`. Assembled by `FamichatWeb.BootContext.for_conn/1` (Web-layer aggregator). Delivered via HTML `<script>` embed on first load (zero round-trip) and `GET /api/v1/boot` for refresh/Capacitor cold start. The JS global `window.__FAMICHAT_BOOT__` is an implementation detail; components use `getBootContext()` from `$lib/auth/boot.ts`.
+6. `channel_token`
+   - A short-lived Phoenix.Token authorizing WebSocket channel joins. Issued by `POST /api/v1/auth/channel_tokens` (plural). The internal token kind atom is `:channel_token`. The signing salt `"channel_bootstrap_v1"` is preserved for backward compatibility. Replaces `channel_bootstrap_token`.
+7. `SPA shell page`
+   - The server-rendered HTML page served by `SpaController` at `/app/*`. Contains the `<script>` tag with boot context, CSS/JS asset links, and locale-switching logic. Loads before Svelte mounts. Use "SPA shell page" in docs, not "boot page."
+8. `session_terminated`
+   - Channel event delivered via `system:user:{user_id}` when a device's session is ended (revocation, admin action). Replaces the proposed `device_revoked` event name, which collides with MLS group revocation. Payload includes `reason` field (`"device_revoked"`, `"user_revoked"`).
+9. `ApiAuth`
+   - `FamichatWeb.Plugs.ApiAuth`. Authenticates API requests by checking the session cookie first (same-origin SPA), falling back to Bearer header (Capacitor). Replaces the proposed `CookieOrBearerAuth` name. Delegates to `Sessions.verify_access_token/1`.
+10. `SpaCSPHeader`
+    - `FamichatWeb.Plugs.SpaCSPHeader`. Scoped CSP plug for the `:spa` pipeline only. Adds `wasm-unsafe-eval` to `script-src` and `worker-src 'self' blob:`. Must not be applied globally — LiveView paths do not need WASM permissions.
 
 ---
 
@@ -81,6 +93,38 @@
 1. `Famichat.Chat` is the write owner for durable conversation security state.
 2. `Famichat.Crypto.MLS` and `backend/infra/mls_nif` are crypto adapters only and do not own persistence tables.
 3. `Famichat.Chat.MessageService` orchestrates state load/persist through Chat-owned boundaries.
+4. `FamichatWeb.BootContext` is the Web-layer aggregator for SPA boot data. It depends on Auth and Accounts but does not belong to either — it lives in the Web layer to avoid circular dependencies.
+5. `FamichatWeb.Plugs.ApiAuth` handles SPA/Capacitor API authentication. Delegates to `Famichat.Auth.Sessions.verify_access_token/1`.
+
+---
+
+## Client Bounded Context
+
+The **Client** is the trust boundary peer to the server. It holds private key material in IndexedDB, maintains MLS epoch state the server cannot overwrite, and controls two persistent stores. "Client" wins over "Browser" (too platform-specific — Capacitor runs in a WebView), "Device" (collides with Auth domain `device`), and "Frontend" (directory name, not a domain concept).
+
+### Client-Side Modules
+
+1. `ConversationCrypto`
+   - Domain-facing crypto interface for components. File: `frontend/src/lib/crypto/conversation-crypto.ts`. Interface: `encrypt(conversationId, plaintext)`, `decrypt(conversationId, ciphertext)`, `restoreSession(conversationId)`, `decryptBatch(conversationId, ciphertexts)`. Components import `ConversationCrypto` only — never `CryptoWorkerManager` or `MlsWorkerApi`.
+2. `CryptoWorkerManager`
+   - Lifecycle owner of the WASM Web Worker. File: `frontend/src/lib/crypto/crypto-worker-manager.ts`. Owns worker spawn, restart, health check, `initWrappingKey`. Non-conversation operations live here, not on `ConversationCrypto`.
+3. `MlsWorkerApi`
+   - Protocol-level Comlink contract running inside the Web Worker. The client-side analog of `Famichat.Crypto.MLS`. Components must not import this directly.
+4. Import hierarchy: `ConversationCrypto` > `CryptoWorkerManager` > `MlsWorkerApi`. This mirrors the server-side pattern where `MessageService` (domain) is distinct from `Famichat.Crypto.MLS` (adapter).
+
+### Client-Side Stores
+
+1. `famichat_mls_keystore`
+   - IndexedDB database for MLS signing keys and group state. The `mls` prefix is intentional: the store is exclusively MLS content, and renaming a deployed IndexedDB database requires a data migration. This asymmetry with the server-side naming guardrail (which discourages `mls` prefixes on Chat-owned modules) is acceptable and documented.
+2. `famichat_messages`
+   - IndexedDB database for decrypted message cache, conversation previews, and sync cursors. Managed by Dexie.js.
+
+### Web-Layer Modules (Server-Side, Supporting Client)
+
+1. `FamichatWeb.BootContext`
+   - Web-layer aggregator that assembles the boot context payload. Depends on `Sessions` (Auth) and `FamilyContext` (Accounts). Lives in the Web layer because it crosses domain boundaries — `Sessions` must not depend on `Accounts`.
+2. `FamichatWeb.SystemChannel`
+   - Phoenix Channel on `system:user:{user_id}` for lifecycle events. Delivers `session_terminated` with `reason` payload. `handle_out` filters by `device_id` so only the target device receives the event.
 
 ---
 
@@ -101,6 +145,12 @@
 6. Target name for migration: `ConversationSecurityClientInventoryPolicy`.
 7. Avoid `key_package` in new Chat-facing module/function names; keep `key_package` terminology scoped to `Famichat.Crypto.MLS` and internal inventory payload fields.
 8. Enforcement command: `cd backend && ./run docs:boundary-check` (see `docs/ia-boundary-guardrails.md`).
+9. Avoid `CookieOrBearerAuth` as a plug name — renamed to `ApiAuth`; names the capability, not the mechanism.
+10. Avoid `CryptoService` as a client-side interface name — the `Service` suffix implies domain authority; use `ConversationCrypto` for the domain interface and `MlsWorkerApi` for the protocol interface.
+11. Avoid `WorkerSupervisor` for the WASM worker lifecycle manager — collides with OTP `Supervisor`; use `CryptoWorkerManager`.
+12. Avoid `boot token` / `boot_token` / `__boot_token` in new documents — superseded by `boot context`; the `sessionStorage.__boot_token` handoff from ADR 012 is replaced by cookie-based auth + `FamichatWeb.BootContext`.
+13. Avoid `channel_bootstrap_token` — canonical term is `channel_token`; endpoint is `POST /api/v1/auth/channel_tokens`.
+14. Avoid `device_revoked` as a channel event name — collides with MLS group revocation; use `session_terminated` for the system channel event.
 
 ---
 

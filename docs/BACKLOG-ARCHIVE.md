@@ -136,6 +136,11 @@ Search here before adding new items to BACKLOG.md.
 - [x] Remove stale dep `Famichat.Auth.Households` from `Famichat.Auth.Recovery` boundary (2c307c8)
 - [x] Delete `Famichat.Accounts.Errors`, `FamichatWeb.LiveError`, and `Famichat.Communities` — zero-caller dead code (2c307c8)
 - [x] Fix stale `alias Famichat.Chat.User` in `GroupConversationPrivileges` to `Famichat.Accounts.User` (2c307c8)
+- [x] Inject `FamichatWeb.Endpoint` via `Application.get_env` in `Auth.Tokens.Storage` — domain→web decoupling
+- [x] Add `Chat.delete_conversation_security_state/1` facade delegate — web layer no longer calls StateStore directly
+- [x] Add `Identity.get_locale_for_user/1` — dedup raw Ecto locale queries from 3 web-layer modules
+- [x] Rename `DeviceMlsRemoval` to `ConversationSecurityDeviceRemoval` — protocol prefix removed per ia-boundary-guardrails
+- [x] Add custom Credo rule `NoRepoInWeb` to flag `Famichat.Repo` usage in web layer
 
 ## Someday/maybe (P3)
 
