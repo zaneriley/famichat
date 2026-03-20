@@ -24,6 +24,8 @@ Resolved decisions and explicitly rejected items. Reference document — answers
 - [x] Decide: cold-start key access model — DECIDED: instant open (persistent CryptoKey); optional passkey/biometric as wishlist → .tmp/2026-03-19-local-first-storage/round-1/consensus.md | agent:consensus
 - [x] Decide: server-side ciphertext retention — DECIDED: short (30 days / all-device ACK); local store is canonical → .tmp/2026-03-19-local-first-storage/round-1/consensus.md | agent:consensus
 - [x] Decide: recovery phrase model — DECIDED: 12-word phrase for L3; social recovery (1-2 family members) as wishlist for L4+ → .tmp/2026-03-19-local-first-storage/round-1/consensus.md | agent:consensus
+- [x] Decide: move `Famichat.Chat.Family` schema to `Famichat.Accounts`? — RESOLVED: no; Family stays in Chat for L1; adding Accounts→Chat dep creates a cycle; FamilyContext cross-boundary reach is documented and accepted → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | agent:boundary-consensus
+- [x] Decide: enforce `Famichat.Auth` facade or accept direct sub-module access? — RESOLVED: accept direct sub-module access; facade has zero callers; 8 Auth sub-boundaries work as independent top-level boundaries → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | agent:boundary-consensus
 
 ## Cut / Won't do
 

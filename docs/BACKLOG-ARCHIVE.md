@@ -40,6 +40,8 @@ Search here before adding new items to BACKLOG.md.
 - [x] Fix LiveView crash on "Generate invite link" in setup post-passkey step
 - [x] Add community-admin role check to CommunityAdminLive (`/en/admin`)
 - [x] Add `validate_length` on username in `User.changeset` at all entry points (setup, invite, family-start)
+- [x] Enforce compile-time domain boundary annotations — replace `exports: :all` with explicit exports on all major boundaries (2c307c8)
+- [x] Delete `FamichatWeb.SchemaMarkup` — hardcoded PII, zero callers (2c307c8)
 
 ## Blocks confidence (P1)
 
@@ -106,6 +108,8 @@ Search here before adding new items to BACKLOG.md.
 - [x] Fix `TypeError: Cannot read properties of undefined (reading 'size')` on `/admin/message` load
 - [x] Add "Local Storage Privacy Stance" section to SPEC.md
 - [x] Resolve SPEC:645 [CONFLICT] data preservation vs. data minimization
+- [x] Add `use Boundary` annotation to `Famichat.Crypto.MLS` (2c307c8)
+- [x] Add `Famichat.Crypto.MLS` to deps in `Mix.Tasks.Famichat.BackfillSnapshotMacs` (2c307c8)
 
 ## Known debt (P2)
 
@@ -127,6 +131,11 @@ Search here before adding new items to BACKLOG.md.
 - [x] Remove dead Content module config from config.exs, dev.exs, prod.exs, test.exs (8fd6ead)
 - [x] Fix Type dropdown in `/admin/message` resetting to "self" when Encrypt Messages toggled
 - [x] Fix `TypeError: null.getAttribute` crash in LiveView pushInput on `/admin/message` Type change
+- [x] Replace `exports: :all` in `Famichat.Chat` boundary with explicit export list (2c307c8)
+- [x] Remove phantom dep `Famichat.Auth.Identity` from `Famichat.Auth.Sessions` boundary (2c307c8)
+- [x] Remove stale dep `Famichat.Auth.Households` from `Famichat.Auth.Recovery` boundary (2c307c8)
+- [x] Delete `Famichat.Accounts.Errors`, `FamichatWeb.LiveError`, and `Famichat.Communities` — zero-caller dead code (2c307c8)
+- [x] Fix stale `alias Famichat.Chat.User` in `GroupConversationPrivileges` to `Famichat.Accounts.User` (2c307c8)
 
 ## Someday/maybe (P3)
 
