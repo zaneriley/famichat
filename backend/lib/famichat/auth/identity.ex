@@ -203,6 +203,21 @@ defmodule Famichat.Auth.Identity do
   end
 
   @doc """
+  Returns the stored locale for a user, or nil if the user does not exist
+  or has no locale set.
+  """
+  @spec get_locale_for_user(String.t()) :: String.t() | nil
+  def get_locale_for_user(user_id) when is_binary(user_id) do
+    Repo.one(
+      from u in User,
+        where: u.id == ^user_id,
+        select: u.locale
+    )
+  end
+
+  def get_locale_for_user(_), do: nil
+
+  @doc """
   Applies the canonical username normalization pipeline.
   """
   @spec normalize_username(String.t()) :: String.t() | nil

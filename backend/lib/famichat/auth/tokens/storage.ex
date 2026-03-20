@@ -98,7 +98,7 @@ defmodule Famichat.Auth.Tokens.Storage do
   """
   @spec sign(term(), String.t(), keyword()) :: String.t()
   def sign(payload, salt, opts \\ []) when is_binary(salt) do
-    Phoenix.Token.sign(FamichatWeb.Endpoint, salt, payload, opts)
+    Phoenix.Token.sign(token_signer(), salt, payload, opts)
   end
 
   @doc """
@@ -108,7 +108,11 @@ defmodule Famichat.Auth.Tokens.Storage do
           {:ok, term()} | {:error, :expired | :invalid | :missing}
   def verify(token, salt, opts \\ [])
       when is_binary(token) and is_binary(salt) do
-    Phoenix.Token.verify(FamichatWeb.Endpoint, salt, token, opts)
+    Phoenix.Token.verify(token_signer(), salt, token, opts)
+  end
+
+  defp token_signer do
+    Application.fetch_env!(:famichat, __MODULE__)[:secret_key_base]
   end
 
   @doc """

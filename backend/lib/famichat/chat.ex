@@ -292,7 +292,7 @@ defmodule Famichat.Chat do
   alias Famichat.Chat.ConversationSecurityRecoveryLifecycle
   alias Famichat.Chat.ConversationSecurityRevocationLifecycle
   alias Famichat.Chat.ConversationVisibilityService
-  alias Famichat.Chat.DeviceMlsRemoval
+  alias Famichat.Chat.ConversationSecurityDeviceRemoval
 
   @doc """
   Hides a conversation for a specific user.
@@ -388,6 +388,14 @@ defmodule Famichat.Chat do
   def rotate_stale_conversation_security_key_package_inventories(opts \\ []) do
     ConversationSecurityKeyPackagePolicy.rotate_stale_inventories(opts)
   end
+
+  @doc """
+  Deletes the conversation security state for a conversation.
+  Used for recovery/reset scenarios.
+  """
+  defdelegate delete_conversation_security_state(conversation_id),
+    to: Famichat.Chat.ConversationSecurityStateStore,
+    as: :delete
 
   @doc """
   Recovers durable conversation security state using rejoin material.
@@ -508,6 +516,6 @@ defmodule Famichat.Chat do
           String.t()
         ) :: :ok
   def remove_device_from_mls_groups(user_id, device_id, revocation_ref) do
-    DeviceMlsRemoval.remove_async(user_id, device_id, revocation_ref)
+    ConversationSecurityDeviceRemoval.remove_async(user_id, device_id, revocation_ref)
   end
 end

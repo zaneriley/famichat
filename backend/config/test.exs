@@ -4,6 +4,9 @@ config :famichat, FamichatWeb.Endpoint,
   token_salt: System.get_env("DEV_TOKEN_SALT"),
   secret_key_base: System.fetch_env!("SECRET_KEY_BASE")
 
+config :famichat, Famichat.Auth.Tokens.Storage,
+  secret_key_base: System.fetch_env!("SECRET_KEY_BASE")
+
 config :famichat, Famichat.Repo, pool: Ecto.Adapters.SQL.Sandbox
 
 config :logger, :console,

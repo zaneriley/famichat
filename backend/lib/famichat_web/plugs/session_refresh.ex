@@ -13,8 +13,7 @@ defmodule FamichatWeb.Plugs.SessionRefresh do
   """
 
   import Plug.Conn
-  import Ecto.Query, only: [from: 2]
-
+  alias Famichat.Auth.Identity
   alias Famichat.Auth.Sessions
   alias FamichatWeb.ConnHelpers
   alias FamichatWeb.SessionKeys
@@ -107,12 +106,7 @@ defmodule FamichatWeb.Plugs.SessionRefresh do
   end
 
   defp maybe_restore_locale(conn, user_id) when is_binary(user_id) do
-    locale =
-      Famichat.Repo.one(
-        from u in Famichat.Accounts.User,
-          where: u.id == ^user_id,
-          select: u.locale
-      )
+    locale = Identity.get_locale_for_user(user_id)
 
     case locale do
       l when is_binary(l) and l != "" ->

@@ -12,7 +12,6 @@ defmodule FamichatWeb.MessageTestController do
 
   alias Famichat.Chat
   alias Famichat.Chat.{Conversation, ConversationAccess, Message, Self}
-  alias Famichat.Chat.ConversationSecurityStateStore
   alias FamichatWeb.MessagingDispatch
   alias Famichat.Repo
 
@@ -124,7 +123,7 @@ defmodule FamichatWeb.MessageTestController do
       ) do
     with {:ok, request} <- normalize_conversation_target(params),
          {:ok, conversation} <- fetch_conversation(request, user_id),
-         :ok <- ConversationSecurityStateStore.delete(conversation.id) do
+         :ok <- Chat.delete_conversation_security_state(conversation.id) do
       json(conn, %{
         status: "success",
         action: "reset_conversation_security_state",

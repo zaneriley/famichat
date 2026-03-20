@@ -1,4 +1,4 @@
-defmodule Famichat.Chat.DeviceMlsRemoval do
+defmodule Famichat.Chat.ConversationSecurityDeviceRemoval do
   @moduledoc """
   Best-effort MLS group removal for revoked devices.
 
@@ -88,7 +88,7 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
     conversation_ids = list_conversation_ids(user_id)
 
     Logger.info(
-      "[DeviceMlsRemoval] Starting MLS removal for revoked device",
+      "[ConversationSecurityDeviceRemoval] Starting MLS removal for revoked device",
       user_id: user_id,
       device_id: device_id,
       conversation_count: length(conversation_ids),
@@ -122,7 +122,7 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
       )
 
     Logger.info(
-      "[DeviceMlsRemoval] MLS removal complete for revoked device",
+      "[ConversationSecurityDeviceRemoval] MLS removal complete for revoked device",
       user_id: user_id,
       device_id: device_id,
       summary: summary
@@ -148,7 +148,7 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
 
       nil ->
         Logger.warning(
-          "[DeviceMlsRemoval] Timed out removing device from conversation",
+          "[ConversationSecurityDeviceRemoval] Timed out removing device from conversation",
           conversation_id: conversation_id,
           device_id: device_id,
           timeout_ms: @per_conversation_timeout_ms
@@ -174,7 +174,7 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
       {:error, :storage_inconsistent, %{reason: :missing_state}} ->
         # No MLS state means this conversation was never enrolled in MLS.
         Logger.debug(
-          "[DeviceMlsRemoval] Skipping conversation with no MLS state",
+          "[ConversationSecurityDeviceRemoval] Skipping conversation with no MLS state",
           conversation_id: conversation_id,
           device_id: device_id
         )
@@ -183,7 +183,7 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
 
       {:error, :storage_inconsistent, details} ->
         Logger.warning(
-          "[DeviceMlsRemoval] Storage inconsistency removing device from conversation",
+          "[ConversationSecurityDeviceRemoval] Storage inconsistency removing device from conversation",
           conversation_id: conversation_id,
           device_id: device_id,
           details: inspect(details)
@@ -200,7 +200,7 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
 
       {:error, code, details} ->
         Logger.warning(
-          "[DeviceMlsRemoval] Failed to remove device from MLS group",
+          "[ConversationSecurityDeviceRemoval] Failed to remove device from MLS group",
           conversation_id: conversation_id,
           device_id: device_id,
           error_code: code,
@@ -260,7 +260,7 @@ defmodule Famichat.Chat.DeviceMlsRemoval do
 
       {:error, code, details} ->
         Logger.warning(
-          "[DeviceMlsRemoval] Could not load revocation record to mark failed",
+          "[ConversationSecurityDeviceRemoval] Could not load revocation record to mark failed",
           conversation_id: conversation_id,
           revocation_ref: revocation_ref,
           error_code: code,

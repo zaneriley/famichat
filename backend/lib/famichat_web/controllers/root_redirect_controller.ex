@@ -1,8 +1,7 @@
 defmodule FamichatWeb.RootRedirectController do
   use FamichatWeb, :controller
 
-  import Ecto.Query, only: [from: 2]
-
+  alias Famichat.Auth.Identity
   alias Famichat.Auth.Sessions
   alias FamichatWeb.SessionKeys
 
@@ -28,11 +27,7 @@ defmodule FamichatWeb.RootRedirectController do
            Plug.Conn.get_session(conn, SessionKeys.access_token()),
          {:ok, %{user_id: user_id}} <- Sessions.verify_access_token(token),
          locale when is_binary(locale) and locale != "" <-
-           Famichat.Repo.one(
-             from u in Famichat.Accounts.User,
-               where: u.id == ^user_id,
-               select: u.locale
-           ) do
+           Identity.get_locale_for_user(user_id) do
       locale
     else
       _ -> FamichatWeb.Plugs.SetLocale.extract_preferred_locale(conn)

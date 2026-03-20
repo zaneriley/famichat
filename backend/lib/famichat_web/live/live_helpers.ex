@@ -33,7 +33,7 @@ defmodule FamichatWeb.LiveHelpers do
   import Phoenix.Component
   import FamichatWeb.AppName, only: [app_name: 0]
   import FamichatWeb.Gettext
-  import Ecto.Query, only: [from: 2]
+  alias Famichat.Auth.Identity
 
   require Logger
 
@@ -64,12 +64,7 @@ defmodule FamichatWeb.LiveHelpers do
     case Famichat.Auth.Sessions.verify_access_token(token) do
       {:ok, %{user_id: user_id, device_id: device_id}} ->
         # Lightweight query: fetch only the locale column, not the full User struct.
-        user_locale =
-          Famichat.Repo.one(
-            from u in Famichat.Accounts.User,
-              where: u.id == ^user_id,
-              select: u.locale
-          )
+        user_locale = Identity.get_locale_for_user(user_id)
 
         socket =
           socket

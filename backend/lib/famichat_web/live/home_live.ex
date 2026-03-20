@@ -7,8 +7,7 @@ defmodule FamichatWeb.HomeLive do
 
   alias Famichat.Chat.{
     Conversation,
-    ConversationParticipant,
-    ConversationSecurityStateStore
+    ConversationParticipant
   }
 
   alias Famichat.Accounts.{FamilyContext, HouseholdMembership, User}
@@ -393,7 +392,7 @@ defmodule FamichatWeb.HomeLive do
 
   @impl true
   def handle_event("reset-conversation-security-state", _params, socket) do
-    case ConversationSecurityStateStore.delete(socket.assigns.conversation_id) do
+    case Chat.delete_conversation_security_state(socket.assigns.conversation_id) do
       :ok ->
         {:noreply,
          socket

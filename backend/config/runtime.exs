@@ -89,6 +89,9 @@ endpoint_config =
 
 config :famichat, FamichatWeb.Endpoint, endpoint_config
 
+config :famichat, Famichat.Auth.Tokens.Storage,
+  secret_key_base: secret_key_base
+
 # ── Database ───────────────────────────────────────────────────────
 
 db_user = System.get_env("POSTGRES_USER", "famichat")
