@@ -303,6 +303,8 @@ Use the app daily for real couple messaging. Track:
 | Photo sharing | Punted to next cycle; not required for L1 dogfood |
 | Deployment | Homelab + Docker Compose + Cloudflare Tunnel; dogfoods operator self-hosting experience |
 | Refresh token TTL | 30 days (deferred to L2; 7-day TTL adds friction, no security gain at L1) |
+| Local-first storage | Persistent IndexedDB as primary data layer; encrypted at rest (AES-256-GCM); instant open (no passphrase); short server retention (30d / all-device ACK); Dexie.js wrapper |
+| Recovery model | 12-word BIP-39 phrase for L3; social key recovery (1-2 family members) wishlist for L4+ |
 
 ---
 
@@ -314,6 +316,9 @@ Use the app daily for real couple messaging. Track:
 - CSP not updated for WASM Web Worker (`worker-src 'self' blob:`)
 - `device_id` → MLS leaf index mapping gap (blocks revoke → MLS removal)
 - S7 + M3 WASM spike criteria pending physical iOS device
+- ADR 012 "30-minute idle wrapping-key timeout" conflicts with instant-open decision — needs removal or opt-in
+- `famichat_messages` IndexedDB schema not built (local-first storage layer)
+- Local-first data layer (Dexie.js + Svelte stores reading from IndexedDB) not scaffolded
 
 ## Known gaps — blocking Phase 1 (message plane)
 

@@ -131,6 +131,26 @@ store: "pending_members"
   value: { member_state: <json_blob> }   ← Bob's pre-join key material
 ```
 
+**Second IndexedDB database: `famichat_messages` (message cache — reconstructible from server)**
+
+Separate from `famichat_mls_keystore` so that clearing the message cache does not destroy
+key material. All values encrypted at rest with AES-256-GCM using the same wrapping key.
+
+```
+store: "messages"
+  key:   {conversation_id, message_seq}
+  value: { body: <aes_gcm_blob>, sender_id, sent_at, content_type }
+  index: [conversation_id], [sent_at]
+
+store: "conversation_previews"
+  key:   {conversation_id}
+  value: { last_message_seq, preview_text: <aes_gcm_blob>, last_message_at }
+
+store: "sync_cursors"
+  key:   {conversation_id}
+  value: { last_local_seq: <int>, synced_at: <timestamp> }
+```
+
 **Write ordering invariant:** Write new `group_state` to IndexedDB BEFORE sending
 ciphertext to the server. If the server POST fails, the state is still advanced
 (the plaintext must be re-encrypted, not the old ciphertext resent).
@@ -266,6 +286,13 @@ At step 6: the server sees `conversation_id`, `sender_device_id`, `ciphertext` (
 5. For each ciphertext: WASM decrypt_message(group_state, ciphertext) → feeds new_group_state into next call
 6. All messages decrypted locally; server never sees plaintext
 ```
+
+**Local-first storage model (decided 2026-03-19):**
+Decrypted messages are written to the `famichat_messages` IndexedDB database after
+decryption (encrypted at rest with AES-256-GCM). On subsequent app opens, the hook reads
+from local IndexedDB first, then fetches only new messages since `last_local_seq` from the
+server. The local store is the canonical readable copy — MLS forward secrecy means old
+server ciphertext is permanently undecryptable after epoch rotation.
 
 ---
 

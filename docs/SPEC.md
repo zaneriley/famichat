@@ -260,7 +260,7 @@ Conflicts are flagged inline with `[CONFLICT]`. Unresolved decisions are flagged
 - Quick polls ("Pizza or tacos tonight?")
 - @mentions in group conversations
 - Shared family calendar — [OPEN TENSION] build vs pull from Google Calendar / iCal?
-- Memory lane (past moments, anniversaries) — [OPEN TENSION] requires storing media/data at rest; conflicts with data-minimization principle
+- Memory lane (past moments, anniversaries) — [OPEN TENSION] requires storing media/data at rest; local-first persistence resolves the text/message aspect; media storage policy still open
 - Location-specific info (weather in multiple locations) — low-priority idea
 
 ### Ambient / Cozy Features (backlog — not accepted)
@@ -305,9 +305,21 @@ Conflicts are flagged inline with `[CONFLICT]`. Unresolved decisions are flagged
 ### Core Security Philosophy
 - Goal: make it **impossible** to be insecure — not just guarded, not just defended, axiomatically impossible
 - If we don't own or sit on data, we can't lose it or expose it — data minimization is a security primitive, not a product choice
+- Data minimization applies to the server and infrastructure layer, not to the user's own device. Under E2EE (Path C), the user's local device is the canonical home for decrypted messages — MLS forward secrecy discards old epoch keys, making server ciphertext permanently undecryptable. Persistent local storage is user ownership, not data liability.
 - This applies to us and to any operator: the system should make it structurally impossible for anyone (including Famichat, including the self-hoster) to do the wrong thing
 - Where security and utility conflict (e.g., losing messages or media would be bad), resolve case-by-case with explicit reasoning — do not silently trade security for convenience
 - Physical/cryptographic principles take priority over software-layer protections
+
+### Local Storage Privacy Stance (decided 2026-03-19)
+- Under E2EE (Path C), the user's device holds the only readable copy of past messages — MLS forward secrecy discards old epoch keys, making server ciphertext permanently undecryptable after epoch rotation
+- Persistent local storage in IndexedDB is structurally required: search, conversation previews, and offline access are impossible without it
+- Message bodies encrypted at rest in IndexedDB (AES-256-GCM, same wrapping key infrastructure as ADR 012)
+- Instant open: app opens from local data without passphrase re-entry; optional passkey/biometric unlock is wishlist
+- Server ciphertext retention: short (30 days or all-device ACK); local store is canonical
+- Recovery: 12-word BIP-39 phrase for L3; social key recovery (1-2 family members) as wishlist for L4+
+- Two separate IndexedDB databases: `famichat_mls_keystore` (key material, non-reconstructible) and `famichat_messages` (message cache, reconstructible from server)
+- Dexie.js (~30 kB) as IndexedDB wrapper; `liveQuery()` for Svelte 5 reactivity
+- Full research: `.tmp/2026-03-19-local-first-storage/round-1/consensus.md`
 
 ### Current Architecture vs Security Goal
 
@@ -602,7 +614,7 @@ Every user-facing `:string` field in an Ecto schema must have `validate_length` 
 
 ### Security & Data
 - [OPEN] Memory lane / media archival: storing media at rest conflicts with data-minimization principle; how do we let people preserve memories without us holding their data?
-- [OPEN] Key recovery UX: no backup vs cloud backup with passphrase vs social key recovery (Shamir's)
+- [PARTIALLY RESOLVED] Key recovery UX: 12-word BIP-39 phrase for L3; social key recovery (1-2 family members) as wishlist for L4+. Cloud backup deferred.
 - [OPEN] Key lifecycle revocation: device/user removal semantics incomplete
 - [OPEN] Coercion resistance at the household boundary: household admin currently gates all family-level participation. For L4 (teen autonomy) and beyond, adult community agency should not require household admin approval. The home environment is not always a trustworthy credentialing context. Research references: Merino et al. (TRIP/Votegral) on in-person credentialing under coercion; Ford on separating personhood from identity.
 
@@ -642,7 +654,7 @@ Every user-facing `:string` field in an Ecto schema must have `validate_length` 
 ## Conflicts & Tensions Captured
 
 - [RESOLVED] Server-side decryption vs security goal: current architecture is a known dogfooding expedient; Path C (SPA + OpenMLS WASM) is the decided fix; gate is L3 — must ship before any family other than your own trusts the server
-- [CONFLICT] Data preservation vs data minimization: users want to preserve memories and media; storing data at rest creates liability and attack surface; resolve case-by-case with explicit reasoning
+- [RESOLVED] Data preservation vs data minimization: resolved by scoping — data minimization applies to the server (ciphertext only after Path C); user devices hold decrypted messages as the canonical readable copy; MLS forward secrecy makes server ciphertext undecryptable after epoch rotation; persistent local storage IS the archive
 - [CONFLICT] `revoke_device` semantics: intent is that revocation removes device from MLS group; actual implementation revokes session only; `device_id`→MLS leaf mapping not yet built
 - [CONFLICT] ADR 008 defines conversation types as "dm" and "room"; ADR 001 uses "direct, self, group, family" — API spec and domain model use different taxonomies
 - [CONFLICT] "household" vs "family" terminology: governance code uses "household"; UI copy, some ADRs, and some modules still say "family"; migration in progress but not complete
