@@ -86,6 +86,9 @@ Current check scope (active docs):
 4. `docs/NOW.md`
 5. `docs/BACKLOG.md`
 6. `docs/E2EE_INTEGRATION.md`
+7. `docs/decisions/012-spa-wasm-client-architecture.md`
+8. `docs/brand-positioning.md`
+9. `docs/DECISIONS.md`
 
 ## Deferred Terms (do not introduce in code or product copy)
 

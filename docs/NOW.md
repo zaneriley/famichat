@@ -8,25 +8,28 @@ Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [A
 
 ## One-line state
 
-L1 dogfood (2-person, single family, text only) is blocked by 6 P0 security/UX issues found in 2026-03-16 browser walkthrough. Message exchange works. Japanese locale works. Deployment infra is ready.
+L1 dogfood is ready to deploy. All 6 original P0 blockers from the 2026-03-16 browser walkthrough are resolved (see [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md)). Next step: homelab deploy + 2-week observation.
 
 ---
 
 ## Current blockers
 
-**6 P0 blockers — must fix before handing URL to family:**
+**L1 LiveView dogfood: no blockers remaining.**
 
-- `/en/admin` has no role check — any authenticated user reaches the full community admin panel
-- `invites/complete` sets session cookie before passkey completes — auth bypass; abandoned ceremony = silent login with no passkey
-- Invite/setup token not invalidated after `:pending` user creation — token reusable with different username
-- "Admin Controls" (Revoke Device, Reset Security State) shown to all users on home page
-- Username `validate_length` missing at all entry points — 206-char names accepted and persisted
-- LiveView crash on "Generate invite link" in setup post-passkey step — first-run admin cannot issue invite from setup
+All 6 P0 issues from 2026-03-16 are archived:
+- Admin role check (76776e4)
+- Session-before-passkey auth bypass (76776e4)
+- Token invalidation (90b0d5b)
+- Admin controls visibility (76776e4)
+- Username validate_length (76776e4)
+- Invite gen crash from setup (76776e4)
 
 **P1 context (not blocking L1):**
 
 - `HomeLive.load_family_data/1` picks first membership — irrelevant for L1 (one family) but blocks multi-family
 - Message plane substrate exists (message_seq, cursors, summaries) but unread count math, `Idempotency-Key`, and `pending_welcomes` not wired
+
+**Note on BACKLOG.md P0 items:** The 14 P0-dogfood items currently in BACKLOG.md are all L2 SPA infrastructure (static_paths, CSP, SpaController, Docker context, etc.). They do not block L1 LiveView dogfood. "P0-dogfood" means "blocks SPA dogfood," not "blocks handing the LiveView URL to family."
 
 ---
 
@@ -36,9 +39,9 @@ L1 target: 2-person dogfood (operator + spouse), single family, text messaging o
 
 | Gate | Status | Notes |
 |---|---|---|
-| Operator bootstraps instance | PARTIAL | Setup → passkey → auto-auth → home works. Invite gen from setup crashes (P0). |
-| Operator invites spouse | PARTIAL | Invite gen from home works. Token not invalidated post-user-creation (P0). Auth bypass (P0). |
-| Spouse completes onboarding | PARTIAL | Auth bypass: session set before passkey (P0). |
+| Operator bootstraps instance | PASS | Setup → passkey → auto-auth → invite gen all working (76776e4) |
+| Operator invites spouse | PASS | Token invalidation fixed (90b0d5b); auth bypass fixed (76776e4) |
+| Spouse completes onboarding | PASS | Session gated behind passkey completion (76776e4) |
 | Both users can exchange messages | PASS | Channel join, send, receive, browser notifications |
 | Japanese locale works end-to-end | PASS | Locale persisted to DB, translations complete |
 | Instance deploys with env vars only | PASS | .env.production.example, runtime.exs guards |
@@ -49,11 +52,11 @@ L1 target: 2-person dogfood (operator + spouse), single family, text messaging o
 
 ## Immediate next steps
 
-1. **Fix 6 P0 blockers** — see BACKLOG.md P0 section
-2. **Deploy to homelab** — Docker Compose + Cloudflare Tunnel → `https://chat.<domain>`. Detailed steps in `docs/self-hosting/`. WebAuthn vars are runtime config (container restart, no rebuild).
-3. **Post-deploy browser walkthrough** — full CUJ against deployed instance
-4. **Capture operator friction** — every pain point becomes self-hosting documentation
-5. **2-week dogfood observation** — daily use, track UX gaps, notification reliability, session stability
+1. **Deploy to homelab** — Docker Compose + Cloudflare Tunnel → `https://chat.<domain>`. Detailed steps in `docs/self-hosting/`. WebAuthn vars are runtime config (container restart, no rebuild).
+2. **Post-deploy browser walkthrough** — full CUJ against deployed instance
+3. **Capture operator friction** — every pain point becomes self-hosting documentation
+4. **2-week dogfood observation** — daily use, track UX gaps, notification reliability, session stability
+5. **Begin L2 SPA scaffold** — see BACKLOG.md P0 section for SPA infrastructure items (can overlap with observation)
 
 ---
 

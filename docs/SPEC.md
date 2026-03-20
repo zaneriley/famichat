@@ -413,7 +413,7 @@ These are either things we tried and rejected, known security anti-patterns in M
 - Revoked device cannot access future messages (forward secrecy preserved)
 - Revocation creates tombstone message in each conversation ("Zane removed iPhone 12 from this conversation")
 - [CONFLICT] `revoke_device` revokes session but does NOT currently trigger MLS group removal — device remains MLS group member until `device_id`→MLS leaf mapping is built
-- Connected channel clients receive explicit `device_revoked` state; revoked devices blocked from send/read
+- Connected channel clients receive explicit `session_terminated` event; revoked devices blocked from send/read
 
 ---
 

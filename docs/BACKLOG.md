@@ -35,6 +35,7 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Implement `SystemChannel` on `system:user:{user_id}` with `session_terminated` event — revoked device has no proactive notification → .tmp/2026-03-20-spa-scaffold/ia-proposals/03-channel-api.md | P0-dogfood | agent:ia-consensus
 - [ ] Lock boot page EN/JA copy in `boot.html.heex` — users see blank page without pre-Svelte loading/failure text → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P0-dogfood | agent:ia-consensus
 - [ ] Lock worker recovery failure EN/JA copy — WASM crash with no user message leaves users stranded → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P0-dogfood | agent:ia-consensus
+- [ ] Add `SpaCSPHeader` plug scoped to `:spa` pipeline only — `wasm-unsafe-eval` on LiveView paths is a security regression → .tmp/2026-03-20-spa-scaffold/ia-proposals/05-lexicon-invariants.md | P0-dogfood | agent:spa-readiness (elevated from P1)
 
 ## Blocks confidence (P1)
 <!-- Can dogfood, but erodes trust -->
@@ -65,7 +66,6 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Create `wasm-rebuild-atomic.sh` for dev watch mode — Vite loads partially-written WASM during rebuilds → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P1-confidence | agent:consensus
 - [ ] Implement iOS filesystem backup tier for MLS keys via @capacitor/filesystem — iOS evicts IndexedDB under storage pressure; keys lost permanently → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P1-confidence | agent:consensus
 - [ ] Verify AASA file accessibility for passkey spike on staging — VPN-only staging silently fails passkey registration → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P1-confidence | agent:consensus
-- [ ] Add `SpaCSPHeader` plug scoped to `:spa` pipeline only — `wasm-unsafe-eval` on LiveView paths is a security regression → .tmp/2026-03-20-spa-scaffold/ia-proposals/05-lexicon-invariants.md | P1-confidence | agent:ia-consensus
 - [ ] Write IndexedDB invariant contracts for `famichat_mls_keystore` and `famichat_messages` — stores hold security-critical state with no documented preconditions → .tmp/2026-03-20-spa-scaffold/ia-proposals/05-lexicon-invariants.md | P1-confidence | agent:ia-consensus
 - [ ] Document device trust state to client behavior mapping — developer has no spec for "terminate the worker" → .tmp/2026-03-20-spa-scaffold/ia-proposals/01-client-context.md | P1-confidence | agent:ia-consensus
 - [ ] Document `MlsWorkerApi` vs `ConversationCrypto` import hierarchy as boundary rule — without stated rule, developers bypass domain interface → .tmp/2026-03-20-spa-scaffold/ia-proposals/01-client-context.md | P1-confidence | agent:ia-consensus
@@ -77,6 +77,12 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Rename `WorkerSupervisor`/`CryptoService` to canonical names in ADR 012 — stale names in active design doc cause confusion → .tmp/2026-03-20-spa-scaffold/ia-proposals/01-client-context.md | P1-confidence | agent:ia-consensus
 - [ ] Rate-limit `GET /api/v1/boot` to 10 req/min per device — endpoint issues channel token on every call → .tmp/2026-03-20-spa-scaffold/ia-proposals/02-auth-boot.md | P1-confidence | agent:ia-consensus
 - [ ] Confirm "clear messages" preserves session (does not sign user out) — confirmation body copy depends on behavior → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P1-confidence | agent:ia-consensus
+- [ ] Document P0 SPA item dependency order (Phase 1: Cargo+Docker, Phase 2: router+plugs, Phase 3: BootContext+endpoints, Phase 4: copy+scaffold) — implementer starting Phase 3 without Phase 2 wastes effort → .tmp/2026-03-20-spa-readiness/round-1/01-technical.md | P1-confidence | agent:spa-readiness
+- [ ] Add ADR 012 + brand-positioning.md + DECISIONS.md to `docs:boundary-check` scan list — naming drift in most-read SPA doc invisible to automated check → .tmp/2026-03-20-spa-readiness/round-1/04-ia-ddd.md | P1-confidence | agent:spa-readiness
+- [ ] Rewrite 500 error page to brand voice and remove personal meta description — 500 during dogfood shows leaked PII and off-brand copy → .tmp/2026-03-20-spa-readiness/round-1/02-ux.md | P1-confidence | agent:spa-readiness
+- [ ] Establish green CI baseline with `--exclude` tags for known-broken tests — red CI masks new regressions → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P1-confidence | agent:spa-readiness (elevated from P2)
+- [ ] Evaluate Paraglide-js 2.0 for SPA i18n — JA locale is a dogfood gate; no SPA copy can be written without i18n system → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P1-confidence | agent:spa-readiness (elevated from P2)
+- [ ] Migrate `@channel_bootstrap_kind` atom to `@channel_token_kind :channel_token` — endpoint will be built against wrong internal atom if not renamed first → .tmp/2026-03-20-spa-scaffold/ia-proposals/03-channel-api.md | P1-confidence | agent:spa-readiness (elevated from P2)
 
 ## Known debt (P2)
 <!-- Not blocking; matters at scale or public launch -->
@@ -92,7 +98,6 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Add photo sharing for 1:1 conversations — half of couple communication is visual; punted to next cycle → .tmp/2026-03-09-mlp-ux/consensus.md | P2-debt | agent:consensus
 - [ ] Strip unnecessary packages from prod Dockerfile stage — 100MB+ build tools in prod image → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Remove `/api/v1/hello` route and HelloController — dev artifact in production API → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
-- [ ] Establish green CI baseline with `--exclude` tags for known-broken tests — red CI masks new regressions → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Add Docker image smoke test to CI pipeline — broken Dockerfile only discovered after release → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Update README.md with "For Self-Hosters" link to deployment guide — no path from README to deploy → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Remove unused CONTENT_REPO_URL and GITHUB_WEBHOOK_SECRET from dev `.env` — cargo-culted from prior project → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
@@ -119,7 +124,6 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Design social key recovery (1-2 family members help recover lost member's access) — grandparent who loses phrase loses all history permanently without this → .tmp/2026-03-19-local-first-storage/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Implement server-side ciphertext TTL (30 days or all-device ACK) — indefinite retention stores data nobody can read; wastes operator storage → .tmp/2026-03-19-local-first-storage/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Add SPA cache headers plug for immutable assets — hashed assets re-downloaded without proper headers → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P2-debt | agent:consensus
-- [ ] Evaluate Paraglide-js 2.0 for SPA i18n — no i18n solution chosen for SPA → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Add `<link rel="prefetch" href="/app">` to LiveView layouts — adds ~100ms to LiveView→SPA transition → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Create test data factories for SPA IndexedDB seeding — no factory pattern for frontend tests → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Fix dangling vitest.e2e.config.js reference in backend/assets workspace — test:browser script fails on missing file → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P2-debt | agent:consensus
@@ -132,10 +136,14 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Update LiveView PO entry "This device has been removed" to match SPA copy — copy divergence between LiveView and SPA creates inconsistent UX → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P2-debt | agent:ia-consensus
 - [ ] Add grep-based SPA copy discipline lint rule to `./run lint:all` — brand rules have no carry-forward into Paraglide catalogs → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P2-debt | agent:ia-consensus
 - [ ] Add JA locale file header comment template for product noun discipline — contributors need the rule visible → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P2-debt | agent:ia-consensus
-- [ ] Migrate `@channel_bootstrap_kind` atom to `@channel_token_kind :channel_token` — internal atom diverges from canonical term → .tmp/2026-03-20-spa-scaffold/ia-proposals/03-channel-api.md | P2-debt | agent:ia-consensus
 - [ ] Add telemetry event `[:famichat, :system_channel, :session_terminated]` — revocation delivery has no monitoring → .tmp/2026-03-20-spa-scaffold/ia-proposals/03-channel-api.md | P2-debt | agent:ia-consensus
 - [ ] Add PR template checklist item for copy review on translation-touching PRs — lint can't catch tonally wrong strings → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P2-debt | agent:ia-consensus
 - [ ] Document platform detection constraint: no user-visible string may reference platform names — platform names will leak into copy without explicit constraint → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | P2-debt | agent:ia-consensus
+- [ ] Create SPA copy inventory: enumerate ~40 new EN/JA strings against brand-positioning.md — lint rules enforce nothing without content → .tmp/2026-03-20-spa-readiness/round-1/02-ux.md | P2-debt | agent:spa-readiness
+- [ ] Design degraded-state UX patterns (WASM failure, IndexedDB loss, worker crash, private browsing) — ADR 012 behavioral specs have no interaction designs → .tmp/2026-03-20-spa-readiness/round-1/02-ux.md | P2-debt | agent:spa-readiness
+- [ ] Design "syncing messages" first-open intermediate state for SPA conversation list — first-open shows empty list during delta sync with no feedback → .tmp/2026-03-20-spa-readiness/round-1/02-ux.md | P2-debt | agent:spa-readiness
+- [ ] Narrow `Famichat.Crypto.MLS` from `exports: :all` to explicit export list — only major boundary not tightened during enforcement work → .tmp/2026-03-20-spa-readiness/round-1/04-ia-ddd.md | P2-debt | agent:spa-readiness
+- [ ] Write L1-to-L3 hybrid migration security contract — no doc specifies what happens to NIF-held MLS state during WASM transition → .tmp/2026-03-20-spa-readiness/round-1/03-security.md | P2-debt | agent:spa-readiness
 
 ## Someday/maybe (P3)
 <!-- Documentation/guidance; infra will change -->
@@ -158,12 +166,10 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Decide: does WebAuthn ceremony hang reproduce in a real browser? — CDP virtual authenticator artifact in Playwright; if confirmed in Firefox/Chrome, elevates to P0-dogfood → .tmp/2026-03-16-browser-walkthrough/triage.md | agent:consensus
 - [ ] Decide: history backfill depth on first device setup — determines first-open wait time; 10,000 messages = 8.6s decrypt on desktop → .tmp/2026-03-19-local-first-storage/round-1/consensus.md | agent:consensus
 - [ ] Decide: same wrapping key for MLS state + messages, or separate HKDF-derived keys? — single key means compromised message cache also exposes signing keys → .tmp/2026-03-19-local-first-storage/round-1/consensus.md | agent:consensus
-- [ ] Decide: Capacitor 7 or 8 — starting on 7 invites near-term migration; check SPM plugin support → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | agent:consensus
 - [ ] Decide: SPA i18n approach (Paraglide-js 2.0 vs alternative) — no translation system for SPA → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | agent:consensus
 - [ ] Decide: SPA CSS strategy (Tailwind 3 vs 4 vs other) — LiveView uses 3.4; SPA may diverge → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | agent:consensus
 - [ ] Decide: dev workflow (Vite proxy to Docker Phoenix vs single container) — DX during development → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | agent:consensus
 - [ ] Decide: exclude priv/static/app/ from phx.digest or accept double-hashing — Vite already hashes filenames → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | agent:consensus
-- [ ] Decide: wasm-pack #1490 workaround (bypass wasm-pack vs dummy [package] vs shared release profile) — blocks Cargo workspace PR → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | agent:consensus
 - [ ] Decide boot endpoint path: `/api/v1/boot` vs `/api/v1/session` vs `/api/v1/context` — path should be chosen before first PR → .tmp/2026-03-20-spa-scaffold/ia-proposals/02-auth-boot.md | agent:ia-consensus
 - [ ] Decide session expiry vs device revocation copy distinction — both lead to sign-in page but carry different user expectations → .tmp/2026-03-20-spa-scaffold/ia-proposals/04-copy-brand.md | agent:ia-consensus
 - [ ] Decide: session cookie max_age alignment with refresh token TTL (30 days) — browser close kills session but refresh token survives → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | agent:consensus

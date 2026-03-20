@@ -26,6 +26,8 @@ Resolved decisions and explicitly rejected items. Reference document — answers
 - [x] Decide: recovery phrase model — DECIDED: 12-word phrase for L3; social recovery (1-2 family members) as wishlist for L4+ → .tmp/2026-03-19-local-first-storage/round-1/consensus.md | agent:consensus
 - [x] Decide: move `Famichat.Chat.Family` schema to `Famichat.Accounts`? — RESOLVED: no; Family stays in Chat for L1; adding Accounts→Chat dep creates a cycle; FamilyContext cross-boundary reach is documented and accepted → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | agent:boundary-consensus
 - [x] Decide: enforce `Famichat.Auth` facade or accept direct sub-module access? — RESOLVED: accept direct sub-module access; facade has zero callers; 8 Auth sub-boundaries work as independent top-level boundaries → .tmp/2026-03-20-boundary-enforcement/round-1/consensus.md | agent:boundary-consensus
+- [x] Decide: Capacitor 7 or 8 — RESOLVED: Capacitor 7 per ADR 012; SPM plugin support confirmed → .tmp/2026-03-20-spa-readiness/round-1/consensus.md | agent:spa-readiness
+- [x] Decide: wasm-pack #1490 workaround — RESOLVED per BACKLOG-ARCHIVE.md; bypass wasm-pack or shared release profile → .tmp/2026-03-20-spa-readiness/round-1/consensus.md | agent:spa-readiness
 
 ## Cut / Won't do
 
