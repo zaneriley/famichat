@@ -113,7 +113,7 @@ Structure the output as:
 ## Not Addressed
 
 ### <Category>
-- **Reason:** <already tracked in BACKLOG.md / SPEC explicitly blesses this / one-off finding>
+- **Reason:** <already tracked in BACKLOG.md / already done in BACKLOG-ARCHIVE.md / SPEC explicitly blesses this / one-off finding>
 ```
 
 ## Escalation Ladder

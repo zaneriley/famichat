@@ -142,4 +142,4 @@ If the Task tool is unavailable (platform limitation), degrade to running each a
 - Do NOT produce an execution plan or DAG. That is a separate concern.
 - Each agent writes exactly one file. No shared state between agents.
 - If an agent fails, the round is still usable. Note the gap in the manifest.
-- Check BACKLOG.md before flagging something as new — note if a finding is already tracked.
+- Check BACKLOG.md and BACKLOG-ARCHIVE.md before flagging something as new — note if a finding is already tracked or already done.

@@ -114,4 +114,4 @@ Write `final-consensus.md` to the slug root directory (not inside any round).
 - When severity is ambiguous (P0 vs P1), default to P1 and note the uncertainty.
 - When agents disagree and no clear resolution exists, mark the tension as UNRESOLVED. Do not force consensus.
 - Attribute every finding to its source angle(s). No orphan claims.
-- If a finding is already tracked in BACKLOG.md, note "already tracked" instead of re-listing it for promotion.
+- If a finding is already tracked in BACKLOG.md or completed in BACKLOG-ARCHIVE.md, note "already tracked" or "already done" instead of re-listing it for promotion.

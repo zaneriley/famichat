@@ -35,9 +35,11 @@ Read the consensus document fully. Then read ALL canonical docs fully:
 4. `docs/E2EE_INTEGRATION.md`
 5. `docs/NOW.md`
 6. `docs/BACKLOG.md`
-7. `docs/brand-positioning.md`
+7. `docs/BACKLOG-ARCHIVE.md` (for dedup — completed/cut items live here)
+8. `docs/DECISIONS.md` (for dedup — resolved decisions and cut items live here)
+9. `docs/brand-positioning.md`
 
-This is ~1500-2000 lines total. Read them all before making any decisions.
+Read them all before making any decisions.
 
 ## Step 3: Triage (Routing)
 
@@ -78,12 +80,12 @@ Severity mapping from consensus:
 - Consensus "Blocks Dogfooding" / P0 → `P0-dogfood`
 - Consensus "Blocks Confidence" / P1 → `P1-confidence`
 - Consensus "Known Debt" / P2 → `P2-debt`
-- Consensus "Cut" → `[-] Description (reason) → path | agent:consensus`
+- Consensus "Cut" → add to `docs/DECISIONS.md` under "Cut / Won't do": `- [-] Description — reason | agent:consensus`
 - Consensus "Decisions Needed" → goes in the "Decisions needed" section
 
 Source tag for all promoted items: `agent:consensus`
 
-**Dedup rule:** Before adding any item, grep BACKLOG.md for the key noun (e.g., "PutRemoteIp", "reconnect"). If a matching item exists, skip it and note "already tracked." If it exists at a different severity, flag for human review — do not silently change severity.
+**Dedup rule:** Before adding any item, grep BACKLOG.md AND BACKLOG-ARCHIVE.md for the key noun (e.g., "PutRemoteIp", "reconnect"). If a matching item exists in either file, skip it and note "already tracked" (or "already done" if found in archive). If it exists at a different severity, flag for human review — do not silently change severity.
 
 ### Example Translation
 
@@ -116,7 +118,8 @@ Edit docs in this order (dependencies flow downward):
 4. `docs/E2EE_INTEGRATION.md` — security posture (rarely changed)
 5. `docs/NOW.md` — current state, references SPEC and BACKLOG
 6. `docs/BACKLOG.md` — implementation items, references everything above
-7. `docs/brand-positioning.md` — copy/voice (rarely changed)
+7. `docs/DECISIONS.md` — cut items and resolved decisions go here
+8. `docs/brand-positioning.md` — copy/voice (rarely changed)
 
 ## Step 7: Verify
 

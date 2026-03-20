@@ -631,14 +631,15 @@ Read ALL of these files:
 - .tmp/{DATE}-browser-walkthrough/agent-4-locale-errors.md
 - .tmp/{DATE}-browser-walkthrough/agent-5-link-basher.md
 - .tmp/{DATE}-browser-walkthrough/agent-6-api-basher.md
-- docs/BACKLOG.md (to check for duplicates)
+- docs/BACKLOG.md (to check for open duplicates)
+- docs/BACKLOG-ARCHIVE.md (to check for already-done items)
 
 Skip any agent files that don't exist (those agents may have been skipped).
 
 ### Your job
 
 1. Extract every FAIL and UNEXPECTED from the agent reports
-2. For each finding, check if it's already tracked in BACKLOG.md (grep for key nouns)
+2. For each finding, check if it's already tracked in BACKLOG.md or already done in BACKLOG-ARCHIVE.md (grep for key nouns)
 3. Assign severity to NEW findings:
    - P0-dogfood: Blocks handing the URL to family. Crashes, data loss, auth bypass, can't complete a core CUJ.
    - P1-confidence: Can dogfood, but erodes trust. Bad copy, confusing UX, missing feedback, a11y failures.
@@ -705,7 +706,7 @@ If `/promote` is not available, do it manually:
 
 6. **Triage before promoting.** Phase 2 must complete before Phase 3 starts.
 
-7. **Check for duplicates.** The Triage Agent must grep BACKLOG.md for each finding's key noun before flagging it as new.
+7. **Check for duplicates.** The Triage Agent must grep BACKLOG.md and BACKLOG-ARCHIVE.md for each finding's key noun before flagging it as new.
 
 8. **Context budget.** Each agent should complete within ~40 tool interactions. If an agent exceeds this, it should summarize progress so far and stop. Quality over quantity.
 
