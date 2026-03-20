@@ -9,15 +9,7 @@ defmodule Famichat.Chat.OrphanFamilyCleanup do
   Called by `OrphanFamilyReaper` on a timer.
   """
 
-  use Boundary,
-    top_level?: true,
-    exports: :all,
-    deps: [
-      Famichat,
-      Famichat.Accounts,
-      Famichat.Chat
-    ]
-
+  # Part of Famichat.Chat boundary (no standalone annotation needed).
   import Ecto.Query
 
   alias Famichat.Accounts.HouseholdMembership

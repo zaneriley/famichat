@@ -5,13 +5,12 @@ defmodule Famichat.Auth.Sessions do
 
   use Boundary,
     top_level?: true,
-    exports: :all,
+    exports: [],
     deps: [
       Famichat,
       Famichat.Accounts,
       Famichat.Chat,
       Famichat.Auth.Households,
-      Famichat.Auth.Identity,
       Famichat.Auth.RateLimit,
       Famichat.Auth.Runtime,
       Famichat.Auth.Tokens

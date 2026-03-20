@@ -5,7 +5,7 @@ defmodule Famichat.Auth.Households do
 
   use Boundary,
     top_level?: true,
-    exports: :all,
+    exports: [],
     deps: [
       Famichat,
       Famichat.Accounts

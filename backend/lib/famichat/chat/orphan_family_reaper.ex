@@ -4,13 +4,7 @@ defmodule Famichat.Chat.OrphanFamilyReaper do
   conversation-less families. Sweeps every 30 minutes.
   """
 
-  use Boundary,
-    top_level?: true,
-    exports: :all,
-    deps: [
-      Famichat.Chat.OrphanFamilyCleanup
-    ]
-
+  # Part of Famichat.Chat boundary (no standalone annotation needed).
   use GenServer
 
   require Logger

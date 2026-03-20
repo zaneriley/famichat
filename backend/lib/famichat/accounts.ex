@@ -12,10 +12,19 @@ defmodule Famichat.Accounts do
 
   use Boundary,
     top_level?: true,
-    exports: :all,
-    deps: [
-      Famichat
-    ]
+    exports: [
+      Community,
+      CommunityScope,
+      FamilyContext,
+      FirstRun,
+      HouseholdMembership,
+      Passkey,
+      User,
+      UserDevice,
+      UserToken,
+      Username
+    ],
+    deps: [Famichat]
 
   import Ecto.Query, warn: false
 

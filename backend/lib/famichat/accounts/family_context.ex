@@ -17,6 +17,9 @@ defmodule Famichat.Accounts.FamilyContext do
   Does NOT depend on `Famichat.Auth` (to avoid circular deps).
   """
 
+  # Boundary: inherits from Famichat.Accounts. References Chat.Family —
+  # a known cross-boundary reach until Family schema ownership is resolved.
+
   import Ecto.Query
   require Logger
 

@@ -10,7 +10,7 @@ defmodule Famichat.Auth.Tokens do
 
   use Boundary,
     top_level?: true,
-    exports: :all,
+    exports: [IssuedToken, Policy, Policy.Definition, Storage],
     deps: [
       Famichat,
       Famichat.Accounts

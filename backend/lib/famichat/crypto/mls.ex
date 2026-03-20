@@ -5,6 +5,8 @@ defmodule Famichat.Crypto.MLS do
   This module defines a stable contract before the Rust NIF adapter is wired.
   """
 
+  use Boundary, top_level?: true, deps: [Famichat], exports: :all
+
   alias Famichat.Crypto.MLS.Adapter.Unimplemented
 
   @telemetry_prefix [:famichat, :crypto, :mls]

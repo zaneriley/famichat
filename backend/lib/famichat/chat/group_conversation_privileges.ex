@@ -15,7 +15,8 @@ defmodule Famichat.Chat.GroupConversationPrivileges do
 
   use Ecto.Schema
   import Ecto.Changeset
-  alias Famichat.Chat.{Conversation, User}
+  alias Famichat.Chat.Conversation
+  alias Famichat.Accounts.User
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

@@ -6,10 +6,10 @@ defmodule Famichat.Application do
     top_level?: true,
     deps: [
       Famichat,
+      Famichat.Chat,
       FamichatWeb,
       Famichat.Auth.PendingUserReaper,
-      Famichat.Auth.TokenReaper,
-      Famichat.Chat.OrphanFamilyReaper
+      Famichat.Auth.TokenReaper
     ]
 
   @impl true

@@ -10,7 +10,7 @@ defmodule Famichat.Auth do
 
   use Boundary,
     top_level?: true,
-    exports: :all,
+    exports: [],
     deps: [
       Famichat.Accounts,
       Famichat.Auth.Passkeys,

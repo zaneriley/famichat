@@ -7,7 +7,7 @@ defmodule Famichat.Auth.RateLimit do
 
   use Boundary,
     top_level?: true,
-    exports: :all,
+    exports: [],
     deps: [Famichat]
 
   alias Famichat.Auth.RateLimit.Buckets

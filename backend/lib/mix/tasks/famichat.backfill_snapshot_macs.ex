@@ -43,7 +43,8 @@ defmodule Mix.Tasks.Famichat.BackfillSnapshotMacs do
     top_level?: true,
     deps: [
       Famichat,
-      Famichat.Chat
+      Famichat.Chat,
+      Famichat.Crypto.MLS
     ],
     exports: []
 

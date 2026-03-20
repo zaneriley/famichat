@@ -5,12 +5,34 @@ defmodule Famichat.Chat do
 
   use Boundary,
     top_level?: true,
-    exports: :all,
+    exports: [
+      # Schema structs used by web layer and other domains
+      Conversation,
+      ConversationAccess,
+      ConversationParticipant,
+      ConversationSummary,
+      Family,
+      Message,
+      Self,
+      UserReadCursor,
+      # Service modules used by web layer and other domains
+      ConversationQueries,
+      ConversationSecurityPolicy,
+      ConversationSecurityState,
+      ConversationSecurityStateStore,
+      ConversationService,
+      ConversationVisibilityService,
+      MessageRateLimiter,
+      MessageService,
+      # OTP processes referenced by Application supervisor
+      OrphanFamilyReaper
+    ],
     deps: [
       Famichat,
       Famichat.Accounts,
       Famichat.Auth.Households,
-      Famichat.Auth.Identity
+      Famichat.Auth.Identity,
+      Famichat.Crypto.MLS
     ]
 
   import Ecto.Query, warn: false
