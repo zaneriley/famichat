@@ -114,7 +114,7 @@ L1 target: 2-person dogfood (operator + spouse), single family, text messaging o
 
 ## Known gaps — pre-existing, not blocking L1
 
-- 66 pre-existing test failures (stale `household_id` field, hardcoded UUIDs, snapshot shape drift). Separate workstream.
+- 67 pre-existing test failures across 7 buckets: missing ConversationSecurityState test fixtures (27), FirstRun ETS cache poisoning (10), stale test targets (8), schema constraint violations (5), API response shape drift (4), auth/passkey behavioral changes (6), mixed individual causes (7). Foundation sprint Track A addresses these.
 - No CI `mix test` step.
 - Passkey challenge options use `Base.encode64` instead of `Base.url_encode64`. May fail on strict browsers.
 - `GET /api/v1/devices` endpoint not built.

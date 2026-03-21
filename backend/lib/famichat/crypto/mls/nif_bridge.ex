@@ -1,6 +1,7 @@
 defmodule Famichat.Crypto.MLS.NifBridge do
   @moduledoc false
 
+  # credo:disable-for-next-line Credo.Check.Warning.MixEnv
   use Rustler,
     otp_app: :famichat,
     crate: "mls_nif",

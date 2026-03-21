@@ -30,6 +30,8 @@ defmodule FamichatWeb.ErrorHTML do
     def actions(_exception), do: []
   end
 
+  # Catch-all for status codes without a custom template (e.g., 403, 422).
+  # Custom templates (404, 410, 500) are matched first via embed_templates above.
   def render(embed_template, _assigns) do
     Phoenix.Controller.status_message_from_template(embed_template)
   end

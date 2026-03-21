@@ -171,6 +171,7 @@
           {Credo.Check.Warning.UnusedStringOperation, []},
           {Credo.Check.Warning.UnusedTupleOperation, []},
           {Credo.Check.Warning.WrongTestFileExtension, []},
+          {Credo.Check.Warning.MixEnv, []},
 
           # Experimental/Opinionated checks
           {Credo.Check.Warning.LeakyEnvironment, []},
@@ -208,8 +209,7 @@
           {Credo.Check.Refactor.RejectFilter, []},
           {Credo.Check.Refactor.VariableRebinding, []},
           {Credo.Check.Warning.LazyLogging, []},
-          {Credo.Check.Warning.MapGetUnsafePass, []},
-          {Credo.Check.Warning.MixEnv, []}
+          {Credo.Check.Warning.MapGetUnsafePass, []}
 
           # {Credo.Check.Refactor.MapInto, []},
 
