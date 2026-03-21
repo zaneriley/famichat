@@ -1,6 +1,6 @@
 # Famichat NOW
 
-**Last updated:** 2026-03-20
+**Last updated:** 2026-03-21
 
 Non-evergreen context. For stable design guidance, see [SPEC.md](SPEC.md) and [ADR 012](decisions/012-spa-wasm-client-architecture.md). For completed work, see [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). For resolved decisions, see [DECISIONS.md](DECISIONS.md).
 
@@ -50,13 +50,58 @@ L1 target: 2-person dogfood (operator + spouse), single family, text messaging o
 
 ---
 
+## Foundation sprint progress (2026-03-20 — ongoing)
+
+Goal: increase velocity and minimize bugs before SPA implementation.
+
+### Track A: CI — Make the Safety Net Real
+
+| Item | Status | Notes |
+|---|---|---|
+| A0: `./run` native fallback + thin CI | Done | `459bd9c` — `_dc` auto-detects Docker vs native; `lint.yml` is one `./run ci:lint` call |
+| A1: `mix compile --warnings-as-errors` | Not started | Pre-existing warning in `community_admin_live.ex:200` (ungrouped `handle_event/3`) blocks gate |
+| A2: Fix test failures | Done | `2cc2f3b` tagged 43 known_failure, `99a401e` fixed 38 of those. Baseline: 660 tests, 0 failures, 5 known_failure remaining |
+| A3: `ci-test.yml` workflow | Done | `459bd9c` — ExUnit + Rust tests + known_failure ceiling check |
+| A4: Sobelow in `ci:lint` | Not started | ~30 min; `.sobelow-conf` exists, needs router path fix |
+
+### Track B: SPA Plumbing
+
+| Item | Status | Notes |
+|---|---|---|
+| Phase 1: Build infra (7 items) | Done | `51934c8` — Cargo workspace, static_paths, gzip, HelloController removal, 500 page, Dockerfile, .gitignore |
+| Phase 1 follow-up | Done | `750b380` — Credo prod guard, CI cache paths, stale Cargo.lock removal, infra/.gitignore |
+| Phase 2: SpaCSPHeader plug | Not started | |
+| Phase 2: ApiAuth plug | Not started | Needs CSRF decision (recommendation: SameSite=Lax sufficient for L2) |
+| Phase 2: `:spa` + `:spa_api` pipelines | Not started | Depends on SpaCSPHeader + ApiAuth |
+| Phase 2: Session cookie `max_age` | Not started | 30 days matches refresh token TTL |
+| Phase 2: `channel_token` rename | Not started | Touches `sessions.ex` + `tokens/policy.ex` |
+
+### Track C: Quick Wins
+
+| Item | Status | Notes |
+|---|---|---|
+| C1: Enable MixEnv Credo check | Done | `3555958` |
+| C2: ErrorHTML catch-all investigation | Done | `3555958` — documented: `embed_templates` clauses match before catch-all; working correctly |
+| C3: Delete schema_markup.ex | Already done | Pre-sprint (`2c307c8`) |
+| C4: Fix NOW.md description | Done | `3555958` |
+
+### Remaining work
+
+1. **A1** — fix `community_admin_live.ex` handle_event grouping, then add `--warnings-as-errors` to CI
+2. **A4** — add Sobelow to `ci:lint`
+3. **Track B Phase 2** — 5 items (SpaCSPHeader, ApiAuth, pipelines, session max_age, channel_token rename)
+4. **Verification** — stub `priv/static/app/index.html`, confirm `/app` serves authenticated HTML with correct CSP
+
+---
+
 ## Immediate next steps
 
-1. **Deploy to homelab** — Docker Compose + Cloudflare Tunnel → `https://chat.<domain>`. Detailed steps in `docs/self-hosting/`. WebAuthn vars are runtime config (container restart, no rebuild).
-2. **Post-deploy browser walkthrough** — full CUJ against deployed instance
-3. **Capture operator friction** — every pain point becomes self-hosting documentation
-4. **2-week dogfood observation** — daily use, track UX gaps, notification reliability, session stability
-5. **Begin L2 SPA scaffold** — see BACKLOG.md P0 section for SPA infrastructure items (can overlap with observation)
+1. **Finish foundation sprint remaining items** — A1, A4, Track B Phase 2
+2. **Deploy to homelab** — Docker Compose + Cloudflare Tunnel → `https://chat.<domain>`. Detailed steps in `docs/self-hosting/`. WebAuthn vars are runtime config (container restart, no rebuild).
+3. **Post-deploy browser walkthrough** — full CUJ against deployed instance
+4. **Capture operator friction** — every pain point becomes self-hosting documentation
+5. **2-week dogfood observation** — daily use, track UX gaps, notification reliability, session stability
+6. **Begin L2 SPA scaffold** — see BACKLOG.md P0 section for SPA infrastructure items (can overlap with observation)
 
 ---
 
@@ -106,16 +151,13 @@ L1 target: 2-person dogfood (operator + spouse), single family, text messaging o
 - ADR 012 "30-minute idle wrapping-key timeout" conflicts with instant-open decision
 - `famichat_messages` IndexedDB schema not built
 - Local-first data layer (Dexie.js + Svelte stores) not scaffolded
-- `static_paths/0` missing `"app"` entry — SPA assets return 404
 - `SpaController` for authenticated boot page not built
 - Docker build context is `backend/` — cannot access `frontend/` for SPA build
-- Cargo workspace root not created — NIF and WASM profile conflict
-- Committed WASM binaries in `backend/infra/mls_wasm/pkg/` — 2.2 MB per clone
 
 ## Known gaps — pre-existing, not blocking L1
 
-- 67 pre-existing test failures across 7 buckets: missing ConversationSecurityState test fixtures (27), FirstRun ETS cache poisoning (10), stale test targets (8), schema constraint violations (5), API response shape drift (4), auth/passkey behavioral changes (6), mixed individual causes (7). Foundation sprint Track A addresses these.
-- No CI `mix test` step.
+- 5 remaining `known_failure`-tagged tests (down from 67; 38 fixed in `99a401e`, 24 deleted as stale). Baseline: 660 tests, 0 failures, 5 known_failure + 3 pending excluded.
+- `mix compile --warnings-as-errors` not yet gating CI (pre-existing warning in `community_admin_live.ex` blocks it).
 - Passkey challenge options use `Base.encode64` instead of `Base.url_encode64`. May fail on strict browsers.
 - `GET /api/v1/devices` endpoint not built.
 - `HomeLive` server-side decryption — transitional, acceptable at L0/L1 only.
