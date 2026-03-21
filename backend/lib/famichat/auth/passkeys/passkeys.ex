@@ -67,12 +67,14 @@ defmodule Famichat.Auth.Passkeys do
     {count, _} =
       Repo.update_all(query, set: [disabled_at: DateTime.utc_now()])
 
-    if count > 0 do
-      emit_passkey_event(:disabled_all, %{user_id: user_id, count: count})
-    end
-
+    maybe_emit_disabled(user_id, count)
     :ok
   end
+
+  defp maybe_emit_disabled(user_id, count) when count > 0,
+    do: emit_passkey_event(:disabled_all, %{user_id: user_id, count: count})
+
+  defp maybe_emit_disabled(_user_id, _count), do: :ok
 
   @doc """
   Disables passkeys for each user in the provided list.
@@ -101,12 +103,10 @@ defmodule Famichat.Auth.Passkeys do
           {:ok, map()} | {:error, term()}
   def issue_assertion_challenge(identifier)
       when is_map(identifier) and not is_struct(identifier) do
-    with :ok <- reject_user_id_only(identifier) do
-      if discoverable_request?(identifier) do
-        issue_discoverable_assertion_challenge()
-      else
-        do_issue_assertion_for_identifier(identifier)
-      end
+    case classify_assertion_request(identifier) do
+      :invalid -> {:error, :invalid_identifier}
+      :discoverable -> issue_discoverable_assertion_challenge()
+      {:identified, id} -> do_issue_assertion_for_identifier(id)
     end
   end
 
@@ -114,13 +114,21 @@ defmodule Famichat.Auth.Passkeys do
     do_issue_assertion_for_identifier(identifier)
   end
 
-  # An empty map or a map with no username/email/identifier keys is a
-  # discoverable credential request (the authenticator identifies the user).
-  defp discoverable_request?(params) when is_map(params) do
-    not (Map.has_key?(params, "username") or
-           Map.has_key?(params, "email") or
-           Map.has_key?(params, "identifier"))
-  end
+  # Classifies a map-based assertion request into one of three categories:
+  # - :invalid — only user_id with no public lookup key
+  # - :discoverable — no identifier at all (resident key flow)
+  # - {:identified, map} — has a username, email, or identifier key
+  defp classify_assertion_request(%{"user_id" => _} = m)
+       when not is_map_key(m, "username") and not is_map_key(m, "email"),
+       do: :invalid
+
+  defp classify_assertion_request(m)
+       when not is_map_key(m, "username")
+       and not is_map_key(m, "email")
+       and not is_map_key(m, "identifier"),
+       do: :discoverable
+
+  defp classify_assertion_request(m), do: {:identified, m}
 
   @doc """
   Issues a discoverable assertion challenge (no user binding).
@@ -184,24 +192,17 @@ defmodule Famichat.Auth.Passkeys do
   end
 
   defp do_issue_assertion_for_identifier(identifier) do
-    # Reject any map that supplies only `user_id` and no accepted public lookup
-    # key. The unauthenticated assert-challenge endpoint must not accept UUID
-    # lookups: a nonexistent UUID returns a different path through Identity than
-    # a missing identifier, enabling user-ID enumeration. Only `username` (or
-    # `email` as a fallback) are valid for unauthenticated challenges.
-    with :ok <- reject_user_id_only(identifier) do
-      normalized = normalize_identifier(identifier)
-      key = passkey_identifier_key(normalized)
+    normalized = normalize_identifier(identifier)
+    key = passkey_identifier_key(normalized)
 
-      with :ok <-
-             RateLimit.check(:"passkey.assertion", key, limit: 10, interval: 60),
-           {:ok, user} <- Identity.resolve_user(reject_user_id_key(normalized)),
-           {:ok, challenge} <- issue_assertion_challenge(user, []) do
-        {:ok, challenge}
-      else
-        {:error, {:rate_limited, retry}} -> {:error, {:rate_limited, retry}}
-        other -> other
-      end
+    with :ok <-
+           RateLimit.check(:"passkey.assertion", key, limit: 10, interval: 60),
+         {:ok, user} <- Identity.resolve_user(reject_user_id_key(normalized)),
+         {:ok, challenge} <- issue_assertion_challenge(user, []) do
+      {:ok, challenge}
+    else
+      {:error, {:rate_limited, retry}} -> {:error, {:rate_limited, retry}}
+      other -> other
     end
   end
 
@@ -213,23 +214,6 @@ defmodule Famichat.Auth.Passkeys do
   end
 
   defp normalize_identifier(params), do: params
-
-  # Returns {:error, :invalid_identifier} when the map supplies `user_id` but
-  # no `username` or `email`. A binary identifier (raw string) is always allowed.
-  defp reject_user_id_only(identifier) when is_map(identifier) do
-    has_user_id = Map.has_key?(identifier, "user_id")
-
-    has_public_key =
-      Map.has_key?(identifier, "username") or Map.has_key?(identifier, "email")
-
-    if has_user_id and not has_public_key do
-      {:error, :invalid_identifier}
-    else
-      :ok
-    end
-  end
-
-  defp reject_user_id_only(_identifier), do: :ok
 
   # Strips the `user_id` key from a map before forwarding to Identity.resolve_user/1
   # so that even a map containing both `user_id` and `username` cannot trigger
@@ -375,7 +359,7 @@ defmodule Famichat.Auth.Passkeys do
       case Repo.insert(Passkey.changeset(%Passkey{}, attrs)) do
         {:ok, passkey} ->
           with {:ok, _user} <- maybe_activate_pending_user(user),
-               :ok <- finalize_registration_challenge(challenge_ctx) do
+               :ok <- finalize_challenge(challenge_ctx) do
             emit_passkey_event(:register, %{user_id: user.id})
             _ = Identity.sync_enrollment_requirement(user)
             {:ok, passkey}
@@ -461,7 +445,7 @@ defmodule Famichat.Auth.Passkeys do
          :ok <- check_user_verified(auth_data),
          :ok <- check_sign_count_regression(passkey, auth_data.sign_count),
          {:ok, passkey} <- update_sign_count(passkey, auth_data.sign_count),
-         :ok <- finalize_assertion_challenge(challenge_ctx) do
+         :ok <- finalize_challenge(challenge_ctx) do
       user = Repo.preload(passkey, :user).user
       emit_passkey_event(:assert, %{user_id: user.id})
       {:ok, %{user: user, passkey: passkey}}
@@ -543,65 +527,49 @@ defmodule Famichat.Auth.Passkeys do
         json_str
         |> Jason.decode!()
         |> Enum.reduce(%{}, fn {k, v}, acc ->
-          int_key = String.to_integer(k)
-
-          val =
-            cond do
-              is_binary(v) ->
-                case Base.decode64(v) do
-                  {:ok, bin} -> bin
-                  :error -> v
-                end
-
-              true ->
-                v
-            end
-
-          Map.put(acc, int_key, val)
+          Map.put(acc, String.to_integer(k), decode_cose_value(v))
         end)
 
-      if is_map(cose_key) do
-        {:ok, cose_key}
-      else
-        {:error, :invalid_public_key}
-      end
+      {:ok, cose_key}
     rescue
       _ -> {:error, :invalid_public_key}
     end
   end
+
+  defp decode_cose_value(v) when is_binary(v) do
+    case Base.decode64(v) do
+      {:ok, bin} -> bin
+      :error -> v
+    end
+  end
+
+  defp decode_cose_value(v), do: v
 
   # Deserializes the stored public key back into a COSE key map.
   # Supports both the new portable JSON format (produced by encode_cose_key_json/1)
   # and the legacy term_to_binary format (for passkeys registered before this fix).
   # Legacy passkeys stored with term_to_binary should be disabled separately since
   # the binary format is not portable across Erlang major versions.
+  defp load_cose_key(%Passkey{public_key: "{" <> _ = pk_bin}),
+    do: decode_cose_key_json(pk_bin)
+
   defp load_cose_key(%Passkey{public_key: pk_bin}) when is_binary(pk_bin) do
-    # Detect JSON format: JSON strings begin with '{'
-    if String.starts_with?(pk_bin, "{") do
-      decode_cose_key_json(pk_bin)
-    else
-      # Legacy term_to_binary path — attempt to read but log a warning.
-      # These passkeys should be disabled and re-enrolled.
-      Logger.warning(
-        "[Passkeys] Loading passkey stored in legacy term_to_binary format. " <>
-          "This passkey should be disabled and re-enrolled for Erlang version portability."
-      )
-
-      try do
-        cose_key = :erlang.binary_to_term(pk_bin, [:safe])
-
-        if is_map(cose_key) do
-          {:ok, cose_key}
-        else
-          {:error, :invalid_public_key}
-        end
-      rescue
-        _ -> {:error, :invalid_public_key}
-      end
-    end
+    Logger.warning("[Passkeys] Loading passkey stored in legacy term_to_binary format...")
+    load_legacy_cose_key(pk_bin)
   end
 
   defp load_cose_key(_), do: {:error, :invalid_public_key}
+
+  defp load_legacy_cose_key(pk_bin) do
+    try do
+      case :erlang.binary_to_term(pk_bin, [:safe]) do
+        cose_key when is_map(cose_key) -> {:ok, cose_key}
+        _ -> {:error, :invalid_public_key}
+      end
+    rescue
+      _ -> {:error, :invalid_public_key}
+    end
+  end
 
   # Returns :ok when the incoming sign_count is strictly greater than the stored
   # value (or both are zero, which means the authenticator does not implement
@@ -720,12 +688,9 @@ defmodule Famichat.Auth.Passkeys do
       [:famichat, :auth, :passkeys, :issue],
       %{user_id: user.id, type: type},
       do:
-        case Repo.transaction(fn ->
-               persist_challenge(user, type, ttl, opts)
-             end) do
-          {:ok, response} -> {:ok, response}
-          {:error, reason} -> {:error, reason}
-        end
+        Repo.transaction(fn ->
+          persist_challenge(user, type, ttl, opts)
+        end)
     )
   end
 
@@ -939,15 +904,12 @@ defmodule Famichat.Auth.Passkeys do
        when reason in [:invalid, :invalid_challenge, :type_mismatch],
        do: {:error, :invalid_challenge}
 
-  defp emit_challenge_event(kind, metadata) do
-    event =
-      case kind do
-        :issued -> [:famichat, :auth, :passkeys, :challenge_issued]
-        :consumed -> [:famichat, :auth, :passkeys, :challenge_consumed]
-        :invalid -> [:famichat, :auth, :passkeys, :challenge_invalid]
-      end
+  defp challenge_event_name(:issued), do: [:famichat, :auth, :passkeys, :challenge_issued]
+  defp challenge_event_name(:consumed), do: [:famichat, :auth, :passkeys, :challenge_consumed]
+  defp challenge_event_name(:invalid), do: [:famichat, :auth, :passkeys, :challenge_invalid]
 
-    :telemetry.execute(event, %{count: 1}, metadata)
+  defp emit_challenge_event(kind, metadata) do
+    :telemetry.execute(challenge_event_name(kind), %{count: 1}, metadata)
   end
 
   defp ensure_type(%Challenge{type: type}, type), do: :ok
@@ -991,18 +953,8 @@ defmodule Famichat.Auth.Passkeys do
     }
   end
 
-  defp finalize_registration_challenge(%{record: record}) do
-    case consume_challenge(record) do
-      {:ok, _} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp finalize_assertion_challenge(%{record: record}) do
-    case consume_challenge(record) do
-      {:ok, _} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+  defp finalize_challenge(%{record: record}) do
+    with {:ok, _} <- consume_challenge(record), do: :ok
   end
 
   # Discoverable flow: challenge has no user_id — credential identifies the user.
