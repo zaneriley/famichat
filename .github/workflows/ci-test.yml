@@ -71,8 +71,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            backend/infra/mls_nif/target
-          key: ${{ runner.os }}-rust-${{ hashFiles('backend/infra/mls_nif/Cargo.lock') }}
+            backend/infra/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('backend/infra/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-rust-
 
