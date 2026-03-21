@@ -35,6 +35,17 @@ defmodule FamichatWeb.AuthControllerTest do
         remember_device?: true
       )
 
+    # Override webauthn config to match test's @webauthn_origin / @webauthn_rp_id
+    prev_webauthn = Application.get_env(:famichat, :webauthn, [])
+
+    Application.put_env(:famichat, :webauthn,
+      origin: @webauthn_origin,
+      rp_id: @webauthn_rp_id,
+      rp_name: "Famichat Test"
+    )
+
+    on_exit(fn -> Application.put_env(:famichat, :webauthn, prev_webauthn) end)
+
     %{family: family, admin: admin, admin_session: admin_session}
   end
 
@@ -107,7 +118,6 @@ defmodule FamichatWeb.AuthControllerTest do
   # ---------------------------------------------------------------------------
   # Test 2: full invite → pair → register → passkey login flow with real WebAuthn
   # ---------------------------------------------------------------------------
-  @tag known_failure: "B6: invite-to-passkey flow changed (2026-03-21)"
   test "invite → pair → register → passkey login flow",
        %{
          conn: conn,
@@ -328,7 +338,6 @@ defmodule FamichatWeb.AuthControllerTest do
     assert Repo.aggregate(revocation_query, :count, :id) == 1
   end
 
-  @tag known_failure: "B6: magic link/OTP flow changed (2026-03-21)"
   test "magic link and otp flows", %{conn: conn, admin: admin} do
     conn = put_req_header(conn, "content-type", @json)
 
@@ -384,9 +393,13 @@ defmodule FamichatWeb.AuthControllerTest do
 
     refute is_nil(otp_token)
 
-    conn
-    |> post(~p"/api/v1/auth/otp/verify", %{email: admin.email, code: otp_token})
-    |> json_response(200)
+    otp_verify_resp =
+      conn
+      |> post(~p"/api/v1/auth/otp/verify", %{email: admin.email, code: otp_token})
+      |> json_response(201)
+
+    assert otp_verify_resp["access_token"]
+    assert otp_verify_resp["user_id"]
   end
 
   test "missing required params return 400 invalid_parameters instead of 500",
@@ -713,7 +726,7 @@ defmodule FamichatWeb.AuthControllerTest do
   # BUG-R4-005: assert/challenge must not accept user_id (user enumeration)
   # ---------------------------------------------------------------------------
   describe "passkey_assert_challenge — user_id enumeration prevention" do
-    @tag known_failure: "B6: passkey assert_challenge API shape changed (2026-03-21)"
+
     test "user_id UUID for nonexistent user returns 400, not 404", %{conn: conn} do
       conn = put_req_header(conn, "content-type", @json)
 
@@ -734,7 +747,7 @@ defmodule FamichatWeb.AuthControllerTest do
       assert body["error"]["code"] == "invalid_parameters"
     end
 
-    @tag known_failure: "B6: passkey assert_challenge API shape changed (2026-03-21)"
+
     test "user_id UUID for existing user also returns 400", %{
       conn: conn,
       admin: admin
@@ -756,7 +769,7 @@ defmodule FamichatWeb.AuthControllerTest do
       assert body["error"]["code"] == "invalid_parameters"
     end
 
-    @tag known_failure: "B6: passkey assert_challenge API shape changed (2026-03-21)"
+
     test "existing and nonexistent user_id return the same response (no enumeration)",
          %{
            conn: conn,

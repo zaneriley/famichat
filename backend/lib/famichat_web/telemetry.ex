@@ -249,14 +249,14 @@ defmodule FamichatWeb.Telemetry do
     conversation_type = Map.get(metadata, :conversation_type, "unknown")
     conversation_id = Map.get(metadata, :conversation_id, "unknown")
     user_id = Map.get(metadata, :user_id, "unknown")
-    message_id = Map.get(metadata, :message_id, "unknown")
+    message_seq = Map.get(metadata, :message_seq)
 
     Logger.info(
       "[MessageChannel] Message acknowledgment: " <>
         "conversation_type=#{conversation_type} " <>
         "conversation_id=#{conversation_id} " <>
         "user_id=#{user_id} " <>
-        "message_id=#{message_id} " <>
+        "message_seq=#{inspect(message_seq)} " <>
         "duration_ms=#{duration_ms}"
     )
   end

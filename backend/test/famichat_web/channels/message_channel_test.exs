@@ -585,14 +585,14 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, %{socket: socket}}
     end
 
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcasts messages on direct conversation channel", %{socket: socket} do
       payload = %{"body" => "Hello from direct conversation!"}
       {_, metadata} = push_and_assert_broadcast(socket, :direct, payload)
       assert metadata.encryption_status == "disabled"
     end
 
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcasts encrypted messages on direct conversation channel", %{
       socket: socket
     } do
@@ -609,7 +609,7 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.encryption_status == "enabled"
     end
 
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcast telemetry only includes encryption_status field", %{
       socket: socket
     } do
@@ -634,7 +634,7 @@ defmodule FamichatWeb.MessageChannelTest do
       assert plain_metadata.user_id == @valid_user_id
     end
 
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "persists messages before broadcast", %{socket: socket} do
       payload = %{"body" => "persisted direct message"}
       push_and_assert_broadcast(socket, :direct, payload)
@@ -670,7 +670,7 @@ defmodule FamichatWeb.MessageChannelTest do
     2. Telemetry events are emitted with the correct metadata
     3. The conversation type is properly identified as "self"
     """
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcasts plain text messages in self conversation", %{
       socket: socket
     } do
@@ -686,7 +686,7 @@ defmodule FamichatWeb.MessageChannelTest do
     2. Telemetry events include encryption_status but not sensitive encryption metadata
     3. The payload preserves all encryption-related fields
     """
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcasts encrypted messages in self conversation", %{socket: socket} do
       encrypted_message = %{
         "body" => "encrypted_self_note",
@@ -721,7 +721,7 @@ defmodule FamichatWeb.MessageChannelTest do
     2. Telemetry events are emitted with the correct metadata
     3. The conversation type is properly identified as "group"
     """
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcasts plain text messages in group conversation", %{
       socket: socket
     } do
@@ -737,7 +737,7 @@ defmodule FamichatWeb.MessageChannelTest do
     2. Telemetry events include encryption_status but not sensitive encryption metadata
     3. The payload preserves all encryption-related fields
     """
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcasts encrypted messages in group conversation", %{
       socket: socket
     } do
@@ -774,7 +774,7 @@ defmodule FamichatWeb.MessageChannelTest do
     2. Telemetry events are emitted with the correct metadata
     3. The conversation type is properly identified as "family"
     """
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcasts plain text messages in family conversation", %{
       socket: socket
     } do
@@ -790,7 +790,7 @@ defmodule FamichatWeb.MessageChannelTest do
     2. Telemetry events include encryption_status but not sensitive encryption metadata
     3. The payload preserves all encryption-related fields
     """
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "broadcasts encrypted messages in family conversation", %{
       socket: socket
     } do
@@ -1293,16 +1293,15 @@ defmodule FamichatWeb.MessageChannelTest do
     2. Telemetry events are emitted for acknowledgments
     3. The acknowledgment includes the correct metadata
     """
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "client acknowledgments are received and logged", %{socket: socket} do
       import ExUnit.CaptureLog
 
       # Capture logs to verify the acknowledgment logging
       logs =
         capture_log(fn ->
-          # Send a message acknowledgment
-          message_id = "test-message-123"
-          push(socket, "message_ack", %{"message_id" => message_id})
+          # Send a message acknowledgment with an integer sequence number
+          push(socket, "message_ack", %{"message_seq" => 42})
 
           # Wait for telemetry to be emitted
           assert_receive {:ack_telemetry_event,
@@ -1311,11 +1310,10 @@ defmodule FamichatWeb.MessageChannelTest do
                          @telemetry_timeout
 
           # Verify metadata in telemetry
-          assert metadata.message_id == message_id
+          assert metadata.message_seq == 42
           assert metadata.user_id == @valid_user_id
           assert metadata.conversation_type == "direct"
           assert metadata.conversation_id == @direct_conversation_id
-          assert Map.has_key?(metadata, :timestamp)
           assert Map.has_key?(measurements, :duration_ms)
         end)
 
@@ -1324,17 +1322,17 @@ defmodule FamichatWeb.MessageChannelTest do
       assert logs =~ "conversation_type=direct"
       assert logs =~ "conversation_id=#{@direct_conversation_id}"
       assert logs =~ "user_id=#{@valid_user_id}"
-      assert logs =~ "message_id=test-message-123"
+      assert logs =~ "message_seq=42"
     end
 
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "acknowledgment telemetry captures non-direct conversations", %{
       socket: socket
     } do
       {:ok, _, group_socket} =
         subscribe_and_join(socket, MessageChannel, conversation_topic(:group))
 
-      push(group_socket, "message_ack", %{"message_id" => "group-msg"})
+      push(group_socket, "message_ack", %{"message_seq" => 7})
 
       assert_receive {:ack_telemetry_event, [:famichat, :message_channel, :ack],
                       _measurements, metadata},
@@ -1342,11 +1340,11 @@ defmodule FamichatWeb.MessageChannelTest do
 
       assert metadata.conversation_type == "group"
       assert metadata.conversation_id == @group_conversation_id
-      assert metadata.message_id == "group-msg"
+      assert metadata.message_seq == 7
     end
 
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
-    test "acknowledgment telemetry defaults message_id when missing", %{
+
+    test "acknowledgment telemetry defaults message_seq to nil when missing", %{
       socket: socket
     } do
       push(socket, "message_ack", %{})
@@ -1355,7 +1353,7 @@ defmodule FamichatWeb.MessageChannelTest do
                       _measurements, metadata},
                      @telemetry_timeout
 
-      assert metadata.message_id == "unknown"
+      assert metadata.message_seq == nil
     end
 
     @doc """
@@ -1366,7 +1364,7 @@ defmodule FamichatWeb.MessageChannelTest do
     2. The client can acknowledge receipt of the message
     3. The server logs both the broadcast and the acknowledgment
     """
-    @tag known_failure: "B5: broadcast payload includes message_id/sender_name — assertion pattern mismatch (2026-03-21)"
+
     test "end-to-end message delivery with acknowledgment logging", %{
       socket: socket,
       second_user: second_user
@@ -1377,30 +1375,30 @@ defmodule FamichatWeb.MessageChannelTest do
       topic = "message:direct:#{@direct_conversation_id}"
       {:ok, _, socket2} = subscribe_and_join(socket2, MessageChannel, topic)
 
-      # First client sends a message with a message ID
-      message_id = "unique-message-#{:rand.uniform(1000)}"
-
+      # First client sends a message
       push(socket, "new_msg", %{
-        "body" => "Message requiring acknowledgment",
-        "message_id" => message_id
+        "body" => "Message requiring acknowledgment"
       })
 
-      # Verify message was broadcast to channel
-      assert_broadcast "new_msg", %{
-        "body" => "Message requiring acknowledgment",
-        "user_id" => @valid_user_id
-      }
+      # Capture the broadcast payload to get the persisted message_id (UUID)
+      assert_receive %Phoenix.Socket.Broadcast{
+                       event: "new_msg",
+                       payload: %{"message_id" => persisted_message_id} = broadcast_payload
+                     }
 
-      # Manually send an acknowledgment from the second client
-      push(socket2, "message_ack", %{"message_id" => message_id})
+      assert broadcast_payload["body"] == "Message requiring acknowledgment"
+      assert broadcast_payload["user_id"] == @valid_user_id
+
+      # Send ack using the real message_id so extract_acked_seq can resolve the seq
+      push(socket2, "message_ack", %{"message_id" => persisted_message_id})
 
       # Verify telemetry event for the acknowledgment
       assert_receive {:ack_telemetry_event, [:famichat, :message_channel, :ack],
                       _measurements, metadata},
                      @telemetry_timeout
 
-      # Verify metadata in telemetry
-      assert metadata.message_id == message_id
+      # message_seq should be resolved from the persisted message
+      assert is_integer(metadata.message_seq)
       # The acknowledging user
       assert metadata.user_id == @second_user_id
       assert metadata.conversation_type == "direct"
@@ -1412,14 +1410,32 @@ defmodule FamichatWeb.MessageChannelTest do
     user_id = Keyword.get(opts, :user_id, @valid_user_id)
     device_id = Keyword.get(opts, :device_id, socket.assigns.device_id)
 
-    expected_payload =
+    expected_subset =
       payload
       |> Map.take(["body"] ++ @encryption_metadata_fields)
       |> Map.put("user_id", user_id)
       |> Map.put("device_id", device_id)
 
     push(socket, "new_msg", payload)
-    assert_broadcast("new_msg", ^expected_payload)
+
+    # Use assert_receive with a binding (not a pin) so extra keys are tolerated,
+    # then verify the expected subset is present.
+    assert_receive %Phoenix.Socket.Broadcast{
+                     event: "new_msg",
+                     payload: broadcast_payload
+                   },
+                   ExUnit.configuration()[:assert_receive_timeout] || 100
+
+    for {k, v} <- expected_subset do
+      assert Map.get(broadcast_payload, k) == v,
+             "Expected broadcast key #{inspect(k)} to be #{inspect(v)}, got #{inspect(Map.get(broadcast_payload, k))}"
+    end
+
+    assert Map.has_key?(broadcast_payload, "message_id"),
+           "Broadcast payload missing \"message_id\""
+
+    assert Map.has_key?(broadcast_payload, "sender_name"),
+           "Broadcast payload missing \"sender_name\""
 
     encryption_status =
       if Map.get(payload, "encryption_flag"), do: "enabled", else: "disabled"

@@ -101,10 +101,12 @@ defmodule Famichat.Auth.Passkeys do
           {:ok, map()} | {:error, term()}
   def issue_assertion_challenge(identifier)
       when is_map(identifier) and not is_struct(identifier) do
-    if discoverable_request?(identifier) do
-      issue_discoverable_assertion_challenge()
-    else
-      do_issue_assertion_for_identifier(identifier)
+    with :ok <- reject_user_id_only(identifier) do
+      if discoverable_request?(identifier) do
+        issue_discoverable_assertion_challenge()
+      else
+        do_issue_assertion_for_identifier(identifier)
+      end
     end
   end
 

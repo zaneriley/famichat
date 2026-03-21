@@ -615,7 +615,11 @@ defmodule FamichatWeb.MessageChannel do
       updated_at = EXCLUDED.updated_at
     """
 
-    case Repo.query(sql, [user_id, conversation_id, message_seq, now]) do
+    # Raw SQL parameters require binary UUIDs, not string representations.
+    {:ok, user_id_bin} = Ecto.UUID.dump(user_id)
+    {:ok, conv_id_bin} = Ecto.UUID.dump(conversation_id)
+
+    case Repo.query(sql, [user_id_bin, conv_id_bin, message_seq, now]) do
       {:ok, _result} ->
         :ok
 

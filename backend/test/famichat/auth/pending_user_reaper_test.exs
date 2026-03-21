@@ -6,7 +6,6 @@ defmodule Famichat.Auth.PendingUserReaperTest do
   alias Famichat.Repo
 
   describe "PendingUserCleanup.run/0" do
-    @tag known_failure: "B4: insert_user missing NOT NULL username_fingerprint (2026-03-21)"
     test "deletes pending users older than the buffer" do
       old_pending =
         insert_user(%{
@@ -19,7 +18,6 @@ defmodule Famichat.Auth.PendingUserReaperTest do
       assert Repo.get(User, old_pending.id) == nil
     end
 
-    @tag known_failure: "B4: insert_user missing NOT NULL username_fingerprint (2026-03-21)"
     test "keeps recent pending users" do
       recent_pending =
         insert_user(%{
@@ -31,7 +29,6 @@ defmodule Famichat.Auth.PendingUserReaperTest do
       assert Repo.get(User, recent_pending.id) != nil
     end
 
-    @tag known_failure: "B4: insert_user missing NOT NULL username_fingerprint (2026-03-21)"
     test "keeps active users regardless of age" do
       old_active =
         insert_user(%{
@@ -46,9 +43,11 @@ defmodule Famichat.Auth.PendingUserReaperTest do
 
   defp insert_user(attrs) do
     now = DateTime.utc_now()
+    username = "test-#{System.unique_integer([:positive])}"
 
     defaults = %{
-      username: "test-#{System.unique_integer([:positive])}",
+      username: username,
+      username_fingerprint: Famichat.Accounts.Username.fingerprint(username),
       status: :pending,
       inserted_at: now,
       updated_at: now

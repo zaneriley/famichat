@@ -166,7 +166,6 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
            end)
   end
 
-  @tag known_failure: "B5: pagination API response shape drift (2026-03-21)"
   test "paginates messages oldest to newest using cast params", %{
     authed_conn: authed_conn,
     conversation: conversation,
@@ -191,7 +190,7 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
 
     assert %{"data" => data} = response
     assert response["meta"]["has_more"] == true
-    assert is_binary(response["meta"]["next_cursor"])
+    assert is_integer(response["meta"]["next_cursor"])
     assert Enum.map(data, & &1["content"]) == ["msg-1", "msg-2"]
 
     error_response =
@@ -201,7 +200,7 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
       })
       |> json_response(422)
 
-    assert error_response["error"] == "invalid_pagination"
+    assert error_response["error"] == %{"code" => "invalid_pagination"}
     assert Map.has_key?(error_response["details"], "limit")
   end
 
@@ -263,7 +262,6 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
     assert page_2["meta"]["next_cursor"] == m4.message_seq
   end
 
-  @tag known_failure: "B5: error response shape changed to nested %{code: ...} (2026-03-21)"
   test "returns invalid_pagination when after cursor is not a valid integer", %{
     authed_conn: authed_conn,
     conversation: conversation
@@ -275,11 +273,10 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
       })
       |> json_response(422)
 
-    assert response["error"] == "invalid_pagination"
+    assert response["error"] == %{"code" => "invalid_pagination"}
     assert Map.has_key?(response["details"], "after")
   end
 
-  @tag known_failure: "B5: error response shape changed to nested %{code: ...} (2026-03-21)"
   test "returns invalid_pagination when after and offset are combined", %{
     authed_conn: authed_conn,
     conversation: conversation,
@@ -300,7 +297,7 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
       })
       |> json_response(422)
 
-    assert response["error"] == "invalid_pagination"
+    assert response["error"] == %{"code" => "invalid_pagination"}
     assert Map.has_key?(response["details"], "offset")
   end
 
@@ -323,7 +320,6 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
     assert response["meta"]["has_more"] == false
   end
 
-  @tag known_failure: "B5: error response shape changed to nested %{code: ...} (2026-03-21)"
   test "returns not_found for conversations the user does not belong to", %{
     authed_conn: authed_conn,
     partner: partner
@@ -342,10 +338,9 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
       |> get(~p"/api/v1/conversations/#{other_conversation.id}/messages")
       |> json_response(404)
 
-    assert response == %{"error" => "not_found"}
+    assert response == %{"error" => %{"code" => "not_found"}}
   end
 
-  @tag known_failure: "B5: error response shape changed to nested %{code: ...} (2026-03-21)"
   test "returns indistinguishable not_found for inaccessible vs unknown conversation ids",
        %{
          authed_conn: authed_conn,
@@ -370,8 +365,8 @@ defmodule FamichatWeb.API.ChatReadControllerTest do
       |> get(~p"/api/v1/conversations/#{Ecto.UUID.generate()}/messages")
       |> json_response(404)
 
-    assert existing_response == %{"error" => "not_found"}
-    assert unknown_response == %{"error" => "not_found"}
+    assert existing_response == %{"error" => %{"code" => "not_found"}}
+    assert unknown_response == %{"error" => %{"code" => "not_found"}}
     assert existing_response == unknown_response
   end
 

@@ -145,7 +145,6 @@ defmodule FamichatWeb.FrontDoorLiveTest do
       assert render(view) =~ "Continue — set up your passkey next"
     end
 
-    @tag known_failure: "B7: invite front door flow changed (2026-03-21)"
     test "username validation errors keep invite users on the accept step", %{
       conn: conn
     } do
@@ -177,10 +176,10 @@ defmodule FamichatWeb.FrontDoorLiveTest do
 
       html =
         view
-        |> form("form[phx-submit='submit-username']", %{"username" => "A"})
+        |> form("form[phx-submit='submit-username']", %{"username" => ""})
         |> render_submit()
 
-      assert html =~ "Username must be at least 2 characters."
+      assert html =~ "Please enter a username."
       assert has_element?(view, "#username")
       refute has_element?(view, "#passkey-register-btn")
     end

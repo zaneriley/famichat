@@ -26,12 +26,20 @@ defmodule FamichatWeb.HomeLiveTest do
 
     user =
       ChatFixtures.user_fixture(%{
-        household_id: family.id,
+        family_id: family.id,
         role: :member,
         username: "home_live_test_user"
       })
 
     ChatFixtures.membership_fixture(user, family, :member)
+
+    # Insert stub passkey so incomplete_bootstrap detection does not redirect to /setup
+    Famichat.Repo.insert!(%Famichat.Accounts.Passkey{
+      user_id: user.id,
+      credential_id: :crypto.strong_rand_bytes(32),
+      public_key: :crypto.strong_rand_bytes(32),
+      sign_count: 0
+    })
 
     {:ok, session} =
       Sessions.start_session(
@@ -49,28 +57,17 @@ defmodule FamichatWeb.HomeLiveTest do
   end
 
   describe "home chat harness" do
-    @tag known_failure: "B7: unauthenticated /en now redirects to /en/login (2026-03-21)"
-    test "renders sign-in prompt when no token is provided", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en")
-
-      # Unauthenticated: the #kitchen-table-chat div is not rendered.
-      # Instead the user sees a sign-in prompt.
-      refute has_element?(view, "#kitchen-table-chat")
-      assert render(view) =~ "Sign in"
+    test "redirects to login when no token is provided", %{conn: conn} do
+      assert {:error, {:live_redirect, %{to: "/en/login"}}} = live(conn, "/en")
     end
 
-    @tag known_failure: "B7: unauthenticated /en now redirects to /en/login (2026-03-21)"
-    test "renders session-expired message when an invalid token is provided", %{
-      conn: conn
-    } do
-      {:ok, view, _html} = live(conn, "/en?token=invalid-token")
-
-      # Invalid URL token: auth_error is set, template shows the expired message.
-      refute has_element?(view, "#kitchen-table-chat")
-      assert render(view) =~ "Session expired or invalid."
+    test "redirects to login when an invalid token is provided", %{conn: conn} do
+      assert {:error, {:live_redirect, %{to: "/en/login"}}} =
+               live(conn, "/en?token=invalid-token")
     end
 
-    @tag known_failure: "B7: authenticated /en redirects to /en/setup — incomplete bootstrap (2026-03-21)"
+
+    @tag known_failure: "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
     test "uses message_id for deterministic stream identity", %{conn: conn} do
       {auth_conn, _user, _session} = authenticated_conn(conn)
       {:ok, view, _html} = live(auth_conn, "/en")
@@ -88,7 +85,8 @@ defmodule FamichatWeb.HomeLiveTest do
       assert render(view) =~ "hello from other device"
     end
 
-    @tag known_failure: "B7: authenticated /en redirects to /en/setup — incomplete bootstrap (2026-03-21)"
+
+    @tag known_failure: "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
     test "does not render raw MLS wire payload in spike UI", %{conn: conn} do
       Application.put_env(:famichat, :mls_enforcement, true)
       {auth_conn, _user, _session} = authenticated_conn(conn)
@@ -109,7 +107,8 @@ defmodule FamichatWeb.HomeLiveTest do
       assert render(view) =~ "[Encrypted MLS payload]"
     end
 
-    @tag known_failure: "B7: authenticated /en redirects to /en/setup — incomplete bootstrap (2026-03-21)"
+
+    @tag known_failure: "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
     test "drops channel payloads without message_id", %{conn: conn} do
       {auth_conn, _user, _session} = authenticated_conn(conn)
       {:ok, view, _html} = live(auth_conn, "/en")
@@ -123,7 +122,7 @@ defmodule FamichatWeb.HomeLiveTest do
       _ = render_hook(view, "message_received", payload)
 
       refute render(view) =~ "missing-id-body"
-      assert render(view) =~ "Dropped message missing message_id."
+      assert render(view) =~ "A message could not be displayed."
     end
   end
 end
