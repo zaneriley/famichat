@@ -42,6 +42,8 @@ Search here before adding new items to BACKLOG.md.
 - [x] Add `validate_length` on username in `User.changeset` at all entry points (setup, invite, family-start)
 - [x] Enforce compile-time domain boundary annotations — replace `exports: :all` with explicit exports on all major boundaries (2c307c8)
 - [x] Delete `FamichatWeb.SchemaMarkup` — hardcoded PII, zero callers (2c307c8)
+- [x] Remove committed WASM binaries and add pkg dirs to `.gitignore` — Already resolved: pkg/ and pkg-bundler/ directories have * gitignore entries, zero tracked binaries. | P0-dogfood | closed 2026-03-20
+- [x] Remove `/api/v1/hello` route and HelloController — dev artifact in production API | P2-debt | closed 2026-03-20
 
 ## Blocks confidence (P1)
 

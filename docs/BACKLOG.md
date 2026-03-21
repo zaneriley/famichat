@@ -26,7 +26,6 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Create SpaController with authenticated boot page and `/app/*` catch-all before `/:locale` scopes — all SPA deep links 404; auth handoff requires server-rendered boot page → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P0-dogfood | agent:consensus
 - [ ] Change Docker build context from `backend/` to repo root — frontend build stage inaccessible from Docker → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P0-dogfood | agent:consensus
 - [ ] Create Cargo workspace root at `backend/infra/Cargo.toml` — conflicting profiles produce wrong WASM optimization → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P0-dogfood | agent:consensus
-- [ ] Remove committed WASM binaries and add pkg dirs to `.gitignore` — 2.2 MB binaries violate ADR 012; bloat every clone → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P0-dogfood | agent:consensus
 - [ ] Implement cookie-based same-origin auth (ApiAuth plug + server-rendered boot page) — device revocation guaranteed under Bearer-only model on cross-surface navigation → .tmp/2026-03-20-spa-scaffold/round-1/consensus.md | P0-dogfood | agent:consensus
 - [ ] Fix `:spa` pipeline to include `:fetch_session` and `SessionRefresh` — SpaController cannot read session cookie without them → .tmp/2026-03-20-spa-scaffold/ia-proposals/02-auth-boot.md | P0-dogfood | agent:ia-consensus
 - [ ] Implement `FamichatWeb.BootContext.for_conn/1` as Web-layer aggregator — SpaController must not read session keys directly → .tmp/2026-03-20-spa-scaffold/ia-proposals/02-auth-boot.md | P0-dogfood | agent:ia-consensus
@@ -97,7 +96,6 @@ Open work only. Completed items → [BACKLOG-ARCHIVE.md](BACKLOG-ARCHIVE.md). Re
 - [ ] Replace technical session-expired copy with warm brand-aligned version — "re-authenticate" breaks the family-space feeling → .tmp/2026-03-09-mlp-ux/consensus.md | P2-debt | agent:consensus
 - [ ] Add photo sharing for 1:1 conversations — half of couple communication is visual; punted to next cycle → .tmp/2026-03-09-mlp-ux/consensus.md | P2-debt | agent:consensus
 - [ ] Strip unnecessary packages from prod Dockerfile stage — 100MB+ build tools in prod image → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
-- [ ] Remove `/api/v1/hello` route and HelloController — dev artifact in production API → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Add Docker image smoke test to CI pipeline — broken Dockerfile only discovered after release → .tmp/2026-03-10-delivery-and-deployment/round-1/consensus.md | P2-debt | agent:consensus
 - [ ] Update README.md with "For Self-Hosters" link to deployment guide — no path from README to deploy → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus
 - [ ] Remove unused CONTENT_REPO_URL and GITHUB_WEBHOOK_SECRET from dev `.env` — cargo-culted from prior project → .tmp/2026-03-10-delivery-and-deployment/final-consensus.md | P2-debt | agent:consensus

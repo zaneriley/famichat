@@ -66,7 +66,6 @@ defmodule FamichatWeb.Router do
   scope "/api/v1", FamichatWeb do
     pipe_through :api
 
-    get "/hello", HelloController, :index
     get "/health", HealthController, :index
     post "/setup", AuthController, :bootstrap_admin
     post "/auth/invites", AuthController, :issue_invite

@@ -30,7 +30,7 @@ defmodule FamichatWeb.Endpoint do
   plug Plug.Static,
     at: "/",
     from: :famichat,
-    gzip: false,
+    gzip: true,
     only: FamichatWeb.static_paths()
 
   if code_reloading? do
