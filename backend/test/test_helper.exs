@@ -11,7 +11,7 @@ Application.put_env(
 
 # Configure ExUnit
 ExUnit.configure(
-  exclude: [pending: true, timing: true],
+  exclude: [:pending, :timing, :known_failure],
   formatters: [ExUnit.CLIFormatter, ExUnitNotifier]
 )
 

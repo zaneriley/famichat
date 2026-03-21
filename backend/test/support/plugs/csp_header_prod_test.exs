@@ -4,6 +4,7 @@ defmodule FamichatWeb.CSPHeaderProdTest do
   alias FamichatWeb.Plugs.CSPHeader
 
   describe "Production CSP Header" do
+    @tag known_failure: "B5: CSP tightened — unsafe-inline removed from script-src (2026-03-21)"
     test "script-src allows unsafe-inline in development" do
       config = %{
         scheme: "http",

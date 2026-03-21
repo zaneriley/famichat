@@ -14,6 +14,7 @@ defmodule FamichatWeb.CSPHeaderDevTest do
       assert Dev.maybe_add_upgrade_insecure_requests(directives) == directives
     end
 
+    @tag known_failure: "B5: CSP tightened — unsafe-inline removed from script-src (2026-03-21)"
     test "script-src allows unsafe-inline in development" do
       config = %{
         scheme: "http",

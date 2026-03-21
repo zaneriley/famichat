@@ -1,5 +1,11 @@
 defmodule FamichatWeb.RouterTest do
-  use FamichatWeb.ConnCase
+  use FamichatWeb.ConnCase, async: false
+
+  setup do
+    Famichat.Accounts.FirstRun.force_bootstrapped!()
+    on_exit(fn -> Famichat.Accounts.FirstRun.reset_cache() end)
+    :ok
+  end
 
   describe "Locale Handling Tests" do
     test "redirects to default locale when no locale is specified", %{

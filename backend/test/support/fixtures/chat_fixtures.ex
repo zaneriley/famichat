@@ -296,6 +296,31 @@ defmodule Famichat.ChatFixtures do
     |> Repo.insert!()
   end
 
+  @doc """
+  Seeds a minimal ConversationSecurityState row for a conversation.
+
+  Use this in test setups where the channel/message service requires an active
+  security state but the test doesn't manage MLS state itself.
+  """
+  def seed_security_state(conversation_id) do
+    alias Famichat.Chat.ConversationSecurityStateStore
+
+    state = %{
+      "session_sender_storage" => Base.encode64("stub-sender-storage"),
+      "session_recipient_storage" => Base.encode64("stub-recipient-storage"),
+      "session_sender_signer" => Base.encode64("stub-sender-signer"),
+      "session_recipient_signer" => Base.encode64("stub-recipient-signer"),
+      "session_cache" => ""
+    }
+
+    {:ok, _} =
+      ConversationSecurityStateStore.upsert(
+        conversation_id,
+        %{state: state, epoch: 0, protocol: "mls"},
+        nil
+      )
+  end
+
   defp add_participant(conversation_id, user_id) do
     %ConversationParticipant{}
     |> ConversationParticipant.changeset(%{

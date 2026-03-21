@@ -275,19 +275,23 @@ config :famichat, :webauthn,
   rp_name: webauthn_rp_name
 
 # ── MLS enforcement (optional) ─────────────────────────────────────
+# Skip env-var override in test — test.exs pins mls_enforcement: false,
+# and tests that need enforcement opt in explicitly via Application.put_env.
 
-case System.get_env("FAMICHAT_MLS_ENFORCEMENT") do
-  nil ->
-    :ok
+if config_env() != :test do
+  case System.get_env("FAMICHAT_MLS_ENFORCEMENT") do
+    nil ->
+      :ok
 
-  value ->
-    enabled? =
-      value
-      |> String.trim()
-      |> String.downcase()
-      |> then(&(&1 in ["1", "true", "yes", "on"]))
+    value ->
+      enabled? =
+        value
+        |> String.trim()
+        |> String.downcase()
+        |> then(&(&1 in ["1", "true", "yes", "on"]))
 
-    config :famichat, mls_enforcement: enabled?
+      config :famichat, mls_enforcement: enabled?
+  end
 end
 
 # ── Public registration ──────────────────────────────────────────

@@ -2,7 +2,7 @@
   verbose: false,
   private: false,
   skip: false,
-  router: "",
+  router: "FamichatWeb.Router",
   exit: "low",
   format: "txt",
   out: "",

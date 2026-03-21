@@ -294,9 +294,14 @@ function elixir:format:check {
   mix format --check-formatted
 }
 
+function elixir:compile:check {
+  # Compile with warnings-as-errors (boundary compiler runs in dev)
+  _dc -e "MIX_ENV=dev" web mix compile --warnings-as-errors
+}
+
 function elixir:security-check {
   # Run Sobelow security checks
-  mix sobelow --config --exit
+  _dc web mix sobelow --config --exit
 }
 
 function elixir:test {
@@ -3498,8 +3503,10 @@ function ci:lint {
     docs:boundary-check
     lint:session-keys
     lint:phx-hooks
+    elixir:compile:check
     elixir:format:check
     elixir:lint
+    elixir:security-check
     rust:lint
     js:fix:check
     css:lint:check

@@ -72,3 +72,14 @@ jobs:
       - name: Run full lint suite
         working-directory: backend
         run: ./run ci:lint
+
+      - name: Check known_failure ceiling
+        working-directory: backend
+        run: |
+          count=$(grep -rc '@tag known_failure:' test/ | awk -F: '{s+=$2} END {print s}')
+          ceiling=$(cat .known_failure_ceiling)
+          echo "known_failure count: $count, ceiling: $ceiling"
+          if [ "$count" -gt "$ceiling" ]; then
+            echo "::error::known_failure count ($count) exceeds ceiling ($ceiling)"
+            exit 1
+          fi

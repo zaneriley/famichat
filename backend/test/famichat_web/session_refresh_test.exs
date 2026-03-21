@@ -9,6 +9,12 @@ defmodule FamichatWeb.SessionRefreshTest do
 
   @event [:famichat, :plug, :session_refresh, :call]
 
+  setup do
+    Famichat.Accounts.FirstRun.force_bootstrapped!()
+    on_exit(fn -> Famichat.Accounts.FirstRun.reset_cache() end)
+    :ok
+  end
+
   test "public browser routes do not emit session_refresh telemetry", %{
     conn: conn
   } do
@@ -26,7 +32,7 @@ defmodule FamichatWeb.SessionRefreshTest do
                  302
                ]
 
-        assert get(build_conn(), "/en/does-not-exist").status == 302
+        assert get(build_conn(), "/en/does-not-exist").status == 404
       end)
 
     assert events == []

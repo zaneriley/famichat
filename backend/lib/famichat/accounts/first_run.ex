@@ -38,6 +38,17 @@ defmodule Famichat.Accounts.FirstRun do
   end
 
   @doc """
+  Force the bootstrapped flag to true in ETS without querying the DB.
+  Use in test setup blocks that assume a bootstrapped instance but
+  don't test the bootstrap flow itself.
+  """
+  @spec force_bootstrapped!() :: :ok
+  def force_bootstrapped! do
+    put_cache(true)
+    :ok
+  end
+
+  @doc """
   Clears the cached bootstrapped flag. Useful in tests.
   """
   @spec reset_cache() :: :ok

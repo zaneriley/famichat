@@ -42,3 +42,7 @@ config :famichat,
 config :famichat, :admin_basic_auth,
   username: "test-admin",
   password: "test-secret"
+
+# MLS enforcement off by default in tests. Tests that exercise MLS paths
+# opt in via Application.put_env(:famichat, :mls_enforcement, true) + on_exit cleanup.
+config :famichat, mls_enforcement: false
