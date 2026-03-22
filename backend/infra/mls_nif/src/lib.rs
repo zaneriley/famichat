@@ -883,16 +883,26 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
 
     with_required_group(operation, params, |group_id| {
         let body = params.get("body").cloned().unwrap_or_default();
+        let should_restore =
+            has_complete_session_snapshot(params) || !GROUP_SESSIONS.contains_key(&group_id);
 
-        if has_complete_session_snapshot(params) || !GROUP_SESSIONS.contains_key(&group_id) {
+        if should_restore {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                // Entry::Vacant: do not overwrite an existing session inserted by a concurrent thread.
-                if let dashmap::mapref::entry::Entry::Vacant(e) =
-                    GROUP_SESSIONS.entry(group_id.clone())
-                {
-                    e.insert(restored);
+                if has_complete_session_snapshot(params) {
+                    // A complete snapshot is the caller's explicit actor/session view for this
+                    // request. Reuse the same authoritative restore behavior as process_incoming:
+                    // if the caller swaps sender/recipient snapshot fields after mls_remove, this
+                    // call must encrypt as that swapped actor, not as a stale cached session.
+                    GROUP_SESSIONS.insert(group_id.clone(), restored);
+                } else {
+                    // Entry::Vacant: do not overwrite an existing session inserted by a concurrent thread.
+                    if let dashmap::mapref::entry::Entry::Vacant(e) =
+                        GROUP_SESSIONS.entry(group_id.clone())
+                    {
+                        e.insert(restored);
+                    }
                 }
             }
         }
@@ -2498,6 +2508,74 @@ mod tests {
             remove_result.get("status"),
             Some(&"ok".to_owned()),
             "status must be ok"
+        );
+    }
+
+    #[test]
+    fn create_application_message_snapshot_sender_is_authoritative_after_remove() {
+        let group_id = unique_group_id("group-remove-authoritative");
+
+        let group = create_group(&payload(&[
+            ("group_id", &group_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect("group must be created");
+
+        let mut remove_params = Payload::new();
+        remove_params.insert("group_id".to_owned(), group_id.clone());
+        remove_params.insert("remove_target".to_owned(), "recipient".to_owned());
+        for key in [
+            "session_sender_storage",
+            "session_recipient_storage",
+            "session_sender_signer",
+            "session_recipient_signer",
+            "session_cache",
+        ] {
+            if let Some(value) = group.get(key) {
+                remove_params.insert(key.to_owned(), value.clone());
+            }
+        }
+
+        let remove_result = mls_remove(&remove_params).expect("mls_remove must succeed");
+
+        let removed_sender_storage = remove_result
+            .get("session_recipient_storage")
+            .expect("recipient storage in remove payload")
+            .clone();
+        let removed_sender_signer = remove_result
+            .get("session_recipient_signer")
+            .expect("recipient signer in remove payload")
+            .clone();
+        let survivor_recipient_storage = remove_result
+            .get("session_sender_storage")
+            .expect("sender storage in remove payload")
+            .clone();
+        let survivor_recipient_signer = remove_result
+            .get("session_sender_signer")
+            .expect("sender signer in remove payload")
+            .clone();
+
+        let error = create_application_message(&payload(&[
+            ("group_id", &group_id),
+            ("body", "should fail"),
+            ("session_sender_storage", &removed_sender_storage),
+            ("session_sender_signer", &removed_sender_signer),
+            ("session_recipient_storage", &survivor_recipient_storage),
+            ("session_recipient_signer", &survivor_recipient_signer),
+            (
+                "session_cache",
+                remove_result.get("session_cache").unwrap_or(&String::new()),
+            ),
+        ]))
+        .expect_err("removed member snapshot must not encrypt");
+
+        assert_eq!(error.code, ErrorCode::UnauthorizedOperation);
+        assert_eq!(
+            error.details.get("reason"),
+            Some(&"sender_not_member".to_owned())
         );
     }
 
