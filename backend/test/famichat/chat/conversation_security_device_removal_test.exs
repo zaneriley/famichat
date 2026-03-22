@@ -71,7 +71,12 @@ defmodule Famichat.Chat.ConversationSecurityDeviceRemovalTest do
              })
 
     # Run MLS removal synchronously.
-    summary = ConversationSecurityDeviceRemoval.remove_sync(user.id, device_id, revocation_ref)
+    summary =
+      ConversationSecurityDeviceRemoval.remove_sync(
+        user.id,
+        device_id,
+        revocation_ref
+      )
 
     assert summary.total == 2
     assert summary.succeeded == 2
@@ -141,7 +146,12 @@ defmodule Famichat.Chat.ConversationSecurityDeviceRemovalTest do
                revocation_reason: "auth_device_revoked"
              })
 
-    summary = ConversationSecurityDeviceRemoval.remove_sync(user.id, device_id, revocation_ref)
+    summary =
+      ConversationSecurityDeviceRemoval.remove_sync(
+        user.id,
+        device_id,
+        revocation_ref
+      )
 
     assert summary.total == length(conversations)
     assert summary.succeeded == 1

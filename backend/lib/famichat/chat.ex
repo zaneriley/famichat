@@ -516,6 +516,10 @@ defmodule Famichat.Chat do
           String.t()
         ) :: :ok
   def remove_device_from_mls_groups(user_id, device_id, revocation_ref) do
-    ConversationSecurityDeviceRemoval.remove_async(user_id, device_id, revocation_ref)
+    ConversationSecurityDeviceRemoval.remove_async(
+      user_id,
+      device_id,
+      revocation_ref
+    )
   end
 end

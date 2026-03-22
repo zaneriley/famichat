@@ -96,7 +96,9 @@ defmodule FamichatWeb.Plugs.CSPHeader do
       style_src: "'self' #{all_hosts} 'unsafe-inline'",
       img_src: "'self' #{all_hosts} data:",
       font_src: "'self' #{all_hosts} data:",
-      connect_src: "'self' #{all_hosts} #{ws_url}" <> if(@env == :dev, do: " ws: wss:", else: ""),
+      connect_src:
+        "'self' #{all_hosts} #{ws_url}" <>
+          if(@env == :dev, do: " ws: wss:", else: ""),
       frame_src: @env_module.frame_src(),
       object_src: "'none'",
       base_uri: "'self'",

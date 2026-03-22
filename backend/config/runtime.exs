@@ -82,15 +82,17 @@ endpoint_config = [
 endpoint_config =
   if config_env() == :prod do
     origin_port = if url_port in ["80", "443"], do: "", else: ":#{url_port}"
-    Keyword.put(endpoint_config, :check_origin, ["#{url_scheme}://#{url_host}#{origin_port}"])
+
+    Keyword.put(endpoint_config, :check_origin, [
+      "#{url_scheme}://#{url_host}#{origin_port}"
+    ])
   else
     endpoint_config
   end
 
 config :famichat, FamichatWeb.Endpoint, endpoint_config
 
-config :famichat, Famichat.Auth.Tokens.Storage,
-  secret_key_base: secret_key_base
+config :famichat, Famichat.Auth.Tokens.Storage, secret_key_base: secret_key_base
 
 # ── Database ───────────────────────────────────────────────────────
 
@@ -240,7 +242,8 @@ webauthn_origin =
       value
   end
 
-if config_env() == :prod and not String.starts_with?(webauthn_origin, "https://") do
+if config_env() == :prod and
+     not String.starts_with?(webauthn_origin, "https://") do
   IO.warn("""
   ── WEBAUTHN_ORIGIN does not use https:// ────────────────────────
 
@@ -267,7 +270,8 @@ webauthn_rp_id =
   end
 
 webauthn_rp_name =
-  System.get_env("WEBAUTHN_RP_NAME") || Application.get_env(:famichat, :app_name, "Famichat")
+  System.get_env("WEBAUTHN_RP_NAME") ||
+    Application.get_env(:famichat, :app_name, "Famichat")
 
 config :famichat, :webauthn,
   origin: webauthn_origin,
@@ -305,7 +309,10 @@ registration_open =
       config_env() != :prod
 
     value ->
-      value |> String.trim() |> String.downcase() |> then(&(&1 in ["1", "true", "yes", "on"]))
+      value
+      |> String.trim()
+      |> String.downcase()
+      |> then(&(&1 in ["1", "true", "yes", "on"]))
   end
 
 config :famichat, registration_open: registration_open

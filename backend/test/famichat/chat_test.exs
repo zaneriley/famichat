@@ -169,7 +169,8 @@ defmodule Famichat.ChatTest do
       refute user.id in updated_conv.hidden_by_users
     end
 
-    @tag known_failure: "B7: conversation visibility query needs community_id audit (2026-03-21)"
+    @tag known_failure:
+           "B7: conversation visibility query needs community_id audit (2026-03-21)"
     test "list_visible_conversations/1 excludes hidden conversations", %{
       user1: user,
       conv1: conv1,

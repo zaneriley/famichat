@@ -585,13 +585,11 @@ defmodule FamichatWeb.MessageChannelTest do
       {:ok, %{socket: socket}}
     end
 
-
     test "broadcasts messages on direct conversation channel", %{socket: socket} do
       payload = %{"body" => "Hello from direct conversation!"}
       {_, metadata} = push_and_assert_broadcast(socket, :direct, payload)
       assert metadata.encryption_status == "disabled"
     end
-
 
     test "broadcasts encrypted messages on direct conversation channel", %{
       socket: socket
@@ -608,7 +606,6 @@ defmodule FamichatWeb.MessageChannelTest do
 
       assert metadata.encryption_status == "enabled"
     end
-
 
     test "broadcast telemetry only includes encryption_status field", %{
       socket: socket
@@ -633,7 +630,6 @@ defmodule FamichatWeb.MessageChannelTest do
       assert plain_metadata.encryption_status == "disabled"
       assert plain_metadata.user_id == @valid_user_id
     end
-
 
     test "persists messages before broadcast", %{socket: socket} do
       payload = %{"body" => "persisted direct message"}
@@ -1325,7 +1321,6 @@ defmodule FamichatWeb.MessageChannelTest do
       assert logs =~ "message_seq=42"
     end
 
-
     test "acknowledgment telemetry captures non-direct conversations", %{
       socket: socket
     } do
@@ -1342,7 +1337,6 @@ defmodule FamichatWeb.MessageChannelTest do
       assert metadata.conversation_id == @group_conversation_id
       assert metadata.message_seq == 7
     end
-
 
     test "acknowledgment telemetry defaults message_seq to nil when missing", %{
       socket: socket
@@ -1382,9 +1376,9 @@ defmodule FamichatWeb.MessageChannelTest do
 
       # Capture the broadcast payload to get the persisted message_id (UUID)
       assert_receive %Phoenix.Socket.Broadcast{
-                       event: "new_msg",
-                       payload: %{"message_id" => persisted_message_id} = broadcast_payload
-                     }
+        event: "new_msg",
+        payload: %{"message_id" => persisted_message_id} = broadcast_payload
+      }
 
       assert broadcast_payload["body"] == "Message requiring acknowledgment"
       assert broadcast_payload["user_id"] == @valid_user_id

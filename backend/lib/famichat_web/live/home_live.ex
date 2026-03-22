@@ -426,37 +426,37 @@ defmodule FamichatWeb.HomeLive do
        )}
     else
       case Chat.recover_conversation_security_state(
-               socket.assigns.conversation_id,
-               recovery_ref,
-               %{
-                 rejoin_token:
-                   "spike-rejoin-#{System.unique_integer([:positive])}"
-               }
-             ) do
-          {:ok, result} ->
-            description =
-              if result.idempotent do
-                "Recovery replay accepted (idempotent) for #{result.recovery_ref}."
-              else
-                "Recovery completed at epoch #{result.recovered_epoch} (ref #{result.recovery_ref})."
-              end
+             socket.assigns.conversation_id,
+             recovery_ref,
+             %{
+               rejoin_token:
+                 "spike-rejoin-#{System.unique_integer([:positive])}"
+             }
+           ) do
+        {:ok, result} ->
+          description =
+            if result.idempotent do
+              "Recovery replay accepted (idempotent) for #{result.recovery_ref}."
+            else
+              "Recovery completed at epoch #{result.recovered_epoch} (ref #{result.recovery_ref})."
+            end
 
-            {:noreply,
-             socket
-             |> assign(
-               error_message: nil,
-               security_reason: nil,
-               security_action: nil,
-               recovery_last_status: description
-             )
-             |> put_system_notice(description)}
+          {:noreply,
+           socket
+           |> assign(
+             error_message: nil,
+             security_reason: nil,
+             security_action: nil,
+             recovery_last_status: description
+           )
+           |> put_system_notice(description)}
 
-          {:error, reason} ->
-            {:noreply,
-             assign(socket,
-               error_message: "Recovery failed: #{inspect(reason)}"
-             )}
-        end
+        {:error, reason} ->
+          {:noreply,
+           assign(socket,
+             error_message: "Recovery failed: #{inspect(reason)}"
+           )}
+      end
     end
   end
 

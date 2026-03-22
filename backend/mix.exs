@@ -9,8 +9,10 @@ defmodule Famichat.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       compilers: compilers(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      build_path: if(System.get_env("DOCKER_BUILD"), do: "/mix/_build", else: "_build"),
-      deps_path: if(System.get_env("DOCKER_BUILD"), do: "/mix/deps", else: "deps"),
+      build_path:
+        if(System.get_env("DOCKER_BUILD"), do: "/mix/_build", else: "_build"),
+      deps_path:
+        if(System.get_env("DOCKER_BUILD"), do: "/mix/deps", else: "deps"),
       aliases: aliases(),
       deps: deps(),
       dialyzer: [

@@ -1284,7 +1284,9 @@ defmodule Famichat.Auth.Onboarding do
   defp assert_community_admin(user_id) do
     if Repo.exists?(
          from(u in User,
-           where: u.id == ^user_id and u.community_admin == true and u.status == :active
+           where:
+             u.id == ^user_id and u.community_admin == true and
+               u.status == :active
          )
        ) do
       :ok

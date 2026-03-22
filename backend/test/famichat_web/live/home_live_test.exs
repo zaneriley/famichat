@@ -66,8 +66,8 @@ defmodule FamichatWeb.HomeLiveTest do
                live(conn, "/en?token=invalid-token")
     end
 
-
-    @tag known_failure: "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
+    @tag known_failure:
+           "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
     test "uses message_id for deterministic stream identity", %{conn: conn} do
       {auth_conn, _user, _session} = authenticated_conn(conn)
       {:ok, view, _html} = live(auth_conn, "/en")
@@ -85,8 +85,8 @@ defmodule FamichatWeb.HomeLiveTest do
       assert render(view) =~ "hello from other device"
     end
 
-
-    @tag known_failure: "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
+    @tag known_failure:
+           "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
     test "does not render raw MLS wire payload in spike UI", %{conn: conn} do
       Application.put_env(:famichat, :mls_enforcement, true)
       {auth_conn, _user, _session} = authenticated_conn(conn)
@@ -107,8 +107,8 @@ defmodule FamichatWeb.HomeLiveTest do
       assert render(view) =~ "[Encrypted MLS payload]"
     end
 
-
-    @tag known_failure: "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
+    @tag known_failure:
+           "B7: spike UI render_hook does not reflect stream inserts in test (2026-03-21)"
     test "drops channel payloads without message_id", %{conn: conn} do
       {auth_conn, _user, _session} = authenticated_conn(conn)
       {:ok, view, _html} = live(auth_conn, "/en")

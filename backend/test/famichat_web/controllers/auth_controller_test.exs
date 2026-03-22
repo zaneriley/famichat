@@ -395,7 +395,10 @@ defmodule FamichatWeb.AuthControllerTest do
 
     otp_verify_resp =
       conn
-      |> post(~p"/api/v1/auth/otp/verify", %{email: admin.email, code: otp_token})
+      |> post(~p"/api/v1/auth/otp/verify", %{
+        email: admin.email,
+        code: otp_token
+      })
       |> json_response(201)
 
     assert otp_verify_resp["access_token"]
@@ -726,7 +729,6 @@ defmodule FamichatWeb.AuthControllerTest do
   # BUG-R4-005: assert/challenge must not accept user_id (user enumeration)
   # ---------------------------------------------------------------------------
   describe "passkey_assert_challenge — user_id enumeration prevention" do
-
     test "user_id UUID for nonexistent user returns 400, not 404", %{conn: conn} do
       conn = put_req_header(conn, "content-type", @json)
 
@@ -746,7 +748,6 @@ defmodule FamichatWeb.AuthControllerTest do
       body = json_response(resp, 400)
       assert body["error"]["code"] == "invalid_parameters"
     end
-
 
     test "user_id UUID for existing user also returns 400", %{
       conn: conn,
@@ -768,7 +769,6 @@ defmodule FamichatWeb.AuthControllerTest do
       body = json_response(resp, 400)
       assert body["error"]["code"] == "invalid_parameters"
     end
-
 
     test "existing and nonexistent user_id return the same response (no enumeration)",
          %{

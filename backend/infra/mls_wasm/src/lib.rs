@@ -20,9 +20,8 @@
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use openmls::prelude::{
-    tls_codec::Deserialize,
-    BasicCredential, Ciphersuite, CredentialWithKey, GroupId, KeyPackage, MlsGroup,
-    MlsGroupCreateConfig, MlsGroupJoinConfig, MlsMessageIn, OpenMlsProvider,
+    tls_codec::Deserialize, BasicCredential, Ciphersuite, CredentialWithKey, GroupId, KeyPackage,
+    MlsGroup, MlsGroupCreateConfig, MlsGroupJoinConfig, MlsMessageIn, OpenMlsProvider,
     ProcessedMessageContent, ProtocolVersion, StagedWelcome,
 };
 use openmls_basic_credential::SignatureKeyPair;
@@ -121,8 +120,12 @@ fn deserialize_group_state(
     // Rebuild the storage HashMap
     let mut map: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     for (k_b64, v_b64) in &state.storage {
-        let k = B64.decode(k_b64).map_err(|e| format!("key b64 decode: {}", e))?;
-        let v = B64.decode(v_b64).map_err(|e| format!("val b64 decode: {}", e))?;
+        let k = B64
+            .decode(k_b64)
+            .map_err(|e| format!("key b64 decode: {}", e))?;
+        let v = B64
+            .decode(v_b64)
+            .map_err(|e| format!("val b64 decode: {}", e))?;
         map.insert(k, v);
     }
 
@@ -247,8 +250,8 @@ fn encrypt_message_inner(group_state: &str, plaintext: &str) -> Result<serde_jso
     }
 
     // Deserialize group (proves stateless: only caller's blob holds state)
-    let (mut group, signer, provider) = deserialize_group_state(group_state)
-        .map_err(|e| format!("state deserialize: {}", e))?;
+    let (mut group, signer, provider) =
+        deserialize_group_state(group_state).map_err(|e| format!("state deserialize: {}", e))?;
 
     // Encrypt — create_message(provider, signer, message_bytes)
     let mls_msg_out = group
@@ -290,8 +293,8 @@ fn decrypt_message_inner(group_state: &str, ciphertext: &str) -> Result<serde_js
     }
 
     // Deserialize group (proves P3: state restores correctly)
-    let (mut group, signer, provider) = deserialize_group_state(group_state)
-        .map_err(|e| format!("state deserialize: {}", e))?;
+    let (mut group, signer, provider) =
+        deserialize_group_state(group_state).map_err(|e| format!("state deserialize: {}", e))?;
 
     // Decode ciphertext from base64
     let ciphertext_bytes = B64
@@ -315,14 +318,15 @@ fn decrypt_message_inner(group_state: &str, ciphertext: &str) -> Result<serde_js
     // Extract plaintext from ProcessedMessageContent
     let plaintext = match processed.into_content() {
         ProcessedMessageContent::ApplicationMessage(content) => {
-            String::from_utf8(content.into_bytes())
-                .map_err(|e| format!("utf8 decode: {}", e))?
+            String::from_utf8(content.into_bytes()).map_err(|e| format!("utf8 decode: {}", e))?
         }
         ProcessedMessageContent::ProposalMessage(_) => {
             return Err("received proposal, expected application message".to_string());
         }
         ProcessedMessageContent::ExternalJoinProposalMessage(_) => {
-            return Err("received external join proposal, expected application message".to_string());
+            return Err(
+                "received external join proposal, expected application message".to_string(),
+            );
         }
         ProcessedMessageContent::StagedCommitMessage(_) => {
             return Err("received staged commit, expected application message".to_string());
@@ -431,8 +435,8 @@ fn add_member_inner(group_state: &str, key_package_b64: &str) -> Result<serde_js
     }
 
     // Restore Alice's group
-    let (mut group, signer, provider) = deserialize_group_state(group_state)
-        .map_err(|e| format!("state deserialize: {}", e))?;
+    let (mut group, signer, provider) =
+        deserialize_group_state(group_state).map_err(|e| format!("state deserialize: {}", e))?;
 
     // Decode and TLS-deserialize the KeyPackage
     let kp_bytes = B64
@@ -509,8 +513,8 @@ fn join_group_inner(
     }
 
     // Parse member_state
-    let ms: MemberState = serde_json::from_str(member_state)
-        .map_err(|e| format!("member_state parse: {}", e))?;
+    let ms: MemberState =
+        serde_json::from_str(member_state).map_err(|e| format!("member_state parse: {}", e))?;
 
     // Rebuild Bob's provider with his stored key material
     let provider = OpenMlsRustCrypto::default();
@@ -615,7 +619,8 @@ fn process_commit_inner(group_state: &str, commit_b64: &str) -> Result<serde_jso
 
     let (mut group, signer, provider) = deserialize_group_state(group_state)?;
 
-    let commit_bytes = B64.decode(commit_b64)
+    let commit_bytes = B64
+        .decode(commit_b64)
         .map_err(|e| format!("commit b64 decode: {}", e))?;
 
     let message = MlsMessageIn::tls_deserialize(&mut commit_bytes.as_slice())
@@ -644,7 +649,10 @@ fn process_commit_inner(group_state: &str, commit_b64: &str) -> Result<serde_jso
             return Err("expected StagedCommit in process_commit, got ProposalMessage".to_string());
         }
         ProcessedMessageContent::ExternalJoinProposalMessage(_) => {
-            return Err("expected StagedCommit in process_commit, got ExternalJoinProposalMessage".to_string());
+            return Err(
+                "expected StagedCommit in process_commit, got ExternalJoinProposalMessage"
+                    .to_string(),
+            );
         }
     }
 
@@ -683,8 +691,7 @@ mod tests {
     }
 
     fn alice_group_with_id(gid: &str) -> (serde_json::Value, String) {
-        let result = create_group_inner("alice@test", gid)
-            .expect("create_group_inner failed");
+        let result = create_group_inner("alice@test", gid).expect("create_group_inner failed");
         let state = result["group_state"].as_str().unwrap().to_string();
         (result, state)
     }
@@ -695,11 +702,9 @@ mod tests {
 
     fn two_member_group() -> (String, String) {
         let (_, alice_state) = alice_group();
-        let bob = create_member_inner("bob@test")
-            .expect("create_member_inner failed");
+        let bob = create_member_inner("bob@test").expect("create_member_inner failed");
         let bob_kp = bob["key_package"].as_str().unwrap();
-        let add = add_member_inner(&alice_state, bob_kp)
-            .expect("add_member_inner failed");
+        let add = add_member_inner(&alice_state, bob_kp).expect("add_member_inner failed");
         let alice_new = add["new_group_state"].as_str().unwrap().to_string();
         let bob_result = join_group_inner(
             add["welcome"].as_str().unwrap(),
@@ -719,8 +724,9 @@ mod tests {
         // Round-trip: deserialize then re-serialize both states
         let (alice_group, alice_signer, alice_provider) =
             deserialize_group_state(&alice_state).expect("alice deserialize");
-        let alice_rt = serialize_group_state(&alice_provider, &alice_signer, alice_group.group_id())
-            .expect("alice re-serialize");
+        let alice_rt =
+            serialize_group_state(&alice_provider, &alice_signer, alice_group.group_id())
+                .expect("alice re-serialize");
 
         let (bob_group, bob_signer, bob_provider) =
             deserialize_group_state(&bob_state).expect("bob deserialize");
@@ -755,7 +761,8 @@ mod tests {
 
     #[test]
     fn truncated_state_blob_fails_with_clear_error() {
-        let err = deserialize_group_state("{\"storage\":{},\"signer_bytes\":\"x\",\"group_id\":\"y\"}");
+        let err =
+            deserialize_group_state("{\"storage\":{},\"signer_bytes\":\"x\",\"group_id\":\"y\"}");
         assert!(err.is_err(), "invalid base64 in state should fail");
     }
 
@@ -765,17 +772,18 @@ mod tests {
         let (alice_state, bob_state) = two_member_group();
         let plaintext = "hello from alice to bob";
 
-        let enc = encrypt_message_inner(&alice_state, plaintext)
-            .expect("encrypt failed");
+        let enc = encrypt_message_inner(&alice_state, plaintext).expect("encrypt failed");
         let ciphertext = enc["ciphertext"].as_str().unwrap();
 
         // Ciphertext must not contain plaintext
         let raw = B64.decode(ciphertext).unwrap();
-        assert!(!raw.windows(plaintext.len()).any(|w| w == plaintext.as_bytes()),
-            "ciphertext must not contain plaintext bytes");
+        assert!(
+            !raw.windows(plaintext.len())
+                .any(|w| w == plaintext.as_bytes()),
+            "ciphertext must not contain plaintext bytes"
+        );
 
-        let dec = decrypt_message_inner(&bob_state, ciphertext)
-            .expect("decrypt failed");
+        let dec = decrypt_message_inner(&bob_state, ciphertext).expect("decrypt failed");
         assert_eq!(dec["plaintext"].as_str().unwrap(), plaintext);
     }
 
@@ -787,13 +795,17 @@ mod tests {
         // Eve has her own separate group — never added to Alice's group
         let (_, eve_state) = alice_group(); // Eve's isolated single-member group
 
-        let enc = encrypt_message_inner(&alice_state, "secret message")
-            .expect("alice encrypt failed");
+        let enc =
+            encrypt_message_inner(&alice_state, "secret message").expect("alice encrypt failed");
         let ciphertext = enc["ciphertext"].as_str().unwrap();
 
         // Eve's state should NOT be able to decrypt Alice's ciphertext
         let result = decrypt_message_inner(&eve_state, ciphertext);
-        assert!(result.is_err(), "non-member must not decrypt: got {:?}", result);
+        assert!(
+            result.is_err(),
+            "non-member must not decrypt: got {:?}",
+            result
+        );
     }
 
     // P5 + P7 — process_commit advances epoch; member with stale state cannot decrypt post-commit messages
@@ -801,8 +813,7 @@ mod tests {
     fn process_commit_advances_epoch_and_enables_post_commit_decryption() {
         // Setup: Alice, Bob in group. Carol creates member state but hasn't joined.
         let (alice_state, bob_state) = two_member_group();
-        let carol = create_member_inner("carol@test")
-            .expect("carol create_member failed");
+        let carol = create_member_inner("carol@test").expect("carol create_member failed");
 
         // Alice adds Carol — returns commit + welcome
         let add = add_member_inner(&alice_state, carol["key_package"].as_str().unwrap())
@@ -813,8 +824,8 @@ mod tests {
         let alice_new_state = add["new_group_state"].as_str().unwrap();
 
         // Bob must process the commit to stay in sync
-        let bob_after_commit = process_commit_inner(&bob_state, commit_b64)
-            .expect("bob process_commit failed");
+        let bob_after_commit =
+            process_commit_inner(&bob_state, commit_b64).expect("bob process_commit failed");
         let bob_new_state = bob_after_commit["new_group_state"].as_str().unwrap();
 
         // Carol joins
@@ -834,12 +845,18 @@ mod tests {
         // Bob (after processing commit) can decrypt
         let dec_bob = decrypt_message_inner(bob_new_state, ciphertext)
             .expect("bob must decrypt post-commit message");
-        assert_eq!(dec_bob["plaintext"].as_str().unwrap(), "post-commit message");
+        assert_eq!(
+            dec_bob["plaintext"].as_str().unwrap(),
+            "post-commit message"
+        );
 
         // Carol (newly joined) can decrypt
         let dec_carol = decrypt_message_inner(carol_state, ciphertext)
             .expect("carol must decrypt post-commit message");
-        assert_eq!(dec_carol["plaintext"].as_str().unwrap(), "post-commit message");
+        assert_eq!(
+            dec_carol["plaintext"].as_str().unwrap(),
+            "post-commit message"
+        );
     }
 
     // P5 — Stale state (pre-commit) cannot decrypt post-commit messages
@@ -859,8 +876,11 @@ mod tests {
 
         // Bob with STALE state (pre-commit, old epoch) should NOT be able to decrypt
         let result = decrypt_message_inner(&bob_state_pre_commit, ciphertext);
-        assert!(result.is_err(),
-            "stale state must not decrypt post-commit message: got {:?}", result);
+        assert!(
+            result.is_err(),
+            "stale state must not decrypt post-commit message: got {:?}",
+            result
+        );
     }
 
     // Validation — empty inputs return clear errors

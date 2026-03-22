@@ -56,21 +56,24 @@ defmodule Famichat.Auth.Passkeys.RefactorGuardTest do
     end
 
     test "2. map with only unknown keys → discoverable challenge", _ctx do
-      assert {:ok, result} = Passkeys.issue_assertion_challenge(%{"foo" => "bar"})
+      assert {:ok, result} =
+               Passkeys.issue_assertion_challenge(%{"foo" => "bar"})
 
       assert is_binary(result["challenge"])
       assert is_binary(result["challenge_handle"])
       assert %{"allowCredentials" => []} = result["public_key_options"]
     end
 
-    test "3. user_id only (no username/email) → {:error, :invalid_identifier}", %{user: user} do
+    test "3. user_id only (no username/email) → {:error, :invalid_identifier}",
+         %{user: user} do
       assert {:error, :invalid_identifier} =
                Passkeys.issue_assertion_challenge(%{"user_id" => user.id})
     end
 
-    test "4. user_id + username → succeeds (user_id silently dropped, username wins)", %{
-      user: user
-    } do
+    test "4. user_id + username → succeeds (user_id silently dropped, username wins)",
+         %{
+           user: user
+         } do
       result =
         Passkeys.issue_assertion_challenge(%{
           "user_id" => user.id,
@@ -87,17 +90,23 @@ defmodule Famichat.Auth.Passkeys.RefactorGuardTest do
       known_user = user_fixture(%{username: "identifiertest"})
       _pk = insert_passkey!(known_user)
 
-      result = Passkeys.issue_assertion_challenge(%{"identifier" => "identifiertest"})
+      result =
+        Passkeys.issue_assertion_challenge(%{"identifier" => "identifiertest"})
+
       assert {:ok, payload} = result
       assert is_binary(payload["challenge"])
       assert is_binary(payload["challenge_handle"])
     end
 
-    test "6. username key → user-bound challenge with allowCredentials", %{user: user} do
+    test "6. username key → user-bound challenge with allowCredentials", %{
+      user: user
+    } do
       _pk = insert_passkey!(user)
 
       assert {:ok, payload} =
-               Passkeys.issue_assertion_challenge(%{"username" => user.username})
+               Passkeys.issue_assertion_challenge(%{
+                 "username" => user.username
+               })
 
       opts = payload["public_key_options"]
       assert is_list(opts["allowCredentials"])
@@ -108,7 +117,9 @@ defmodule Famichat.Auth.Passkeys.RefactorGuardTest do
       str_user = user_fixture(%{username: "stringlookupuser"})
       _pk = insert_passkey!(str_user)
 
-      assert {:ok, payload} = Passkeys.issue_assertion_challenge("stringlookupuser")
+      assert {:ok, payload} =
+               Passkeys.issue_assertion_challenge("stringlookupuser")
+
       assert is_binary(payload["challenge"])
       assert is_binary(payload["challenge_handle"])
     end
@@ -181,7 +192,9 @@ defmodule Famichat.Auth.Passkeys.RefactorGuardTest do
   # =========================================================================
   describe "exchange_registration_token/1 error paths" do
     test "1. garbage token → error tuple", _ctx do
-      result = Passkeys.exchange_registration_token("totally-invalid-garbage-token")
+      result =
+        Passkeys.exchange_registration_token("totally-invalid-garbage-token")
+
       assert {:error, _reason} = result
     end
 

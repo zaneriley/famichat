@@ -1,6 +1,8 @@
 <%= if is_nil(@user_id) do %>
   <div class="flex h-screen flex-col items-center justify-center gap-md">
-    <.typography tag="h1" size="2xl" color="main"><%= app_name() %></.typography>
+    <.typography tag="h1" size="2xl" color="main">
+      <%= app_name() %>
+    </.typography>
     <.typography tag="p" size="md" color="deemphasized">
       <%= if @auth_error,
         do:
@@ -22,7 +24,9 @@
   <%= if @no_family do %>
     <%!-- No family membership — guide the user --%>
     <div class="flex h-screen flex-col items-center justify-center gap-lg p-2xl">
-      <.typography tag="h1" size="2xl" color="main"><%= app_name() %></.typography>
+      <.typography tag="h1" size="2xl" color="main">
+        <%= app_name() %>
+      </.typography>
       <.typography tag="p" size="md" color="deemphasized">
         <%= gettext("You are not part of any family yet.") %>
       </.typography>

@@ -87,7 +87,8 @@ defmodule Famichat.Chat.ConversationSecurityClientInventoryStoreTest do
     assert details[:reason] == :lock_version_mismatch
   end
 
-  @tag known_failure: "B7: key-package tamper detection assertion drift (2026-03-21)"
+  @tag known_failure:
+         "B7: key-package tamper detection assertion drift (2026-03-21)"
   test "load fails closed when persisted key-package payload is tampered" do
     assert {:ok, _persisted} =
              ConversationSecurityClientInventoryStore.upsert(

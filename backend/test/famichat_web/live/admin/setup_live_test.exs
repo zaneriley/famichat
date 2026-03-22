@@ -35,7 +35,9 @@ defmodule FamichatWeb.AdminLive.SetupLiveTest do
 
   defp bootstrap_admin_with_passkey(username) do
     {:ok, %{user: user, family: family}} =
-      Onboarding.bootstrap_admin(username, %{"family_name" => "Setup Test Family"})
+      Onboarding.bootstrap_admin(username, %{
+        "family_name" => "Setup Test Family"
+      })
 
     # Insert a passkey record directly to simulate a completed WebAuthn ceremony,
     # without going through the real Wax registration flow.
@@ -137,7 +139,8 @@ defmodule FamichatWeb.AdminLive.SetupLiveTest do
 
   describe "fetch_admin_awaiting_first_invite/0" do
     test "returns :not_found when no users exist" do
-      assert {:error, :not_found} = Onboarding.fetch_admin_awaiting_first_invite()
+      assert {:error, :not_found} =
+               Onboarding.fetch_admin_awaiting_first_invite()
     end
 
     test "returns :not_found when user exists but has no passkey" do
@@ -145,11 +148,13 @@ defmodule FamichatWeb.AdminLive.SetupLiveTest do
         "family_name" => "No Passkey Family"
       })
 
-      assert {:error, :not_found} = Onboarding.fetch_admin_awaiting_first_invite()
+      assert {:error, :not_found} =
+               Onboarding.fetch_admin_awaiting_first_invite()
     end
 
     test "returns {:ok, user, family} when community_admin has passkey and membership" do
-      %{user: user, family: family} = bootstrap_admin_with_passkey("awaiting_invite_admin")
+      %{user: user, family: family} =
+        bootstrap_admin_with_passkey("awaiting_invite_admin")
 
       assert {:ok, returned_user, returned_family} =
                Onboarding.fetch_admin_awaiting_first_invite()
@@ -164,7 +169,8 @@ defmodule FamichatWeb.AdminLive.SetupLiveTest do
       # Simulate a second user existing (e.g., invite was accepted)
       Famichat.ChatFixtures.user_fixture(%{username: "second_user"})
 
-      assert {:error, :not_found} = Onboarding.fetch_admin_awaiting_first_invite()
+      assert {:error, :not_found} =
+               Onboarding.fetch_admin_awaiting_first_invite()
     end
   end
 

@@ -123,9 +123,9 @@ defmodule Famichat.Auth.Passkeys do
        do: :invalid
 
   defp classify_assertion_request(m)
-       when not is_map_key(m, "username")
-       and not is_map_key(m, "email")
-       and not is_map_key(m, "identifier"),
+       when not is_map_key(m, "username") and
+              not is_map_key(m, "email") and
+              not is_map_key(m, "identifier"),
        do: :discoverable
 
   defp classify_assertion_request(m), do: {:identified, m}
@@ -554,7 +554,10 @@ defmodule Famichat.Auth.Passkeys do
     do: decode_cose_key_json(pk_bin)
 
   defp load_cose_key(%Passkey{public_key: pk_bin}) when is_binary(pk_bin) do
-    Logger.warning("[Passkeys] Loading passkey stored in legacy term_to_binary format...")
+    Logger.warning(
+      "[Passkeys] Loading passkey stored in legacy term_to_binary format..."
+    )
+
     load_legacy_cose_key(pk_bin)
   end
 
@@ -904,9 +907,14 @@ defmodule Famichat.Auth.Passkeys do
        when reason in [:invalid, :invalid_challenge, :type_mismatch],
        do: {:error, :invalid_challenge}
 
-  defp challenge_event_name(:issued), do: [:famichat, :auth, :passkeys, :challenge_issued]
-  defp challenge_event_name(:consumed), do: [:famichat, :auth, :passkeys, :challenge_consumed]
-  defp challenge_event_name(:invalid), do: [:famichat, :auth, :passkeys, :challenge_invalid]
+  defp challenge_event_name(:issued),
+    do: [:famichat, :auth, :passkeys, :challenge_issued]
+
+  defp challenge_event_name(:consumed),
+    do: [:famichat, :auth, :passkeys, :challenge_consumed]
+
+  defp challenge_event_name(:invalid),
+    do: [:famichat, :auth, :passkeys, :challenge_invalid]
 
   defp emit_challenge_event(kind, metadata) do
     :telemetry.execute(challenge_event_name(kind), %{count: 1}, metadata)
