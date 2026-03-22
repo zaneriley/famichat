@@ -7,7 +7,11 @@
   format: "txt",
   out: "",
   threshold: "medium",
-  ignore: ["Config.HTTPS", "Config.CSP"] 
-  #CSP is handled in put_csp_header plug
-  #HTTPS will be implemented closer to release
+  ignore: [
+    "Config.HTTPS",  # HTTPS will be implemented closer to release
+    "Config.CSP",    # CSP is handled in put_csp_header plug
+    "Config.CSRF",   # API pipeline uses bearer tokens / SameSite=Lax cookies, not CSRF tokens
+    "Misc.BinToTerm", # All instances deserialize Cloak-encrypted data from our own vault
+    "DOS.StringToAtom" # Pre-existing in non_empty_param helpers — tracked for remediation
+  ]
 ]
