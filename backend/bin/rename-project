@@ -121,7 +121,7 @@ replace_in_file() {
   fi
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log "update ${file#$PROJECT_ROOT/}: ${find} -> ${replace}"
+    log "update ${file#"$PROJECT_ROOT"/}: ${find} -> ${replace}"
     return 0
   fi
 
@@ -130,7 +130,7 @@ replace_in_file() {
 
 rename_path() {
   local path="$1"
-  local relative_path="${path#$PROJECT_ROOT/}"
+  local relative_path="${path#"$PROJECT_ROOT"/}"
   local target_relative="$relative_path"
   local target
 
