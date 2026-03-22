@@ -504,14 +504,14 @@ All four failure modes have specified behaviors. None are silently swallowed.
 
 | Mode | Trigger | Specified Behavior |
 |---|---|---|
-| WASM panic escaping `catch_unwind` | Worker process terminates; `worker.onerror` fires | `WorkerSupervisor` rejects all in-flight requests with `{ code: "worker_crashed" }`. Sets `cryptoError` in Svelte store. Attempts one automatic restart. If restarted worker also fails init: no further restart; UI shows lock icon on all message bodies with tooltip "Encryption unavailable. Restart app." |
+| WASM panic escaping `catch_unwind` | Worker process terminates; `worker.onerror` fires | `CryptoWorkerManager` rejects all in-flight requests with `{ code: "worker_crashed" }`. Sets `cryptoError` in Svelte store. Attempts one automatic restart. If restarted worker also fails init: no further restart; UI shows lock icon on all message bodies with tooltip "Encryption unavailable. Restart app." |
 | IndexedDB unavailable (private browsing, restricted permissions) | Worker posts `{ type: "init_error", code: "indexeddb_unavailable" }` | Main thread shows inline banner: "Encrypted messages cannot be displayed in private browsing. Open the app in a regular tab." App functional for non-encrypted surfaces. No automatic recovery. |
 | Wrapping key timeout (30-minute idle on web) | Worker discards in-memory wrapping key; posts `{ type: "key_required" }` | Lock screen overlay: "Session locked. Enter your passphrase to continue." In-flight calls queued (not rejected) for up to 2 minutes. User enters passphrase → worker resumes. If user does not respond within 2 minutes: queued calls rejected with `{ code: "key_required" }`. On Capacitor: biometric re-auth via OS (not passphrase). |
-| Worker terminated by browser (memory pressure, mobile backgrounding) | `worker.onmessageerror` or failed postMessage | `WorkerSupervisor` detects termination; restarts worker. Re-init requires re-deriving wrapping key (passphrase or biometric — same UX as wrapping key timeout above). In-flight requests at termination time rejected with `{ code: "worker_terminated" }`. |
+| Worker terminated by browser (memory pressure, mobile backgrounding) | `worker.onmessageerror` or failed postMessage | `CryptoWorkerManager` detects termination; restarts worker. Re-init requires re-deriving wrapping key (passphrase or biometric — same UX as wrapping key timeout above). In-flight requests at termination time rejected with `{ code: "worker_terminated" }`. |
 
 The socket is NOT joined until the worker posts `ready`. This prevents the SPA from receiving channel messages it cannot yet decrypt. While WASM loads, the conversation view shows a loading skeleton.
 
-All `cryptoService` calls go through `WorkerSupervisor.post()` with a 10-second per-request timeout. No Promise hangs forever.
+All `MlsWorkerApi` calls go through `CryptoWorkerManager.post()` with a 10-second per-request timeout. No Promise hangs forever.
 
 Comlink is adopted for the worker/main-thread RPC layer. It solves the pending-request-map failure modes (memory leaks on crash, no built-in timeout, ID collision risk) at a cost of ~3 kB.
 

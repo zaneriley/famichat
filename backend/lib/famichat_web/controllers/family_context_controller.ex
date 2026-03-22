@@ -10,6 +10,7 @@ defmodule FamichatWeb.FamilyContextController do
 
   alias Famichat.Accounts.FamilyContext
   alias Famichat.Auth.{Identity, Sessions}
+  alias FamichatWeb.SessionKeys
 
   def switch(conn, %{"family_id" => family_id} = params) do
     with {:ok, user_id} <- extract_user_id(conn),
@@ -18,7 +19,7 @@ defmodule FamichatWeb.FamilyContextController do
       return_to = safe_return_to(params["return_to"], conn)
 
       conn
-      |> put_session("active_family_id", family_id)
+      |> put_session(SessionKeys.active_family_id(), family_id)
       |> redirect(to: return_to)
     else
       {:error, :not_authenticated} ->
@@ -52,7 +53,7 @@ defmodule FamichatWeb.FamilyContextController do
   end
 
   defp extract_user_id(conn) do
-    token = get_session(conn, "access_token")
+    token = get_session(conn, SessionKeys.access_token())
 
     case Sessions.verify_access_token(token) do
       {:ok, %{user_id: user_id}} -> {:ok, user_id}

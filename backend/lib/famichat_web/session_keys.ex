@@ -15,6 +15,9 @@ defmodule FamichatWeb.SessionKeys do
   @spec user_locale() :: :user_locale
   def user_locale, do: :user_locale
 
+  @spec active_family_id() :: :active_family_id
+  def active_family_id, do: :active_family_id
+
   @spec redirect_count() :: :redirect_count
   def redirect_count, do: :redirect_count
 
@@ -26,6 +29,7 @@ defmodule FamichatWeb.SessionKeys do
           | :refresh_token
           | :device_id
           | :user_locale
+          | :active_family_id
           | :redirect_count
           | :invite_token
         ]
@@ -35,6 +39,7 @@ defmodule FamichatWeb.SessionKeys do
       refresh_token(),
       device_id(),
       user_locale(),
+      active_family_id(),
       redirect_count(),
       invite_token()
     ]

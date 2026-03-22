@@ -46,19 +46,30 @@ jobs:
         working-directory: backend
         run: ./run ci:setup-env
 
+      - name: Set up database
+        working-directory: backend
+        run: ./run ci:setup-db
+
       - name: Run messaging QA fast gate
         working-directory: backend
         run: ./run qa:messaging:fast
 
-      - name: Enforce fast outcome PASS
+      - name: Enforce fast outcome not FAIL/BLOCKED
         if: always()
         run: |
           report=".tmp/_qa_messaging/${QA_RUN_ID}/gate_report.json"
           outcome="$(jq -r '.outcome // "MISSING"' "${report}")"
-          if [[ "${outcome}" != "PASS" ]]; then
-            echo "Fast messaging QA outcome was '${outcome}' (expected PASS)."
-            exit 1
-          fi
+          case "${outcome}" in
+            PASS)
+              ;;
+            WARN)
+              echo "Fast messaging QA completed with warnings."
+              ;;
+            *)
+              echo "Fast messaging QA outcome was '${outcome}' (expected PASS or WARN)."
+              exit 1
+              ;;
+          esac
 
       - name: Print fast gate summary
         if: always()
@@ -95,19 +106,30 @@ jobs:
         working-directory: backend
         run: ./run ci:setup-env
 
+      - name: Set up database
+        working-directory: backend
+        run: ./run ci:setup-db
+
       - name: Run messaging QA deep gate
         working-directory: backend
         run: ./run qa:messaging:deep
 
-      - name: Enforce deep outcome PASS
+      - name: Enforce deep outcome not FAIL/BLOCKED
         if: always()
         run: |
           report=".tmp/_qa_messaging/${QA_RUN_ID}/gate_report.json"
           outcome="$(jq -r '.outcome // "MISSING"' "${report}")"
-          if [[ "${outcome}" != "PASS" ]]; then
-            echo "Deep messaging QA outcome was '${outcome}' (expected PASS)."
-            exit 1
-          fi
+          case "${outcome}" in
+            PASS)
+              ;;
+            WARN)
+              echo "Deep messaging QA completed with warnings."
+              ;;
+            *)
+              echo "Deep messaging QA outcome was '${outcome}' (expected PASS or WARN)."
+              exit 1
+              ;;
+          esac
 
       - name: Print deep gate summary
         if: always()

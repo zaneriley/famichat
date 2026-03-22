@@ -89,7 +89,9 @@ jobs:
 
       - name: Set up database
         working-directory: backend
-        run: mix ecto.setup
+        run: |
+          mix ecto.create
+          mix ecto.migrate
 
       - name: Run tests
         working-directory: backend

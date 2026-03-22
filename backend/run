@@ -147,11 +147,11 @@ function docs:boundary-check {
 
   local -a docs_files=(
     "${project_root}/docs/SPEC.md"
-    "${project_root}/docs/ia-lexicon.md"
-    "${project_root}/docs/ia-boundary-guardrails.md"
     "${project_root}/docs/NOW.md"
-    "${project_root}/docs/BACKLOG.md"
     "${project_root}/docs/E2EE_INTEGRATION.md"
+    "${project_root}/docs/decisions/012-spa-wasm-client-architecture.md"
+    "${project_root}/docs/brand-positioning.md"
+    "${project_root}/docs/DECISIONS.md"
   )
 
   local -a patterns=(
@@ -2475,12 +2475,16 @@ function _qa_messaging_run {
 
   if [[ "${#_g1_scan_files[@]}" -gt 0 ]]; then
     # grep -c with multiple files prints "file:count"; sum the counts via awk
-    mls_failure_count=$(grep -c '\[Telemetry\].*famichat.*message.*mls_failure\|mls_encryption_failed\|mls_decryption_failed' \
-      "${_g1_scan_files[@]}" 2>/dev/null \
-      | awk -F: '{ s += $NF } END { print s+0 }' || echo 0)
+    mls_failure_count=$(
+      {
+        grep -h -c '\[Telemetry\].*famichat.*message.*mls_failure\|mls_encryption_failed\|mls_decryption_failed' \
+          "${_g1_scan_files[@]}" 2>/dev/null || true
+      } | awk -F: '{ s += $NF } END { print s+0 }'
+    )
     # Total attempts: mls failures + successful sends observed in matrix CSV
     local _mls_sends
-    _mls_sends=$(grep -c ',PASS,' "${output_root}/matrix_results.csv" 2>/dev/null || echo 0)
+    _mls_sends=$(grep -c ',PASS,' "${output_root}/matrix_results.csv" 2>/dev/null || true)
+    _mls_sends=$(printf '%s\n' "${_mls_sends:-0}" | tail -n1)
     mls_total_count=$(( mls_failure_count + _mls_sends ))
   fi
 
@@ -3562,7 +3566,8 @@ function ci:security-check {
 }
 
 function ci:setup-db {
-    mix ecto.setup
+    mix ecto.create
+    mix ecto.migrate
 }
 
 function ci:test {

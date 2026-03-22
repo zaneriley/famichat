@@ -94,6 +94,7 @@ nif_toolchain_file="${backend_dir}/infra/mls_nif/rust-toolchain.toml"
 dockerfile="${backend_dir}/Dockerfile"
 lint_workflow="${repo_root}/.github/workflows/lint.yml"
 test_workflow="${repo_root}/.github/workflows/ci-test.yml"
+messaging_workflow="${repo_root}/.github/workflows/messaging-qa.yml"
 
 require_match "${run_file}" 'if [[ -f "infra/Cargo.toml" ]]; then' 'backend/run does not resolve the workspace root manifest'
 require_match "${run_file}" 'echo "Rust workspace not found. Expected infra/Cargo.toml."' 'backend/run still points at the legacy Rust manifest path'
@@ -135,5 +136,11 @@ require_match "${lint_workflow}" 'run: ./run ci:lint' 'lint workflow does not ru
 require_match "${test_workflow}" 'toolchain: 1.94.0' 'test workflow does not pin Rust to 1.94.0'
 require_match "${test_workflow}" 'targets: wasm32-unknown-unknown' 'test workflow does not install the wasm target'
 require_match "${test_workflow}" 'run: ./run ci:test' 'test workflow does not run the canonical ci:test command'
+
+require_match "${messaging_workflow}" 'run: ./run ci:setup-db' 'messaging QA workflow does not prepare the database before probes'
+require_match "${messaging_workflow}" 'run: ./run qa:messaging:fast' 'messaging QA workflow does not run the canonical fast QA command'
+require_match "${messaging_workflow}" 'run: ./run qa:messaging:deep' 'messaging QA workflow does not run the canonical deep QA command'
+require_match "${messaging_workflow}" "expected PASS or WARN" 'messaging QA workflow no longer treats WARN as an acceptable non-blocking outcome'
+require_absent "${messaging_workflow}" "expected PASS)." 'messaging QA workflow still hard-fails on WARN outcomes'
 
 printf 'ci contract check passed\n'

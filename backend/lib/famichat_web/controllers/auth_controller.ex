@@ -17,6 +17,7 @@ defmodule FamichatWeb.AuthController do
 
   alias FamichatWeb.ConnHelpers
   alias FamichatWeb.Plugs.EnsureTrusted
+  alias FamichatWeb.SessionKeys
 
   plug EnsureTrusted
        when action in [
@@ -715,7 +716,7 @@ defmodule FamichatWeb.AuthController do
   defp maybe_put_family_context(conn, user) do
     case FamilyContext.resolve(user.id) do
       {:ok, family, _source} ->
-        put_session(conn, "active_family_id", family.id)
+        put_session(conn, SessionKeys.active_family_id(), family.id)
 
       {:error, :no_family} ->
         conn
@@ -732,7 +733,7 @@ defmodule FamichatWeb.AuthController do
   defp maybe_put_locale(conn, user) do
     case user.locale do
       locale when is_binary(locale) and locale != "" ->
-        put_session(conn, "user_locale", locale)
+        put_session(conn, SessionKeys.user_locale(), locale)
 
       _ ->
         conn
