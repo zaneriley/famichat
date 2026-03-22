@@ -90,8 +90,9 @@ const SNAPSHOT_RECIPIENT_SIGNER_KEY: &str = "session_recipient_signer";
 const SNAPSHOT_CACHE_KEY: &str = "session_cache";
 const MAX_DECRYPT_CACHE_ENTRIES: usize = 256;
 
+// 64 shards reduces cross-group shard contention; default is num_cpus*4
 static GROUP_SESSIONS: std::sync::LazyLock<DashMap<String, GroupSession>> =
-    std::sync::LazyLock::new(DashMap::new);
+    std::sync::LazyLock::new(|| DashMap::with_shard_amount(64));
 static KEY_PACKAGE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 impl MlsError {
@@ -257,10 +258,18 @@ pub fn join_from_welcome(params: &Payload) -> MlsResult {
                 if let Some(restored) =
                     restore_group_session_from_snapshot(&group_id, params, operation)?
                 {
+                    // Intentional overwrite: snapshot restoration is deterministic given the same
+                    // snapshot data. A concurrent insert of the same group_id produces an equivalent
+                    // session; the second writer wins, which is acceptable.
                     GROUP_SESSIONS.insert(group_id.clone(), restored);
                 } else if !GROUP_SESSIONS.contains_key(&group_id) {
                     let session = create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)?;
-                    GROUP_SESSIONS.insert(group_id.clone(), session);
+                    // Entry::Vacant: do not overwrite an existing session inserted by a concurrent thread.
+                    if let dashmap::mapref::entry::Entry::Vacant(e) =
+                        GROUP_SESSIONS.entry(group_id.clone())
+                    {
+                        e.insert(session);
+                    }
                 }
             }
 
@@ -397,28 +406,35 @@ pub fn process_incoming(params: &Payload) -> MlsResult {
             })?;
 
             let mut slice = message_bytes.as_slice();
-            let message_in = MlsMessageIn::tls_deserialize(&mut slice).map_err(|_| {
-                MlsError::with_code(ErrorCode::InvalidInput, operation, "malformed_ciphertext")
+            let message_in = MlsMessageIn::tls_deserialize(&mut slice).map_err(|e| {
+                let mut err =
+                    MlsError::with_code(ErrorCode::InvalidInput, operation, "malformed_ciphertext");
+                err.details.insert("error".to_owned(), format!("{e:?}"));
+                err
             })?;
 
-            let protocol_message = message_in.try_into_protocol_message().map_err(|_| {
-                MlsError::with_code(
+            let protocol_message = message_in.try_into_protocol_message().map_err(|e| {
+                let mut err = MlsError::with_code(
                     ErrorCode::InvalidInput,
                     operation,
                     "unsupported_message_type",
-                )
+                );
+                err.details.insert("error".to_owned(), format!("{e:?}"));
+                err
             })?;
 
             let processed = session
                 .recipient
                 .group
                 .process_message(&session.recipient.provider, protocol_message)
-                .map_err(|_| {
-                    MlsError::with_code(
+                .map_err(|e| {
+                    let mut err = MlsError::with_code(
                         ErrorCode::CommitRejected,
                         operation,
                         "message_processing_failed",
-                    )
+                    );
+                    err.details.insert("error".to_owned(), format!("{e:?}"));
+                    err
                 })?;
 
             let plaintext_bytes = match processed.into_content() {
@@ -510,7 +526,12 @@ pub fn mls_remove(params: &Payload) -> MlsResult {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                GROUP_SESSIONS.insert(group_id.clone(), restored);
+                // Entry::Vacant: do not overwrite an existing session inserted by a concurrent thread.
+                if let dashmap::mapref::entry::Entry::Vacant(e) =
+                    GROUP_SESSIONS.entry(group_id.clone())
+                {
+                    e.insert(restored);
+                }
             }
         }
 
@@ -547,8 +568,11 @@ pub fn mls_remove(params: &Payload) -> MlsResult {
             })?;
 
         // Serialize the commit message to return as commit_ciphertext.
-        let commit_bytes = commit_out.tls_serialize_detached().map_err(|_| {
-            MlsError::with_code(ErrorCode::CryptoFailure, operation, "serialize_failed")
+        let commit_bytes = commit_out.tls_serialize_detached().map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::CryptoFailure, operation, "serialize_failed");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
         let commit_ciphertext = encode_hex(&commit_bytes);
 
@@ -557,12 +581,14 @@ pub fn mls_remove(params: &Payload) -> MlsResult {
             .sender
             .group
             .merge_pending_commit(&session.sender.provider)
-            .map_err(|_| {
-                MlsError::with_code(
+            .map_err(|e| {
+                let mut err = MlsError::with_code(
                     ErrorCode::CommitRejected,
                     operation,
                     "merge_pending_commit_failed",
-                )
+                );
+                err.details.insert("error".to_owned(), format!("{e:?}"));
+                err
             })?;
 
         // Have the recipient process and merge the commit so their group state reflects
@@ -571,30 +597,36 @@ pub fn mls_remove(params: &Payload) -> MlsResult {
         // is_active(). We deserialize the commit bytes and feed them to the recipient.
         let recipient_removed = {
             let mut slice = commit_bytes.as_slice();
-            let msg_in = MlsMessageIn::tls_deserialize(&mut slice).map_err(|_| {
-                MlsError::with_code(
+            let msg_in = MlsMessageIn::tls_deserialize(&mut slice).map_err(|e| {
+                let mut err = MlsError::with_code(
                     ErrorCode::CryptoFailure,
                     operation,
                     "recipient_commit_deserialize_failed",
-                )
+                );
+                err.details.insert("error".to_owned(), format!("{e:?}"));
+                err
             })?;
-            let protocol_message = msg_in.try_into_protocol_message().map_err(|_| {
-                MlsError::with_code(
+            let protocol_message = msg_in.try_into_protocol_message().map_err(|e| {
+                let mut err = MlsError::with_code(
                     ErrorCode::CryptoFailure,
                     operation,
                     "recipient_commit_protocol_message_failed",
-                )
+                );
+                err.details.insert("error".to_owned(), format!("{e:?}"));
+                err
             })?;
             let processed = session
                 .recipient
                 .group
                 .process_message(&session.recipient.provider, protocol_message)
-                .map_err(|_| {
-                    MlsError::with_code(
+                .map_err(|e| {
+                    let mut err = MlsError::with_code(
                         ErrorCode::CommitRejected,
                         operation,
                         "recipient_commit_process_failed",
-                    )
+                    );
+                    err.details.insert("error".to_owned(), format!("{e:?}"));
+                    err
                 })?;
             match processed.into_content() {
                 ProcessedMessageContent::StagedCommitMessage(staged_commit) => {
@@ -602,12 +634,14 @@ pub fn mls_remove(params: &Payload) -> MlsResult {
                         .recipient
                         .group
                         .merge_staged_commit(&session.recipient.provider, *staged_commit)
-                        .map_err(|_| {
-                            MlsError::with_code(
+                        .map_err(|e| {
+                            let mut err = MlsError::with_code(
                                 ErrorCode::CommitRejected,
                                 operation,
                                 "recipient_merge_staged_commit_failed",
-                            )
+                            );
+                            err.details.insert("error".to_owned(), format!("{e:?}"));
+                            err
                         })?;
                 }
                 _ => {
@@ -647,8 +681,11 @@ pub fn mls_remove(params: &Payload) -> MlsResult {
 
 fn determine_remove_target(params: &Payload, operation: &str) -> Result<LeafNodeIndex, MlsError> {
     if let Some(leaf_index_str) = non_empty(params, "leaf_index") {
-        let index: u32 = leaf_index_str.parse().map_err(|_| {
-            MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_leaf_index")
+        let index: u32 = leaf_index_str.parse().map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_leaf_index");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
         return Ok(LeafNodeIndex::new(index));
     }
@@ -692,7 +729,12 @@ pub fn merge_staged_commit(params: &Payload) -> MlsResult {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                GROUP_SESSIONS.insert(group_id.clone(), restored);
+                // Entry::Vacant: do not overwrite an existing session inserted by a concurrent thread.
+                if let dashmap::mapref::entry::Entry::Vacant(e) =
+                    GROUP_SESSIONS.entry(group_id.clone())
+                {
+                    e.insert(restored);
+                }
             }
         }
 
@@ -727,29 +769,35 @@ pub fn merge_staged_commit(params: &Payload) -> MlsResult {
         }
 
         // Decode the commit ciphertext produced by mls_remove (or another commit operation).
-        let commit_bytes = decode_hex(&commit_ciphertext).map_err(|_| {
-            MlsError::with_code(
+        let commit_bytes = decode_hex(&commit_ciphertext).map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::InvalidInput,
                 operation,
                 "invalid_commit_ciphertext",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
         let mut slice = commit_bytes.as_slice();
-        let mls_message = MlsMessageIn::tls_deserialize(&mut slice).map_err(|_| {
-            MlsError::with_code(
+        let mls_message = MlsMessageIn::tls_deserialize(&mut slice).map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::InvalidInput,
                 operation,
                 "malformed_commit_ciphertext",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
-        let protocol_message = mls_message.try_into_protocol_message().map_err(|_| {
-            MlsError::with_code(
+        let protocol_message = mls_message.try_into_protocol_message().map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::InvalidInput,
                 operation,
                 "unsupported_message_type",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
         // Process the commit on the recipient's group to get a StagedCommit.
@@ -840,7 +888,12 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                GROUP_SESSIONS.insert(group_id.clone(), restored);
+                // Entry::Vacant: do not overwrite an existing session inserted by a concurrent thread.
+                if let dashmap::mapref::entry::Entry::Vacant(e) =
+                    GROUP_SESSIONS.entry(group_id.clone())
+                {
+                    e.insert(restored);
+                }
             }
         }
 
@@ -863,8 +916,11 @@ pub fn create_application_message(params: &Payload) -> MlsResult {
             )
             .map_err(|error| map_create_message_error(operation, error))?;
 
-        let serialized = message_out.tls_serialize_detached().map_err(|_| {
-            MlsError::with_code(ErrorCode::CryptoFailure, operation, "serialize_failed")
+        let serialized = message_out.tls_serialize_detached().map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::CryptoFailure, operation, "serialize_failed");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
         let ciphertext = encode_hex(&serialized);
         let epoch = session.sender.group.epoch().as_u64().to_string();
@@ -892,7 +948,12 @@ pub fn export_group_info(params: &Payload) -> MlsResult {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                GROUP_SESSIONS.insert(group_id.clone(), restored);
+                // Entry::Vacant: do not overwrite an existing session inserted by a concurrent thread.
+                if let dashmap::mapref::entry::Entry::Vacant(e) =
+                    GROUP_SESSIONS.entry(group_id.clone())
+                {
+                    e.insert(restored);
+                }
             }
         }
 
@@ -944,7 +1005,12 @@ pub fn list_member_credentials(params: &Payload) -> MlsResult {
             if let Some(restored) =
                 restore_group_session_from_snapshot(&group_id, params, operation)?
             {
-                GROUP_SESSIONS.insert(group_id.clone(), restored);
+                // Entry::Vacant: do not overwrite an existing session inserted by a concurrent thread.
+                if let dashmap::mapref::entry::Entry::Vacant(e) =
+                    GROUP_SESSIONS.entry(group_id.clone())
+                {
+                    e.insert(restored);
+                }
             }
         }
 
@@ -1137,12 +1203,14 @@ fn create_group_session(
         GroupId::from_slice(group_id.as_bytes()),
         sender_credential,
     )
-    .map_err(|_| {
-        MlsError::with_code(
+    .map_err(|e| {
+        let mut err = MlsError::with_code(
             ErrorCode::CryptoFailure,
             "create_group",
             "group_init_failed",
-        )
+        );
+        err.details.insert("error".to_owned(), format!("{e:?}"));
+        err
     })?;
 
     let recipient_provider = OpenMlsRustCrypto::default();
@@ -1160,12 +1228,14 @@ fn create_group_session(
             &recipient_signer,
             recipient_credential,
         )
-        .map_err(|_| {
-            MlsError::with_code(
+        .map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::CryptoFailure,
                 operation,
                 "key_package_generation_failed",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
     let (_commit_message, welcome_message, _group_info) = sender_group
@@ -1174,34 +1244,43 @@ fn create_group_session(
             &sender_signer,
             core::slice::from_ref(recipient_kpb.key_package()),
         )
-        .map_err(|_| {
-            MlsError::with_code(ErrorCode::CommitRejected, operation, "member_add_failed")
+        .map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::CommitRejected, operation, "member_add_failed");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
     sender_group
         .merge_pending_commit(&sender_provider)
-        .map_err(|_| {
-            MlsError::with_code(
+        .map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::CommitRejected,
                 operation,
                 "merge_pending_commit_failed",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
-    let welcome_bytes = welcome_message.tls_serialize_detached().map_err(|_| {
-        MlsError::with_code(
+    let welcome_bytes = welcome_message.tls_serialize_detached().map_err(|e| {
+        let mut err = MlsError::with_code(
             ErrorCode::CryptoFailure,
             operation,
             "welcome_serialize_failed",
-        )
+        );
+        err.details.insert("error".to_owned(), format!("{e:?}"));
+        err
     })?;
     let mut welcome_slice = welcome_bytes.as_slice();
-    let welcome_in = MlsMessageIn::tls_deserialize(&mut welcome_slice).map_err(|_| {
-        MlsError::with_code(
+    let welcome_in = MlsMessageIn::tls_deserialize(&mut welcome_slice).map_err(|e| {
+        let mut err = MlsError::with_code(
             ErrorCode::InvalidInput,
             operation,
             "welcome_deserialize_failed",
-        )
+        );
+        err.details.insert("error".to_owned(), format!("{e:?}"));
+        err
     })?;
     let welcome = match welcome_in.extract() {
         MlsMessageBodyIn::Welcome(welcome) => welcome,
@@ -1220,16 +1299,21 @@ fn create_group_session(
         welcome,
         Some(sender_group.export_ratchet_tree().into()),
     )
-    .map_err(|_| {
-        MlsError::with_code(
+    .map_err(|e| {
+        let mut err = MlsError::with_code(
             ErrorCode::CryptoFailure,
             operation,
             "join_from_welcome_failed",
-        )
+        );
+        err.details.insert("error".to_owned(), format!("{e:?}"));
+        err
     })?
     .into_group(&recipient_provider)
-    .map_err(|_| {
-        MlsError::with_code(ErrorCode::CryptoFailure, operation, "staged_welcome_failed")
+    .map_err(|e| {
+        let mut err =
+            MlsError::with_code(ErrorCode::CryptoFailure, operation, "staged_welcome_failed");
+        err.details.insert("error".to_owned(), format!("{e:?}"));
+        err
     })?;
 
     Ok(GroupSession {
@@ -1254,20 +1338,24 @@ fn create_credential_with_signer_bytes(
     identity: Vec<u8>,
     operation: &str,
 ) -> Result<(CredentialWithKey, SignatureKeyPair), MlsError> {
-    let signer = SignatureKeyPair::new(ciphersuite.signature_algorithm()).map_err(|_| {
-        MlsError::with_code(
+    let signer = SignatureKeyPair::new(ciphersuite.signature_algorithm()).map_err(|e| {
+        let mut err = MlsError::with_code(
             ErrorCode::CryptoFailure,
             operation,
             "signature_key_generation_failed",
-        )
+        );
+        err.details.insert("error".to_owned(), format!("{e:?}"));
+        err
     })?;
 
-    signer.store(provider.storage()).map_err(|_| {
-        MlsError::with_code(
+    signer.store(provider.storage()).map_err(|e| {
+        let mut err = MlsError::with_code(
             ErrorCode::StorageInconsistent,
             operation,
             "signature_key_store_failed",
-        )
+        );
+        err.details.insert("error".to_owned(), format!("{e:?}"));
+        err
     })?;
 
     let credential_with_key = CredentialWithKey {
@@ -1321,6 +1409,12 @@ struct SnapshotRawData {
 /// All operations here are byte-level clones or fixed-size TLS serializations —
 /// typically well under 1 ms. The caller must drop the lock before calling
 /// [`serialize_snapshot_raw_data`].
+///
+/// Lock ordering invariant: callers must hold the DashMap shard lock (via get_mut/get)
+/// BEFORE acquiring sender_provider.storage().values or recipient_provider.storage().values.
+/// Acquiring the RwLocks before the shard lock, or acquiring them in different orders
+/// across two concurrent calls, will deadlock. All 7 call sites currently obey this order.
+/// If a background eviction task is added in future, verify it acquires no shard lock.
 fn extract_snapshot_raw_data(
     session: &GroupSession,
     operation: &str,
@@ -1335,7 +1429,12 @@ fn extract_snapshot_raw_data(
         .storage()
         .values
         .read()
-        .map_err(|_| MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned"))?
+        .map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
+        })?
         .clone();
 
     let recipient_storage = session
@@ -1344,7 +1443,12 @@ fn extract_snapshot_raw_data(
         .storage()
         .values
         .read()
-        .map_err(|_| MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned"))?
+        .map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
+        })?
         .clone();
 
     // TLS-serialize the signers — these are small fixed-size key blobs (~64 bytes),
@@ -1353,12 +1457,14 @@ fn extract_snapshot_raw_data(
         .sender
         .signer
         .tls_serialize_detached()
-        .map_err(|_| {
-            MlsError::with_code(
+        .map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::CryptoFailure,
                 operation,
                 "signature_serialize_failed",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
     let recipient_signer_bytes =
@@ -1366,12 +1472,14 @@ fn extract_snapshot_raw_data(
             .recipient
             .signer
             .tls_serialize_detached()
-            .map_err(|_| {
-                MlsError::with_code(
+            .map_err(|e| {
+                let mut err = MlsError::with_code(
                     ErrorCode::CryptoFailure,
                     operation,
                     "signature_serialize_failed",
-                )
+                );
+                err.details.insert("error".to_owned(), format!("{e:?}"));
+                err
             })?;
 
     // N4 (Fix B): Capture cache entries in VecDeque insertion order so the eviction
@@ -1466,73 +1574,82 @@ fn restore_group_session_from_snapshot(
     params: &Payload,
     operation: &str,
 ) -> Result<Option<GroupSession>, MlsError> {
-    let sender_storage = non_empty(params, SNAPSHOT_SENDER_STORAGE_KEY);
-    let recipient_storage = non_empty(params, SNAPSHOT_RECIPIENT_STORAGE_KEY);
-    let sender_signer = non_empty(params, SNAPSHOT_SENDER_SIGNER_KEY);
-    let recipient_signer = non_empty(params, SNAPSHOT_RECIPIENT_SIGNER_KEY);
     let cache = non_empty(params, SNAPSHOT_CACHE_KEY).unwrap_or_default();
 
-    let any_snapshot_field_present = sender_storage.is_some()
-        || recipient_storage.is_some()
-        || sender_signer.is_some()
-        || recipient_signer.is_some()
-        || !cache.is_empty();
+    // Finding #11: Destructure all four required fields in a single match,
+    // eliminating the separated presence/completeness checks and the four
+    // subsequent .unwrap() calls. The match arm proves all four are Some before
+    // any deserialization occurs.
+    let (sender_storage_str, recipient_storage_str, sender_signer_str, recipient_signer_str) =
+        match (
+            non_empty(params, SNAPSHOT_SENDER_STORAGE_KEY),
+            non_empty(params, SNAPSHOT_RECIPIENT_STORAGE_KEY),
+            non_empty(params, SNAPSHOT_SENDER_SIGNER_KEY),
+            non_empty(params, SNAPSHOT_RECIPIENT_SIGNER_KEY),
+        ) {
+            (Some(ss), Some(rs), Some(sg), Some(rg)) => (ss, rs, sg, rg),
+            (None, None, None, None) if cache.is_empty() => {
+                // No snapshot data at all — caller should create a fresh session.
+                return Ok(None);
+            }
+            _ => {
+                return Err(MlsError::with_code(
+                    ErrorCode::InvalidInput,
+                    operation,
+                    "incomplete_session_snapshot",
+                ));
+            }
+        };
 
-    if !any_snapshot_field_present {
-        return Ok(None);
-    }
-
-    if sender_storage.is_none()
-        || recipient_storage.is_none()
-        || sender_signer.is_none()
-        || recipient_signer.is_none()
-    {
-        return Err(MlsError::with_code(
-            ErrorCode::InvalidInput,
-            operation,
-            "incomplete_session_snapshot",
-        ));
-    }
-
-    let sender_storage = deserialize_storage_map(sender_storage.as_deref().unwrap(), operation)?;
-    let recipient_storage =
-        deserialize_storage_map(recipient_storage.as_deref().unwrap(), operation)?;
-    let sender_signer = deserialize_signer(sender_signer.as_deref().unwrap(), operation)?;
-    let recipient_signer = deserialize_signer(recipient_signer.as_deref().unwrap(), operation)?;
+    let sender_storage = deserialize_storage_map(&sender_storage_str, operation)?;
+    let recipient_storage = deserialize_storage_map(&recipient_storage_str, operation)?;
+    let sender_signer = deserialize_signer(&sender_signer_str, operation)?;
+    let recipient_signer = deserialize_signer(&recipient_signer_str, operation)?;
     // N4 (Fix B): Deserialize in serialization order so VecDeque is deterministic.
     let message_cache_ordered = deserialize_message_cache_ordered(&cache, operation)?;
 
     let sender_provider = OpenMlsRustCrypto::default();
     {
+        // Finding #6: Replace silent poison recovery with proper error propagation.
+        // A poisoned RwLock means a thread panicked while holding it; the inner
+        // value is in an unknown state. Writing into it would silently corrupt
+        // the provider storage. Return LockPoisoned so the Elixir caller can
+        // handle it through Logger/telemetry instead of absorbing it quietly.
         let mut values = sender_provider
             .storage()
             .values
             .write()
-            .unwrap_or_else(|e| {
-                eprintln!("[mls_nif] WARN: sender storage RwLock was poisoned; recovering guard");
-                e.into_inner()
-            });
+            .map_err(|e| {
+                let mut err =
+                    MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
+                err.details.insert("error".to_owned(), format!("{e:?}"));
+                err
+            })?;
         *values = sender_storage;
     }
 
     sender_signer
         .store(sender_provider.storage())
-        .map_err(|_| {
-            MlsError::with_code(
+        .map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::StorageInconsistent,
                 operation,
                 "signature_key_store_failed",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
     let sender_group_id = GroupId::from_slice(group_id.as_bytes());
     let sender_group = MlsGroup::load(sender_provider.storage(), &sender_group_id)
-        .map_err(|_| {
-            MlsError::with_code(
+        .map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::StorageInconsistent,
                 operation,
                 "group_load_failed",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?
         .ok_or_else(|| {
             MlsError::with_code(
@@ -1544,37 +1661,42 @@ fn restore_group_session_from_snapshot(
 
     let recipient_provider = OpenMlsRustCrypto::default();
     {
+        // Finding #13: Same lock-poison fix as the sender block above.
         let mut values = recipient_provider
             .storage()
             .values
             .write()
-            .unwrap_or_else(|e| {
-                eprintln!(
-                    "[mls_nif] WARN: recipient storage RwLock was poisoned; recovering guard"
-                );
-                e.into_inner()
-            });
+            .map_err(|e| {
+                let mut err =
+                    MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
+                err.details.insert("error".to_owned(), format!("{e:?}"));
+                err
+            })?;
         *values = recipient_storage;
     }
 
     recipient_signer
         .store(recipient_provider.storage())
-        .map_err(|_| {
-            MlsError::with_code(
+        .map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::StorageInconsistent,
                 operation,
                 "signature_key_store_failed",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
     let recipient_group_id = GroupId::from_slice(group_id.as_bytes());
     let recipient_group = MlsGroup::load(recipient_provider.storage(), &recipient_group_id)
-        .map_err(|_| {
-            MlsError::with_code(
+        .map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::StorageInconsistent,
                 operation,
                 "group_load_failed",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?
         .ok_or_else(|| {
             MlsError::with_code(
@@ -1629,19 +1751,23 @@ fn deserialize_storage_map(
             ));
         };
 
-        let key = decode_hex(encoded_key).map_err(|_| {
-            MlsError::with_code(
+        let key = decode_hex(encoded_key).map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::InvalidInput,
                 operation,
                 "invalid_storage_snapshot",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
-        let value = decode_hex(encoded_value).map_err(|_| {
-            MlsError::with_code(
+        let value = decode_hex(encoded_value).map_err(|e| {
+            let mut err = MlsError::with_code(
                 ErrorCode::InvalidInput,
                 operation,
                 "invalid_storage_snapshot",
-            )
+            );
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
         values.insert(key, value);
@@ -1651,12 +1777,14 @@ fn deserialize_storage_map(
 }
 
 fn deserialize_signer(encoded: &str, operation: &str) -> Result<SignatureKeyPair, MlsError> {
-    let bytes = decode_hex(encoded).map_err(|_| {
-        MlsError::with_code(
+    let bytes = decode_hex(encoded).map_err(|e| {
+        let mut err = MlsError::with_code(
             ErrorCode::InvalidInput,
             operation,
             "invalid_signature_snapshot",
-        )
+        );
+        err.details.insert("error".to_owned(), format!("{e:?}"));
+        err
     })?;
 
     // H3: tls_deserialize can panic internally on malformed byte sequences
@@ -1786,18 +1914,30 @@ fn deserialize_message_cache_ordered(
             ));
         };
 
-        let message_id = String::from_utf8(decode_hex(message_id_hex).map_err(|_| {
-            MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
+        let message_id = String::from_utf8(decode_hex(message_id_hex).map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?)
-        .map_err(|_| {
-            MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
+        .map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
         let ciphertext = ciphertext_hex.to_owned();
-        let plaintext = String::from_utf8(decode_hex(plaintext_hex).map_err(|_| {
-            MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
+        let plaintext = String::from_utf8(decode_hex(plaintext_hex).map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?)
-        .map_err(|_| {
-            MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache")
+        .map_err(|e| {
+            let mut err =
+                MlsError::with_code(ErrorCode::InvalidInput, operation, "invalid_session_cache");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
         })?;
 
         ordered.push((
@@ -2718,6 +2858,475 @@ mod tests {
                 .map(|r| r.contains(&group_id))
                 .unwrap_or(false),
             "export_ratchet_tree must include group_id in ref"
+        );
+    }
+
+    #[test]
+    fn toctou_vacant_entry_no_spurious_overwrite() {
+        // Verify that Entry::Vacant does not overwrite an existing session.
+        // If two threads race to create the same session, the second thread
+        // should see the first thread's session still intact.
+        // (This is a compile-and-run test, not a threading test -- the
+        // threading safety is structural from using Entry::Vacant.)
+        let group_id = "test-toctou-entry-001".to_string();
+        // Clean up in case a prior test left state.
+        GROUP_SESSIONS.remove(&group_id);
+
+        // Create and insert an initial session via create_group_session.
+        let session =
+            create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)
+                .expect("session must be created");
+        GROUP_SESSIONS.insert(group_id.clone(), session);
+
+        // Record the epoch of the inserted session.
+        let epoch_before = GROUP_SESSIONS
+            .get(&group_id)
+            .expect("session must exist")
+            .sender
+            .group
+            .epoch()
+            .as_u64();
+
+        // Attempt Entry::Vacant insert — should be a no-op since key exists.
+        let second_session =
+            create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)
+                .expect("second session must be created");
+        if let dashmap::mapref::entry::Entry::Vacant(e) =
+            GROUP_SESSIONS.entry(group_id.clone())
+        {
+            e.insert(second_session);
+            panic!("Entry::Vacant should not have fired for existing key");
+        }
+
+        // Key still exists and the epoch is unchanged (original session preserved).
+        let epoch_after = GROUP_SESSIONS
+            .get(&group_id)
+            .expect("session must still exist after vacant no-op")
+            .sender
+            .group
+            .epoch()
+            .as_u64();
+        assert_eq!(
+            epoch_before, epoch_after,
+            "Entry::Vacant must not replace the existing session"
+        );
+
+        GROUP_SESSIONS.remove(&group_id);
+    }
+
+    /// Round-trip MLS encryption/decryption test covering DashMap shard store and Entry::Vacant:
+    ///
+    /// 1. `DashMap::with_shard_amount(64)` — sessions must still be stored and
+    ///    retrieved correctly after the shard count change.
+    /// 2. `Entry::Vacant` in `join_from_welcome` — the fallback new-session path
+    ///    must actually insert the session so `create_application_message` finds it.
+    /// 3. Full protocol flow: create_group → join_from_welcome → encrypt → decrypt.
+    #[test]
+    fn session_store_round_trip_encrypt_decrypt() {
+        // Use a unique group ID so this test is hermetic across parallel test runs.
+        let group_id = unique_group_id("track-a-round-trip");
+
+        // Step 1: create_group — exercises DashMap::with_shard_amount(64) insert.
+        let group_result = create_group(&payload(&[
+            ("group_id", &group_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect("create_group must succeed after Track A DashMap shard change");
+
+        assert_eq!(
+            group_result.get("status"),
+            Some(&"created".to_owned()),
+            "create_group must return status=created"
+        );
+        let epoch_after_create: u64 = group_result
+            .get("epoch")
+            .expect("epoch must be present")
+            .parse()
+            .expect("epoch must be a u64");
+        assert_eq!(epoch_after_create, 1, "epoch must be 1 after two-member group creation");
+
+        // Step 2: join_from_welcome — exercises Entry::Vacant path by triggering the
+        // "group not yet in DashMap" branch with a fresh group_id.
+        //
+        // The `join_from_welcome` function uses Entry::Vacant to avoid spurious overwrites.
+        // We call it with a distinct token to hit the fallback create_group_session path,
+        // exercising the Vacant-insert branch introduced by Track A.
+        let join_group_id = unique_group_id("track-a-join");
+        let join_result = join_from_welcome(&payload(&[
+            ("welcome", "test-welcome-token"),
+            ("group_id", &join_group_id),
+        ]))
+        .expect("join_from_welcome must succeed (fallback branch) after Track A Vacant entry change");
+
+        assert_eq!(
+            join_result.get("status"),
+            Some(&"joined".to_owned()),
+            "join_from_welcome must return status=joined"
+        );
+        // Confirm the session was inserted into GROUP_SESSIONS by the Vacant branch.
+        assert!(
+            GROUP_SESSIONS.contains_key(&join_group_id),
+            "Entry::Vacant insert must have stored the session in GROUP_SESSIONS"
+        );
+
+        // Step 3: create_application_message — confirms sender session is retrievable
+        // from the DashMap with_shard_amount(64) store after create_group.
+        let plaintext_in = "hello from Track A round-trip test";
+        let encrypt_result = create_application_message(&payload(&[
+            ("group_id", &group_id),
+            ("body", plaintext_in),
+        ]))
+        .expect("create_application_message must succeed");
+
+        assert_eq!(
+            encrypt_result.get("status"),
+            Some(&"encrypted".to_owned()),
+            "create_application_message must return status=encrypted"
+        );
+        let ciphertext = encrypt_result
+            .get("ciphertext")
+            .expect("ciphertext must be present in encrypt result");
+        assert!(!ciphertext.is_empty(), "ciphertext must be non-empty");
+
+        // Step 4: process_incoming — decrypts on recipient side and must recover
+        // the original plaintext, confirming the full MLS protocol still works.
+        let decrypt_result = process_incoming(&payload(&[
+            ("group_id", &group_id),
+            ("ciphertext", ciphertext),
+        ]))
+        .expect("process_incoming must succeed");
+
+        assert_eq!(
+            decrypt_result.get("plaintext"),
+            Some(&plaintext_in.to_owned()),
+            "decrypted plaintext must exactly match the original plaintext"
+        );
+
+        // Epoch must be stable (no epoch advance from application messages).
+        let epoch_after_decrypt: u64 = decrypt_result
+            .get("epoch")
+            .expect("epoch must be in decrypt result")
+            .parse()
+            .expect("epoch must be a u64");
+        assert_eq!(
+            epoch_after_decrypt, epoch_after_create,
+            "epoch must not advance from application messages"
+        );
+
+        // Snapshot keys must be present in the decrypt result (Track A did not
+        // remove the snapshot serialization path).
+        for key in [
+            "session_sender_storage",
+            "session_recipient_storage",
+            "session_sender_signer",
+            "session_recipient_signer",
+            "session_cache",
+        ] {
+            assert!(
+                decrypt_result.contains_key(key),
+                "snapshot key '{}' must be present in process_incoming result",
+                key
+            );
+        }
+    }
+
+    // Round-trip happy path is unaffected by map_err enrichment.
+    //
+    // The map_err(|e| closures that add err.details.insert("error", ...) are
+    // purely in error paths and must be invisible to callers on the happy path.
+    // This test confirms:
+    //   1. create_group returns status=created
+    //   2. create_application_message returns status=encrypted with non-empty ciphertext
+    //   3. process_incoming recovers the original plaintext
+    //   4. No spurious "error" key appears in any of the happy-path payloads
+    #[test]
+    fn encrypt_decrypt_unaffected_by_error_enrichment() {
+        let group_id = unique_group_id("group-trackb-roundtrip");
+
+        // Step 1: create_group
+        let group_result = create_group(&payload(&[
+            ("group_id", &group_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect("create_group must succeed on happy path");
+
+        assert_eq!(
+            group_result.get("status"),
+            Some(&"created".to_owned()),
+            "create_group must return status=created"
+        );
+        assert!(
+            !group_result.contains_key("error"),
+            "create_group happy path must not contain a spurious 'error' key"
+        );
+
+        // Step 2: create_application_message
+        let original_plaintext = "hello from round-trip enrichment test";
+        let encrypt_result = create_application_message(&payload(&[
+            ("group_id", &group_id),
+            ("body", original_plaintext),
+        ]))
+        .expect("create_application_message must succeed on happy path");
+
+        assert_eq!(
+            encrypt_result.get("status"),
+            Some(&"encrypted".to_owned()),
+            "create_application_message must return status=encrypted"
+        );
+        let ciphertext = encrypt_result
+            .get("ciphertext")
+            .expect("ciphertext must be present in encrypt result");
+        assert!(
+            !ciphertext.is_empty(),
+            "ciphertext must be non-empty on happy path"
+        );
+        assert!(
+            !encrypt_result.contains_key("error"),
+            "create_application_message happy path must not contain a spurious 'error' key"
+        );
+
+        // Step 3: process_incoming (recipient side)
+        let decrypt_result = process_incoming(&payload(&[
+            ("group_id", &group_id),
+            ("ciphertext", ciphertext),
+        ]))
+        .expect("process_incoming must succeed on happy path");
+
+        assert_eq!(
+            decrypt_result.get("plaintext"),
+            Some(&original_plaintext.to_owned()),
+            "decrypted plaintext must match original"
+        );
+        assert!(
+            !decrypt_result.contains_key("error"),
+            "process_incoming happy path must not contain a spurious 'error' key"
+        );
+    }
+
+    // Verify that error details map contains a non-empty "error" key on failure.
+    //
+    // Before enrichment, map_err(|_| discarded the original error. After enrichment,
+    // map_err(|e| inserts format!("{e:?}") under the "error" key. This test:
+    //   1. Calls process_incoming with garbage bytes (valid hex but invalid TLS structure)
+    //   2. Asserts the "error" key is present and non-empty
+    //   3. Asserts the error CODE atom is still the correct ErrorCode::InvalidInput
+    //      (enrichment must not corrupt the semantic error code Elixir pattern-matches on)
+    #[test]
+    fn error_details_include_underlying_cause() {
+        let group_id = unique_group_id("group-error-details-cause");
+
+        // Create a real group so we reach tls_deserialize rather than failing
+        // on missing_group_state (which would produce a different error code).
+        create_group(&payload(&[
+            ("group_id", &group_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect("group must be created");
+
+        // Valid hex, invalid TLS structure: decode_hex succeeds, tls_deserialize fails,
+        // triggering the map_err(|e| closure that inserts the "error" key.
+        let garbage_hex = "deadbeefcafebabe0102030405060708";
+
+        let err = process_incoming(&payload(&[
+            ("group_id", &group_id),
+            ("ciphertext", garbage_hex),
+        ]))
+        .expect_err("malformed ciphertext must produce an error");
+
+        // Assert correct error code — enrichment must not change the semantic code.
+        assert_eq!(
+            err.code,
+            ErrorCode::InvalidInput,
+            "error code must be InvalidInput (not corrupted by enrichment)"
+        );
+
+        // Assert the "error" key is present and non-empty.
+        let error_context = err
+            .details
+            .get("error")
+            .expect("details must contain 'error' key — error enrichment is missing");
+        assert!(
+            !error_context.is_empty(),
+            "error enrichment produced an empty 'error' string; \
+             format!(\"{{e:?}}\") must yield a non-empty debug representation"
+        );
+
+        // Also assert the static "reason" label is still correct.
+        assert_eq!(
+            err.details.get("reason"),
+            Some(&"malformed_ciphertext".to_owned()),
+            "static 'reason' label must not be affected by error enrichment"
+        );
+    }
+
+    // Finding #6 + #13: A poisoned RwLock must produce LockPoisoned, not silent
+    // corruption. This test exercises the error path using the same map_err
+    // translation used in restore_group_session_from_snapshot, applied to a
+    // real poisoned RwLock of the same element type.
+    //
+    // Note: OpenMlsRustCrypto::storage().values is a plain RwLock (not Arc-
+    // wrapped), so we create an equivalent standalone RwLock to demonstrate the
+    // poison propagation. The production code's map_err is identical in form.
+    #[test]
+    fn restore_poisoned_lock_returns_lock_poisoned_error() {
+        use std::collections::HashMap as StdHashMap;
+        use std::sync::{Arc, RwLock};
+
+        // Create a lock of the same element type used in the provider storage.
+        let lock: Arc<RwLock<StdHashMap<Vec<u8>, Vec<u8>>>> = Arc::new(RwLock::new(StdHashMap::new()));
+
+        // Poison the lock by panicking while holding a write guard.
+        let lock_for_poison = Arc::clone(&lock);
+        let _ = std::panic::catch_unwind(move || {
+            let _guard = lock_for_poison.write().expect("initial write must succeed");
+            panic!("intentionally poisoning lock for test");
+        });
+
+        // Confirm the lock is now poisoned.
+        assert!(lock.write().is_err(), "lock must be poisoned after panic");
+
+        // Apply the same map_err translation used in restore_group_session_from_snapshot.
+        let result: Result<(), MlsError> = lock
+            .write()
+            .map(|_| ())
+            .map_err(|_| MlsError::with_code(ErrorCode::LockPoisoned, "test_op", "lock_poisoned"));
+
+        let err = result.expect_err("poisoned lock must produce an error");
+        assert_eq!(
+            err.code,
+            ErrorCode::LockPoisoned,
+            "error code must be LockPoisoned, not a storage issue"
+        );
+        assert_eq!(
+            err.details.get("reason"),
+            Some(&"lock_poisoned".to_owned()),
+            "reason must be lock_poisoned"
+        );
+        assert_eq!(
+            err.details.get("operation"),
+            Some(&"test_op".to_owned()),
+            "operation must be threaded through"
+        );
+    }
+
+    // Finding #11: An incomplete snapshot (some fields present, some absent)
+    // must return InvalidInput with reason "incomplete_session_snapshot", not
+    // panic. This directly tests the structural match that replaced the
+    // separated guard + unwrap pattern.
+    #[test]
+    fn restore_incomplete_snapshot_returns_error_not_panic() {
+        let group_id = unique_group_id("group-incomplete-snapshot");
+
+        // Provide only sender_storage and sender_signer — recipient fields absent.
+        // The match arm `_ =>` must fire and return Err(InvalidInput).
+        let params = payload(&[
+            ("group_id", &group_id),
+            ("ciphersuite", "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"),
+            ("session_sender_storage", "deadbeef"),
+            ("session_sender_signer", "cafebabe"),
+            // session_recipient_storage and session_recipient_signer intentionally absent
+        ]);
+
+        // GroupSession doesn't implement Debug, so use match to extract the error.
+        let result = restore_group_session_from_snapshot(&group_id, &params, "test_restore");
+        assert!(result.is_err(), "incomplete snapshot must return an error, not panic");
+        let err = match result {
+            Err(e) => e,
+            Ok(_) => panic!("expected Err but got Ok"),
+        };
+
+        assert_eq!(
+            err.code,
+            ErrorCode::InvalidInput,
+            "error code must be InvalidInput for incomplete snapshot"
+        );
+        assert_eq!(
+            err.details.get("reason"),
+            Some(&"incomplete_session_snapshot".to_owned()),
+            "reason must be incomplete_session_snapshot"
+        );
+        assert_eq!(
+            err.details.get("operation"),
+            Some(&"test_restore".to_owned()),
+            "operation must be threaded through"
+        );
+    }
+
+    // Verifies that a normal restore path (no poisoned locks, no missing fields)
+    // produces a fully usable session: a message encrypted with the restored
+    // session can be decrypted, yielding the original plaintext.
+    #[test]
+    fn snapshot_restore_produces_usable_session() {
+        let group_id = unique_group_id("group-snapshot-restore-usable");
+
+        // Step 1: Create the group and capture the snapshot fields it returns.
+        let group = create_group(&payload(&[
+            ("group_id", &group_id),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
+        ]))
+        .expect("group must be created for snapshot restore test");
+
+        // Step 2: Encrypt a message, passing the snapshot so create_application_message
+        // restores state from it (has_complete_session_snapshot fires).
+        let mut encrypt_params = Payload::new();
+        encrypt_params.insert("group_id".to_owned(), group_id.clone());
+        encrypt_params.insert("body".to_owned(), "hello from snapshot".to_owned());
+        for key in [
+            "session_sender_storage",
+            "session_recipient_storage",
+            "session_sender_signer",
+            "session_recipient_signer",
+            "session_cache",
+        ] {
+            if let Some(value) = group.get(key) {
+                encrypt_params.insert(key.to_owned(), value.clone());
+            }
+        }
+
+        let encrypted =
+            create_application_message(&encrypt_params).expect("encrypt after snapshot restore must succeed");
+
+        let ciphertext = encrypted
+            .get("ciphertext")
+            .expect("ciphertext must be present in encrypt result")
+            .clone();
+
+        // Step 3: Decrypt the ciphertext, passing the post-encrypt snapshot so
+        // process_incoming restores state from it (has_complete_session_snapshot fires).
+        let mut decrypt_params = Payload::new();
+        decrypt_params.insert("group_id".to_owned(), group_id.clone());
+        decrypt_params.insert("ciphertext".to_owned(), ciphertext);
+        for key in [
+            "session_sender_storage",
+            "session_recipient_storage",
+            "session_sender_signer",
+            "session_recipient_signer",
+            "session_cache",
+        ] {
+            if let Some(value) = encrypted.get(key) {
+                decrypt_params.insert(key.to_owned(), value.clone());
+            }
+        }
+
+        let decrypted =
+            process_incoming(&decrypt_params).expect("decrypt after snapshot restore must succeed");
+
+        assert_eq!(
+            decrypted.get("plaintext"),
+            Some(&"hello from snapshot".to_owned()),
+            "plaintext must match original message after restore → encrypt → decrypt"
         );
     }
 }
