@@ -143,4 +143,7 @@ require_match "${messaging_workflow}" 'run: ./run qa:messaging:deep' 'messaging 
 require_match "${messaging_workflow}" "expected PASS or WARN" 'messaging QA workflow no longer treats WARN as an acceptable non-blocking outcome'
 require_absent "${messaging_workflow}" "expected PASS)." 'messaging QA workflow still hard-fails on WARN outcomes'
 
+require_match "${repo_root}/.github/workflows/release-please.yml" 'RELEASE_PLEASE_TOKEN' 'release-please workflow is not gated on a dedicated release token'
+require_match "${repo_root}/.github/workflows/release-please.yml" 'Skipping release-please: configure RELEASE_PLEASE_TOKEN' 'release-please workflow no longer skips cleanly when the release token is unavailable'
+
 printf 'ci contract check passed\n'
