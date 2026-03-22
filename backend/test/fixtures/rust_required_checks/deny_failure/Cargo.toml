@@ -1,0 +1,9 @@
+[package]
+name = "rust-required-checks-deny-failure"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+publish = false
+
+[dependencies]
+base64 = "0.22"

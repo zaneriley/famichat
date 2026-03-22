@@ -264,7 +264,7 @@ function lint:dockerfile {
 
 function shell:lint {
   # Lint shell scripts, preferring local shellcheck for speed.
-  local files=(run bin/*)
+  local files=(run bin/* scripts/*.sh test/tooling/*.sh)
 
   if command -v shellcheck >/dev/null 2>&1; then
     shellcheck "${files[@]}"
@@ -3033,8 +3033,8 @@ function _rust_manifest_path {
     return
   fi
 
-  if [[ -f "infra/mls_nif/Cargo.toml" ]]; then
-    echo "infra/mls_nif/Cargo.toml"
+  if [[ -f "infra/Cargo.toml" ]]; then
+    echo "infra/Cargo.toml"
     return
   fi
 
@@ -3046,7 +3046,7 @@ function _ensure_rust_manifest {
   manifest_path="$(_rust_manifest_path)"
 
   if [[ -z "$manifest_path" ]]; then
-    echo "Rust workspace not found. Expected infra/mls_nif/Cargo.toml." >&2
+    echo "Rust workspace not found. Expected infra/Cargo.toml." >&2
     echo "Set RUST_MANIFEST_PATH to target a different crate/workspace." >&2
     return 2
   fi
@@ -3074,6 +3074,7 @@ function rust:doctor {
   cmd cargo --version
 }
 
+# shellcheck disable=SC2120
 function rust:fmt {
   # Validate Rust formatting
   local manifest_path
@@ -3083,6 +3084,7 @@ function rust:fmt {
   cmd cargo fmt --manifest-path "${manifest_path}" --all --check "${@}"
 }
 
+# shellcheck disable=SC2120
 function rust:clippy {
   # Run strict Rust lints (treat warnings as errors)
   local manifest_path
@@ -3108,6 +3110,7 @@ function rust:lint {
   ' _ "${manifest_path}"
 }
 
+# shellcheck disable=SC2120
 function rust:test {
   # Run Rust tests
   local manifest_path
@@ -3115,6 +3118,18 @@ function rust:test {
   _ensure_rust_toolchain || return $?
 
   cmd cargo test --manifest-path "${manifest_path}" --all-features "${@}"
+}
+
+# shellcheck disable=SC2120
+function rust:deny {
+  # Run cargo-deny against the workspace dependency graph
+  local manifest_path
+  local deny_config_path
+  manifest_path="$(_ensure_rust_manifest)" || return $?
+  _ensure_rust_toolchain || return $?
+  deny_config_path="${RUST_DENY_CONFIG_PATH:-infra/deny.toml}"
+
+  cmd cargo deny --manifest-path "${manifest_path}" check --config "${deny_config_path}" "${@}"
 }
 
 function rust:miri {
@@ -3145,13 +3160,36 @@ function rust:check {
   ' _ "${manifest_path}" "${@}"
 }
 
+function rust:verify {
+  # Required Rust validation loop for the workspace
+  # shellcheck disable=SC2119
+  rust:fmt
+  # shellcheck disable=SC2119
+  rust:clippy
+  wasm:check
+  # shellcheck disable=SC2119
+  rust:test
+  # shellcheck disable=SC2119
+  rust:deny
+}
+
 # -----------------------------------------------------------------------------
 # WASM Spike
 # -----------------------------------------------------------------------------
 
 function wasm:check {
   # Check WASM crate builds and compiles cleanly
-  cmd cargo check --target wasm32-unknown-unknown --manifest-path "infra/mls_wasm/Cargo.toml"
+  cmd cargo check --target wasm32-unknown-unknown --manifest-path "infra/Cargo.toml" --package "mls_wasm"
+}
+
+function ci:check-contract {
+    # Verify the Rust CI contract stays aligned with the repo commands.
+    bash scripts/check-ci-contract.sh
+}
+
+function ci:tooling-test {
+    # Validate the required Rust check commands against fixture crates.
+    bash test/tooling/rust_required_checks_test.sh
 }
 
 function wasm:build {
@@ -3498,6 +3536,9 @@ function ci:setup-env {
 }
 
 function ci:lint {
+    # --- blocking gates ---
+    ci:check-contract
+    ci:tooling-test
     shell:lint
     lint:dockerfile "${@}"
     docs:boundary-check
@@ -3508,6 +3549,8 @@ function ci:lint {
     elixir:lint
     elixir:security-check
     rust:lint
+    # shellcheck disable=SC2119
+    rust:deny
     js:fix:check
     css:lint:check
 }
@@ -3521,6 +3564,8 @@ function ci:setup-db {
 }
 
 function ci:test {
+    ci:check-contract
+    wasm:check
     rust:test "${@}"
     elixir:test "${@}"
 }

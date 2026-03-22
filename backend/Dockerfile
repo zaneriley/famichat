@@ -74,8 +74,10 @@ ENV RUSTUP_HOME="/home/elixir/.rustup" \
     PATH="/home/elixir/.cargo/bin:${PATH}"
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-  | sh -s -- -y --profile minimal --default-toolchain stable \
-  && rustup component add rustfmt clippy rust-analyzer
+  | sh -s -- -y --profile minimal --default-toolchain 1.94.0 \
+  && rustup component add rustfmt clippy rust-analyzer \
+  && rustup target add wasm32-unknown-unknown \
+  && cargo install --locked --version 0.19.0 cargo-deny
 
 # Install Hex and Rebar
 RUN mix local.hex --force && mix local.rebar --force

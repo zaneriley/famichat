@@ -15,21 +15,31 @@ Run from `backend/`:
 
 ```bash
 ./run rust:doctor
-./run rust:fmt
-./run rust:clippy
-./run rust:test
+./run rust:verify
 ```
 
-Fast path (single container exec for tighter iteration):
+Fast path for lint + unit tests only:
 
 ```bash
 ./run rust:check
 ```
 
-Lint-only path (used by CI lint stage):
+Lint-only path:
 
 ```bash
 ./run rust:lint
+```
+
+Dependency policy path:
+
+```bash
+./run rust:deny
+```
+
+Tooling verification path (fixture-driven checks for fmt, clippy, test, and deny):
+
+```bash
+./run ci:tooling-test
 ```
 
 Optional unsafe-boundary validation (nightly + Miri):
@@ -44,4 +54,10 @@ If you need a different crate/workspace, override manifest resolution:
 
 ```bash
 RUST_MANIFEST_PATH=path/to/Cargo.toml ./run rust:check
+```
+
+If you need a different `cargo-deny` policy file, override the deny config path:
+
+```bash
+RUST_DENY_CONFIG_PATH=path/to/deny.toml ./run rust:deny
 ```

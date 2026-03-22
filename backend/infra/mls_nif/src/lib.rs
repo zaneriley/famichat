@@ -1430,8 +1430,7 @@ fn extract_snapshot_raw_data(
         .values
         .read()
         .map_err(|e| {
-            let mut err =
-                MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
+            let mut err = MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
             err.details.insert("error".to_owned(), format!("{e:?}"));
             err
         })?
@@ -1444,8 +1443,7 @@ fn extract_snapshot_raw_data(
         .values
         .read()
         .map_err(|e| {
-            let mut err =
-                MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
+            let mut err = MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
             err.details.insert("error".to_owned(), format!("{e:?}"));
             err
         })?
@@ -1615,16 +1613,11 @@ fn restore_group_session_from_snapshot(
         // value is in an unknown state. Writing into it would silently corrupt
         // the provider storage. Return LockPoisoned so the Elixir caller can
         // handle it through Logger/telemetry instead of absorbing it quietly.
-        let mut values = sender_provider
-            .storage()
-            .values
-            .write()
-            .map_err(|e| {
-                let mut err =
-                    MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
-                err.details.insert("error".to_owned(), format!("{e:?}"));
-                err
-            })?;
+        let mut values = sender_provider.storage().values.write().map_err(|e| {
+            let mut err = MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
+        })?;
         *values = sender_storage;
     }
 
@@ -1662,16 +1655,11 @@ fn restore_group_session_from_snapshot(
     let recipient_provider = OpenMlsRustCrypto::default();
     {
         // Finding #13: Same lock-poison fix as the sender block above.
-        let mut values = recipient_provider
-            .storage()
-            .values
-            .write()
-            .map_err(|e| {
-                let mut err =
-                    MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
-                err.details.insert("error".to_owned(), format!("{e:?}"));
-                err
-            })?;
+        let mut values = recipient_provider.storage().values.write().map_err(|e| {
+            let mut err = MlsError::with_code(ErrorCode::LockPoisoned, operation, "lock_poisoned");
+            err.details.insert("error".to_owned(), format!("{e:?}"));
+            err
+        })?;
         *values = recipient_storage;
     }
 
@@ -1815,6 +1803,7 @@ fn deserialize_signer(encoded: &str, operation: &str) -> Result<SignatureKeyPair
 /// Serialize a message cache as a sorted string (used for HashMap-keyed cache in
 /// tests and the session_cache_roundtrip test).  Sort ensures a stable output
 /// when insertion order is not tracked.
+#[cfg(test)]
 fn serialize_message_cache(cache: &HashMap<String, CachedMessage>) -> String {
     let mut entries: Vec<String> = cache
         .iter()
@@ -1853,6 +1842,7 @@ fn serialize_message_cache_ordered(ordered: &[(String, CachedMessage)]) -> Strin
         .join(",")
 }
 
+#[cfg(test)]
 fn deserialize_message_cache(
     encoded: &str,
     operation: &str,
@@ -1958,9 +1948,8 @@ fn cache_decrypted_message(
     message_id: String,
     cached_message: CachedMessage,
 ) {
-    // If already cached, update in place without changing insertion order.
-    if cache.contains_key(&message_id) {
-        cache.insert(message_id, cached_message);
+    if let Some(existing_message) = cache.get_mut(&message_id) {
+        *existing_message = cached_message;
         return;
     }
 
@@ -1996,7 +1985,7 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, &'static str> {
         return Err("hex_input_too_large");
     }
 
-    if !value.len().is_multiple_of(2) {
+    if value.len() % 2 != 0 {
         return Err("invalid_ciphertext_encoding");
     }
 
@@ -2873,9 +2862,8 @@ mod tests {
         GROUP_SESSIONS.remove(&group_id);
 
         // Create and insert an initial session via create_group_session.
-        let session =
-            create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)
-                .expect("session must be created");
+        let session = create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)
+            .expect("session must be created");
         GROUP_SESSIONS.insert(group_id.clone(), session);
 
         // Record the epoch of the inserted session.
@@ -2888,12 +2876,9 @@ mod tests {
             .as_u64();
 
         // Attempt Entry::Vacant insert — should be a no-op since key exists.
-        let second_session =
-            create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)
-                .expect("second session must be created");
-        if let dashmap::mapref::entry::Entry::Vacant(e) =
-            GROUP_SESSIONS.entry(group_id.clone())
-        {
+        let second_session = create_group_session(&group_id, DEFAULT_CIPHERSUITE, None, None)
+            .expect("second session must be created");
+        if let dashmap::mapref::entry::Entry::Vacant(e) = GROUP_SESSIONS.entry(group_id.clone()) {
             e.insert(second_session);
             panic!("Entry::Vacant should not have fired for existing key");
         }
@@ -2946,7 +2931,10 @@ mod tests {
             .expect("epoch must be present")
             .parse()
             .expect("epoch must be a u64");
-        assert_eq!(epoch_after_create, 1, "epoch must be 1 after two-member group creation");
+        assert_eq!(
+            epoch_after_create, 1,
+            "epoch must be 1 after two-member group creation"
+        );
 
         // Step 2: join_from_welcome — exercises Entry::Vacant path by triggering the
         // "group not yet in DashMap" branch with a fresh group_id.
@@ -2959,7 +2947,9 @@ mod tests {
             ("welcome", "test-welcome-token"),
             ("group_id", &join_group_id),
         ]))
-        .expect("join_from_welcome must succeed (fallback branch) after Track A Vacant entry change");
+        .expect(
+            "join_from_welcome must succeed (fallback branch) after Track A Vacant entry change",
+        );
 
         assert_eq!(
             join_result.get("status"),
@@ -3182,7 +3172,8 @@ mod tests {
         use std::sync::{Arc, RwLock};
 
         // Create a lock of the same element type used in the provider storage.
-        let lock: Arc<RwLock<StdHashMap<Vec<u8>, Vec<u8>>>> = Arc::new(RwLock::new(StdHashMap::new()));
+        let lock: Arc<RwLock<StdHashMap<Vec<u8>, Vec<u8>>>> =
+            Arc::new(RwLock::new(StdHashMap::new()));
 
         // Poison the lock by panicking while holding a write guard.
         let lock_for_poison = Arc::clone(&lock);
@@ -3230,7 +3221,10 @@ mod tests {
         // The match arm `_ =>` must fire and return Err(InvalidInput).
         let params = payload(&[
             ("group_id", &group_id),
-            ("ciphersuite", "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"),
+            (
+                "ciphersuite",
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            ),
             ("session_sender_storage", "deadbeef"),
             ("session_sender_signer", "cafebabe"),
             // session_recipient_storage and session_recipient_signer intentionally absent
@@ -3238,7 +3232,10 @@ mod tests {
 
         // GroupSession doesn't implement Debug, so use match to extract the error.
         let result = restore_group_session_from_snapshot(&group_id, &params, "test_restore");
-        assert!(result.is_err(), "incomplete snapshot must return an error, not panic");
+        assert!(
+            result.is_err(),
+            "incomplete snapshot must return an error, not panic"
+        );
         let err = match result {
             Err(e) => e,
             Ok(_) => panic!("expected Err but got Ok"),
@@ -3295,8 +3292,8 @@ mod tests {
             }
         }
 
-        let encrypted =
-            create_application_message(&encrypt_params).expect("encrypt after snapshot restore must succeed");
+        let encrypted = create_application_message(&encrypt_params)
+            .expect("encrypt after snapshot restore must succeed");
 
         let ciphertext = encrypted
             .get("ciphertext")
