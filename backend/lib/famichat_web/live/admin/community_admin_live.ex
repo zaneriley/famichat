@@ -187,16 +187,6 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
   end
 
   @impl true
-  def handle_info(:reset_copied, socket) do
-    {:noreply, assign(socket, :copied, false)}
-  end
-
-  @impl true
-  def handle_info(:reset_copy_failed, socket) do
-    {:noreply, assign(socket, :copy_failed, false)}
-  end
-
-  @impl true
   def handle_event("back_to_dashboard", _params, socket) do
     families = list_families()
 
@@ -209,10 +199,21 @@ defmodule FamichatWeb.AdminLive.CommunityAdminLive do
      |> assign(:created_family, nil)}
   end
 
+  @impl true
+  def handle_info(:reset_copied, socket) do
+    {:noreply, assign(socket, :copied, false)}
+  end
+
+  @impl true
+  def handle_info(:reset_copy_failed, socket) do
+    {:noreply, assign(socket, :copy_failed, false)}
+  end
+
   defp check_admin_status(user_id) do
     Repo.exists?(
       from(u in User,
-        where: u.id == ^user_id and u.community_admin == true and u.status == :active
+        where:
+          u.id == ^user_id and u.community_admin == true and u.status == :active
       )
     )
   end
