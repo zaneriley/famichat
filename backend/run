@@ -539,7 +539,8 @@ function _wait_for_host_http_ready {
 }
 
 function _wait_for_container_http_surface_ready {
-  local container_port="${1:-$(_qa_container_port)}"
+  local container_port
+  container_port="$(_qa_container_port)"
   local attempts="${CI_CONTAINER_HTTP_SURFACE_READY_ATTEMPTS:-60}"
   local sleep_seconds="${CI_CONTAINER_HTTP_SURFACE_READY_SLEEP_SECONDS:-1}"
   local required_successes="${CI_CONTAINER_HTTP_SURFACE_READY_CONSECUTIVE_SUCCESSES:-3}"
@@ -570,7 +571,7 @@ function _wait_for_postgres_ready {
   postgres_user="$(_compose_env_value "POSTGRES_USER" "famichat")"
   local postgres_password
   postgres_password="$(_compose_env_value "POSTGRES_PASSWORD" "password")"
-  local postgres_db="${1:-${postgres_user}}"
+  local postgres_db="${postgres_user}"
   local attempts="${CI_POSTGRES_READY_ATTEMPTS:-60}"
   local sleep_seconds="${CI_POSTGRES_READY_SLEEP_SECONDS:-2}"
   local attempt
@@ -590,7 +591,8 @@ function _wait_for_postgres_ready {
 }
 
 function _dump_ci_startup_diagnostics {
-  local container_port="${1:-$(_qa_container_port)}"
+  local container_port
+  container_port="$(_qa_container_port)"
 
   echo
   echo "CI startup diagnostics:"
@@ -3581,6 +3583,7 @@ function psql {
   # Connect to PostgreSQL
   # shellcheck disable=SC1091
   . .env
+  # shellcheck disable=SC2153
   _dc postgres psql -U "${POSTGRES_USER}" "${@}"
 }
 
