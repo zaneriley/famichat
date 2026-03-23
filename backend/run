@@ -3585,6 +3585,9 @@ function ci:test {
     ci:check-contract
     wasm:check
     rust:test "${@}"
+    # Force a fresh test-env build so Rustler recompiles and copies the NIF
+    # even when GitHub restores a stale _build cache.
+    _dc -e "MIX_ENV=test" web mix clean
     elixir:test "${@}"
 }
 
