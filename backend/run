@@ -706,7 +706,7 @@ function _qa_spawn_ws_listener {
   local wait_seconds="${4:-4}"
   local ready_file="${5:-}"
 
-  node - "${ws_url}" "${ws_topic}" "${output_file}" "${wait_seconds}" "${ready_file}" <<'NODE' &
+  docker compose exec -T js node - "${ws_url}" "${ws_topic}" "${output_file}" "${wait_seconds}" "${ready_file}" <<'NODE' &
 const fs = require("fs");
 
 const [url, topic, outputFile, waitSecondsRaw, readyFile] = process.argv.slice(2);
@@ -766,7 +766,27 @@ function pushEvent(value) {
   events.push(JSON.stringify(value));
 }
 
-const ws = new WebSocket(url);
+function resolveWebSocket() {
+  if (typeof WebSocket !== "undefined") {
+    return WebSocket;
+  }
+
+  try {
+    return require("ws");
+  } catch (_error) {
+    return null;
+  }
+}
+
+const WebSocketImpl = resolveWebSocket();
+
+if (!WebSocketImpl) {
+  pushEvent({error: "websocket_runtime_unavailable"});
+  fs.writeFileSync(outputFile, events.join("\n"), "utf8");
+  process.exit(1);
+}
+
+const ws = new WebSocketImpl(url);
 
 scheduleClose(preReadyTimeoutMs);
 
