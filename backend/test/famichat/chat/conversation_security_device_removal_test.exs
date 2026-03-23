@@ -46,8 +46,15 @@ defmodule Famichat.Chat.ConversationSecurityDeviceRemovalTest do
   test "revoking a device triggers MLS removal from every conversation the device is in" do
     %{user: user, conversations: conversations} = user_with_conversations(2)
 
-    # Seed MLS state for each conversation so stage_pending_commit doesn't fail
-    # with :missing_state.
+    # Start the session first so we know the device_id for credential setup.
+    device_id = start_client_session!(user)
+
+    # Register credentials that include the device_id at leaf 1 (recipient).
+    device_id_hex = Base.encode16(device_id, case: :lower)
+    sender_hex = Base.encode16("sender", case: :lower)
+    credentials = "0:#{sender_hex},1:#{device_id_hex}"
+
+    # Seed MLS state and register matching credentials for each conversation.
     for conv <- conversations do
       assert {:ok, _} =
                ConversationSecurityStateStore.upsert(
@@ -55,14 +62,15 @@ defmodule Famichat.Chat.ConversationSecurityDeviceRemovalTest do
                  %{state: @snapshot_payload, epoch: 1, protocol: "mls"},
                  nil
                )
+
+      FakeAdapter.put_credentials(conv.id, credentials)
     end
 
-    revocation_ref = "mls-removal-test-#{System.unique_integer([:positive])}"
+    on_exit(fn ->
+      for conv <- conversations, do: FakeAdapter.clear_credentials(conv.id)
+    end)
 
-    # Stage the journal entry (normally done by Sessions.revoke_device via
-    # stage_client_revocation; here done manually so we can isolate the MLS
-    # removal step).
-    device_id = start_client_session!(user)
+    revocation_ref = "mls-removal-test-#{System.unique_integer([:positive])}"
 
     assert {:ok, _staged} =
              Chat.stage_client_revocation(device_id, revocation_ref, %{
@@ -129,6 +137,12 @@ defmodule Famichat.Chat.ConversationSecurityDeviceRemovalTest do
     # without state to simulate pre-MLS conversations.
     [conv_with_state | convs_without_state] = conversations
 
+    device_id = start_client_session!(user)
+
+    # Register credentials for the conversation that has MLS state.
+    device_id_hex = Base.encode16(device_id, case: :lower)
+    sender_hex = Base.encode16("sender", case: :lower)
+
     assert {:ok, _} =
              ConversationSecurityStateStore.upsert(
                conv_with_state.id,
@@ -136,10 +150,15 @@ defmodule Famichat.Chat.ConversationSecurityDeviceRemovalTest do
                nil
              )
 
-    device_id = start_client_session!(user)
+    FakeAdapter.put_credentials(
+      conv_with_state.id,
+      "0:#{sender_hex},1:#{device_id_hex}"
+    )
+
+    on_exit(fn -> FakeAdapter.clear_credentials(conv_with_state.id) end)
+
     revocation_ref = "skip-test-#{System.unique_integer([:positive])}"
 
-    # Stage journal entry only for the conversation that has MLS state.
     assert {:ok, _staged} =
              Chat.stage_client_revocation(device_id, revocation_ref, %{
                actor_id: user.id,

@@ -68,7 +68,9 @@ defmodule Famichat.Crypto.MLS.TelemetryContractTest do
     assert {:ok, _} = MLS.mls_commit(%{group_id: "group-1"})
     assert {:ok, _} = MLS.mls_update(%{group_id: "group-1"})
     assert {:ok, _} = MLS.mls_add(%{group_id: "group-1"})
-    assert {:ok, _} = MLS.mls_remove(%{group_id: "group-1"})
+
+    assert {:ok, _} =
+             MLS.mls_remove(%{group_id: "group-1", remove_target: "recipient"})
 
     assert_stop_event(ref, :create_application_message, :ok)
     assert_stop_event(ref, :process_incoming, :ok)

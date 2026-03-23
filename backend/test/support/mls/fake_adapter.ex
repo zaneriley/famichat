@@ -141,7 +141,92 @@ defmodule Famichat.TestSupport.MLS.FakeAdapter do
      }}
   end
 
+  defp success(:mls_remove, params) do
+    leaf_index = fetch_param(params, :leaf_index)
+    remove_target = fetch_param(params, :remove_target)
+
+    if is_nil(leaf_index) and is_nil(remove_target) do
+      {:error, :invalid_input,
+       %{reason: "missing_remove_target", operation: :mls_remove}}
+    else
+      group_id = fetch_param(params, :group_id) || ""
+      epoch = fetch_param(params, :epoch) || "1"
+
+      {:ok,
+       %{
+         "group_id" => group_id,
+         "operation" => "mls_remove",
+         "epoch" => to_string(bump_epoch(epoch)),
+         "staged" => "true",
+         "status" => "ok",
+         "session_sender_storage" =>
+           fetch_param(params, :session_sender_storage) || "",
+         "session_recipient_storage" =>
+           fetch_param(params, :session_recipient_storage) || "",
+         "session_sender_signer" =>
+           fetch_param(params, :session_sender_signer) || "",
+         "session_recipient_signer" =>
+           fetch_param(params, :session_recipient_signer) || "",
+         "session_cache" => fetch_param(params, :session_cache) || ""
+       }}
+    end
+  end
+
+  defp success(:list_member_credentials, params) do
+    group_id = fetch_param(params, :group_id) || ""
+
+    # Tests can register per-group credentials via
+    # FakeAdapter.put_credentials(group_id, "0:hex_id,...").
+    credentials =
+      case :persistent_term.get({__MODULE__, :credentials, group_id}, :not_set) do
+        :not_set -> default_credentials()
+        custom -> custom
+      end
+
+    {:ok,
+     %{
+       "group_id" => group_id,
+       "credentials" => credentials,
+       "status" => "ok"
+     }}
+  end
+
   defp success(_operation, _params), do: {:ok, %{}}
+
+  @doc """
+  Register custom credential mappings for a group in tests.
+
+  Format: comma-separated `"leaf_index:hex_encoded_identity"` pairs,
+  e.g. `"0:#{Base.encode16("device-1", case: :lower)},1:#{Base.encode16("device-2", case: :lower)}"`.
+  """
+  def put_credentials(group_id, credentials_string) do
+    :persistent_term.put(
+      {__MODULE__, :credentials, group_id},
+      credentials_string
+    )
+  end
+
+  @doc "Remove custom credential mappings (call in test on_exit)."
+  def clear_credentials(group_id) do
+    :persistent_term.erase({__MODULE__, :credentials, group_id})
+  end
+
+  defp default_credentials do
+    sender_hex = Base.encode16("sender", case: :lower)
+    recipient_hex = Base.encode16("recipient", case: :lower)
+    "0:#{sender_hex},1:#{recipient_hex}"
+  end
+
+  defp bump_epoch(epoch) when is_integer(epoch), do: epoch + 1
+
+  defp bump_epoch(epoch) when is_binary(epoch) do
+    case Integer.parse(epoch) do
+      {n, _} -> n + 1
+      :error -> 2
+    end
+  end
+
+  defp bump_epoch(_), do: 2
 
   defp build_error_details(operation, params) do
     details =

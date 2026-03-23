@@ -65,13 +65,17 @@ function _dc {
   case "$service" in
     js)
       # JS tools live in assets/node_modules/.bin
-      (cd assets && PATH="node_modules/.bin:$PATH" env "${env_args[@]}" "${@}")
+      if [[ ${#env_args[@]} -gt 0 ]]; then
+        (cd assets && PATH="node_modules/.bin:$PATH" env "${env_args[@]}" "${@}")
+      else
+        (cd assets && PATH="node_modules/.bin:$PATH" env "${@}")
+      fi
       ;;
     *)
       if [[ ${#env_args[@]} -gt 0 ]]; then
         env "${env_args[@]}" "${@}"
       else
-        "${@}"
+        env "${@}"
       fi
       ;;
   esac
@@ -3538,6 +3542,12 @@ function ci:setup-env {
         -e PGPASSWORD=${POSTGRES_PASSWORD} postgres \
         psql -U ${POSTGRES_USER} ${POSTGRES_USER} -c 'SELECT 1'"
 
+    wait-until "docker compose ps web | grep -q '(healthy)'"
+
+    # Populate /mix volume on cold runners (idempotent)
+    docker compose exec -T web mix deps.get
+    docker compose exec -T web mix compile
+
     docker compose logs
 }
 
@@ -3566,6 +3576,7 @@ function ci:security-check {
 }
 
 function ci:setup-db {
+    wait-until "docker compose ps web | grep -q '(healthy)'"
     mix ecto.create
     mix ecto.migrate
 }

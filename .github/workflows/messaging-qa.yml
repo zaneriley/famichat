@@ -58,6 +58,10 @@ jobs:
         if: always()
         run: |
           report=".tmp/_qa_messaging/${QA_RUN_ID}/gate_report.json"
+          if [ ! -f "${report}" ]; then
+            echo "Fast messaging QA did not produce ${report}; see the gate step above."
+            exit 0
+          fi
           outcome="$(jq -r '.outcome // "MISSING"' "${report}")"
           case "${outcome}" in
             PASS)
@@ -74,8 +78,13 @@ jobs:
       - name: Print fast gate summary
         if: always()
         run: |
+          report=".tmp/_qa_messaging/${QA_RUN_ID}/gate_report.json"
+          if [ ! -f "${report}" ]; then
+            echo "Fast messaging QA summary unavailable because the gate report was not written."
+            exit 0
+          fi
           jq '{run_id, outcome, critical_failures, blocked_failures, global_failures}' \
-            ".tmp/_qa_messaging/${QA_RUN_ID}/gate_report.json"
+            "${report}"
 
       - name: Upload fast QA artifacts
         if: always()
@@ -118,6 +127,10 @@ jobs:
         if: always()
         run: |
           report=".tmp/_qa_messaging/${QA_RUN_ID}/gate_report.json"
+          if [ ! -f "${report}" ]; then
+            echo "Deep messaging QA did not produce ${report}; see the gate step above."
+            exit 0
+          fi
           outcome="$(jq -r '.outcome // "MISSING"' "${report}")"
           case "${outcome}" in
             PASS)
@@ -134,8 +147,13 @@ jobs:
       - name: Print deep gate summary
         if: always()
         run: |
+          report=".tmp/_qa_messaging/${QA_RUN_ID}/gate_report.json"
+          if [ ! -f "${report}" ]; then
+            echo "Deep messaging QA summary unavailable because the gate report was not written."
+            exit 0
+          fi
           jq '{run_id, outcome, canonical_flow, canonical_flow_coverage, recovery_rejoin_contract, critical_failures, blocked_failures, global_failures}' \
-            ".tmp/_qa_messaging/${QA_RUN_ID}/gate_report.json"
+            "${report}"
 
       - name: Upload deep QA artifacts
         if: always()

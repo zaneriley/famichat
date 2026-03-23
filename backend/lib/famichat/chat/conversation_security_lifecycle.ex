@@ -34,6 +34,7 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
              is_binary(conversation_id) and is_map(attrs) do
     with {:ok, state} <- load_state(conversation_id, :stage_pending_commit),
          :ok <- ensure_no_pending_commit(state, operation),
+         {:ok, attrs} <- maybe_resolve_remove_target(operation, state, attrs),
          request <- build_request(state, attrs),
          {:ok, payload} <- apply(MLS, operation, [request]),
          :ok <- validate_stage_payload(payload, conversation_id, operation),
@@ -458,6 +459,30 @@ defmodule Famichat.Chat.ConversationSecurityLifecycle do
 
     operation in [:mls_remove, "mls_remove"]
   end
+
+  defp maybe_resolve_remove_target(
+         :mls_remove,
+         state,
+         %{remove_client_id: device_id} = attrs
+       )
+       when is_binary(device_id) do
+    group_params =
+      %{group_id: state.conversation_id, epoch: state.epoch}
+      |> Map.merge(state.state)
+
+    case MLS.resolve_leaf_index(group_params, device_id) do
+      {:ok, leaf_index} ->
+        {:ok,
+         attrs
+         |> Map.delete(:remove_client_id)
+         |> Map.put(:leaf_index, leaf_index)}
+
+      {:error, _code, _details} = error ->
+        error
+    end
+  end
+
+  defp maybe_resolve_remove_target(_operation, _state, attrs), do: {:ok, attrs}
 
   defp build_request(state, attrs) do
     attrs

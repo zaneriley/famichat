@@ -21,11 +21,12 @@ defmodule Famichat.Chat.ConversationSecurityDeviceRemoval do
 
   ## Device → MLS credential mapping
 
-  OpenMLS removes members by leaf index, which is tracked inside the MLS group
-  state stored in `ConversationSecurityStateStore`. The `stage_pending_commit`
-  call for `:mls_remove` passes the `device_id` as `remove_client_id` in the
-  request map; the NIF adapter is responsible for resolving the leaf index from
-  that identifier within the group state.
+  OpenMLS removes members by leaf index. The `stage_pending_commit` call for
+  `:mls_remove` passes the `device_id` as `remove_client_id` in the attrs map.
+  The lifecycle layer resolves this to a `leaf_index` via
+  `MLS.resolve_leaf_index/2` (which calls `list_member_credentials` on the NIF)
+  before the request reaches the NIF's `mls_remove`. The `remove_client_id` key
+  never reaches Rust.
 
   If no MLS state exists for a given conversation (e.g. the conversation was
   created before MLS was enabled), the removal is skipped with an info-level

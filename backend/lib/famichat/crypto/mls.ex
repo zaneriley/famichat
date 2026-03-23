@@ -74,6 +74,51 @@ defmodule Famichat.Crypto.MLS do
   @spec mls_remove(map()) :: {:ok, map()} | {:error, atom(), map()}
   def mls_remove(params), do: call_1(:mls_remove, params)
 
+  @doc """
+  Resolves a device ID to an MLS leaf index by calling `list_member_credentials`
+  and matching on credential identity.
+
+  Returns `{:ok, leaf_index}` or `{:error, code, details}`.
+  """
+  @spec resolve_leaf_index(map(), String.t()) ::
+          {:ok, non_neg_integer()} | {:error, atom(), map()}
+  def resolve_leaf_index(group_params, device_id)
+      when is_map(group_params) and is_binary(device_id) do
+    with {:ok, payload} <- list_member_credentials(group_params) do
+      credentials_str =
+        Map.get(payload, "credentials") || Map.get(payload, :credentials, "")
+
+      case find_leaf_index(credentials_str, device_id) do
+        {:ok, index} ->
+          {:ok, index}
+
+        :not_found ->
+          {:error, :commit_rejected,
+           %{reason: :client_not_in_group, device_id: device_id}}
+      end
+    end
+  end
+
+  defp find_leaf_index(credentials_str, device_id)
+       when is_binary(credentials_str) do
+    device_id_hex = Base.encode16(device_id, case: :lower)
+
+    credentials_str
+    |> String.split(",", trim: true)
+    |> Enum.find_value(:not_found, fn entry ->
+      case String.split(entry, ":", parts: 2) do
+        [index_str, hex_identity] when hex_identity == device_id_hex ->
+          case Integer.parse(index_str) do
+            {index, ""} -> {:ok, index}
+            _ -> nil
+          end
+
+        _ ->
+          nil
+      end
+    end)
+  end
+
   @spec merge_staged_commit(map()) :: {:ok, map()} | {:error, atom(), map()}
   def merge_staged_commit(params), do: call_1(:merge_staged_commit, params)
 

@@ -101,7 +101,8 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert {:ok, staged} =
              ConversationSecurityLifecycle.stage_pending_commit(
                conversation.id,
-               :mls_remove
+               :mls_remove,
+               %{remove_target: "recipient"}
              )
 
     assert staged.pending_commit["operation"] == "mls_remove"
@@ -186,7 +187,8 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert {:ok, _staged} =
              ConversationSecurityLifecycle.stage_pending_commit(
                conversation.id,
-               :mls_remove
+               :mls_remove,
+               %{remove_target: "recipient"}
              )
 
     results =
@@ -258,7 +260,8 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert {:ok, _staged_remove} =
              ConversationSecurityLifecycle.stage_pending_commit(
                conversation.id,
-               :mls_remove
+               :mls_remove,
+               %{remove_target: "recipient"}
              )
 
     assert {:ok, merged_remove} =
@@ -281,7 +284,8 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
     assert {:ok, staged} =
              ConversationSecurityLifecycle.stage_pending_commit(
                conversation.id,
-               :mls_remove
+               :mls_remove,
+               %{remove_target: "recipient"}
              )
 
     assert is_map(staged.pending_commit)
@@ -900,10 +904,16 @@ defmodule Famichat.Chat.ConversationSecurityLifecycleTest do
         fn index ->
           operation = Enum.at(operations, rem(index, length(operations)))
 
+          attrs =
+            if operation == :mls_remove,
+              do: %{remove_target: "recipient"},
+              else: %{}
+
           {operation,
            ConversationSecurityLifecycle.stage_pending_commit(
              conversation.id,
-             operation
+             operation,
+             attrs
            )}
         end,
         max_concurrency: 16,
