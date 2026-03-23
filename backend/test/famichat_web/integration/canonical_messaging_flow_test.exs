@@ -16,10 +16,12 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
 
   setup do
     previous_enforcement = Application.get_env(:famichat, :mls_enforcement)
+
     previous_rate_limiter_config =
       Application.get_env(:famichat, MessageRateLimiter)
 
     Application.put_env(:famichat, :mls_enforcement, false)
+
     Application.put_env(:famichat, MessageRateLimiter,
       windows: [
         %{bucket: :msg_device_burst, key: [:device_id], limit: 5, interval: 60},
@@ -37,6 +39,7 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
         }
       ]
     )
+
     MessageRateLimiter.reset_for_test()
 
     on_exit(fn ->
