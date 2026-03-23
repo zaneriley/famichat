@@ -349,7 +349,7 @@ function _qa_require_host_command {
 }
 
 function _qa_ws_base_url {
-  local base_url="${1:-http://localhost:8002}"
+  local base_url="${1:-$(_qa_base_url)}"
   local normalized_base_url="${base_url%/}"
 
   if [[ -n "${QA_WS_URL:-}" ]]; then
@@ -370,24 +370,42 @@ function _qa_ws_base_url {
   echo "${normalized_base_url}/socket/websocket?vsn=2.0.0"
 }
 
+function _qa_container_port {
+  if [[ -n "${QA_CONTAINER_PORT:-}" ]]; then
+    echo "${QA_CONTAINER_PORT}"
+    return
+  fi
+
+  local env_file=".env"
+  if [[ ! -f "${env_file}" ]]; then
+    env_file=".env.example"
+  fi
+
+  if [[ -f "${env_file}" ]]; then
+    (
+      # shellcheck disable=SC1090
+      . "${env_file}" >/dev/null 2>&1
+      printf '%s\n' "${PORT:-8001}"
+    )
+    return
+  fi
+
+  echo "8001"
+}
+
 function _qa_base_url {
   if [[ -n "${QA_BASE_URL:-}" ]]; then
     echo "${QA_BASE_URL}"
     return
   fi
 
+  local container_port
+  container_port="$(_qa_container_port)"
   local mapped_port=""
-  local candidate_container_port
-  local -a candidates=(8002 8001 4000)
-  for candidate_container_port in "${candidates[@]}"; do
-    mapped_port="$(docker compose port web "${candidate_container_port}" 2>/dev/null | head -n 1 || true)"
-    if [[ -n "${mapped_port}" ]]; then
-      break
-    fi
-  done
+  mapped_port="$(docker compose port web "${container_port}" 2>/dev/null | head -n 1 || true)"
 
   if [[ -z "${mapped_port}" ]]; then
-    echo "http://localhost:8002"
+    echo "http://localhost:${container_port}"
     return
   fi
 
