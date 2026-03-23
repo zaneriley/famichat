@@ -1,5 +1,5 @@
 defmodule FamichatWeb.CanonicalMessagingFlowTest do
-  use FamichatWeb.ChannelCase, async: true
+  use FamichatWeb.ChannelCase, async: false
 
   import Phoenix.ConnTest,
     only: [build_conn: 0, get: 2, json_response: 2, post: 3]
@@ -16,9 +16,32 @@ defmodule FamichatWeb.CanonicalMessagingFlowTest do
 
   setup do
     previous_enforcement = Application.get_env(:famichat, :mls_enforcement)
+    previous_rate_limiter_config =
+      Application.get_env(:famichat, MessageRateLimiter)
+
     Application.put_env(:famichat, :mls_enforcement, false)
+    Application.put_env(:famichat, MessageRateLimiter,
+      windows: [
+        %{bucket: :msg_device_burst, key: [:device_id], limit: 5, interval: 60},
+        %{
+          bucket: :msg_device_sustained,
+          key: [:device_id],
+          limit: 120,
+          interval: 60
+        },
+        %{
+          bucket: :msg_user_sustained,
+          key: [:sender_id],
+          limit: 180,
+          interval: 60
+        }
+      ]
+    )
+    MessageRateLimiter.reset_for_test()
 
     on_exit(fn ->
+      MessageRateLimiter.reset_for_test()
+      restore_env(MessageRateLimiter, previous_rate_limiter_config)
       restore_env(:mls_enforcement, previous_enforcement)
     end)
 
