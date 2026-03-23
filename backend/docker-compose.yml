@@ -11,6 +11,8 @@ x-app: &default-app
     postgres:
       condition: "service_started"
       required: false
+  environment:
+    FAMICHAT_SKIP_ENTRYPOINT_DEPS_GET: "${FAMICHAT_SKIP_ENTRYPOINT_DEPS_GET:-}"
   env_file:
     - ".env"
   restart: "${DOCKER_RESTART_POLICY:-unless-stopped}"

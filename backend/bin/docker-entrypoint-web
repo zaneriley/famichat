@@ -50,8 +50,12 @@ elif [ "$MIX_ENV" = "prod" ]; then
     log "MIX_ENV is set to prod, but release files not found. This might be an error."
 else
     log "Running in local development mode"
-    log "Ensuring Mix dependencies are installed..."
-    mix deps.get --only "${MIX_ENV:-dev}"
+    if [ -n "${FAMICHAT_SKIP_ENTRYPOINT_DEPS_GET:-}" ]; then
+        log "Skipping Mix dependency refresh (prewarmed by caller)"
+    else
+        log "Ensuring Mix dependencies are installed..."
+        mix deps.get --only "${MIX_ENV:-dev}"
+    fi
 fi
 
 # Execute the main command

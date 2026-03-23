@@ -370,9 +370,12 @@ function _qa_ws_base_url {
   echo "${normalized_base_url}/socket/websocket?vsn=2.0.0"
 }
 
-function _qa_container_port {
-  if [[ -n "${QA_CONTAINER_PORT:-}" ]]; then
-    echo "${QA_CONTAINER_PORT}"
+function _compose_env_value {
+  local key="$1"
+  local fallback="${2:-}"
+
+  if [[ -n "${!key:-}" ]]; then
+    printf '%s\n' "${!key}"
     return
   fi
 
@@ -385,12 +388,21 @@ function _qa_container_port {
     (
       # shellcheck disable=SC1090
       . "${env_file}" >/dev/null 2>&1
-      printf '%s\n' "${PORT:-8001}"
+      printf '%s\n' "${!key:-$fallback}"
     )
     return
   fi
 
-  echo "8001"
+  printf '%s\n' "${fallback}"
+}
+
+function _qa_container_port {
+  if [[ -n "${QA_CONTAINER_PORT:-}" ]]; then
+    echo "${QA_CONTAINER_PORT}"
+    return
+  fi
+
+  _compose_env_value "PORT" "8001"
 }
 
 function _qa_base_url {
@@ -460,6 +472,55 @@ function _wait_for_http_200 {
   return 1
 }
 
+function _wait_for_http_surface {
+  local url="$1"
+  local attempts="${2:-30}"
+  local sleep_seconds="${3:-1}"
+  local required_successes="${4:-3}"
+  local connect_timeout="${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}"
+  local max_time="${QA_CURL_MAX_TIME_SECONDS:-12}"
+  local success_count=0
+  local attempt
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    local http_status=""
+    http_status="$(
+      curl -sS \
+        --connect-timeout "${connect_timeout}" \
+        --max-time "${max_time}" \
+        -o /dev/null \
+        -w "%{http_code}" \
+        "${url}" 2>/dev/null || true
+    )"
+
+    if [[ -n "${http_status}" && "${http_status}" != "000" ]]; then
+      success_count=$((success_count + 1))
+      if ((success_count >= required_successes)); then
+        return 0
+      fi
+    else
+      success_count=0
+    fi
+
+    sleep "${sleep_seconds}"
+  done
+
+  echo \
+    "Timed out waiting for ${required_successes} consecutive HTTP responses from ${url}." >&2
+  return 1
+}
+
+function _wait_for_host_http_surface_ready {
+  local base_url="${1:-$(_qa_base_url)}"
+  local normalized_base_url="${base_url%/}"
+
+  _wait_for_http_surface \
+    "${normalized_base_url}/up" \
+    "${CI_HTTP_SURFACE_READY_ATTEMPTS:-30}" \
+    "${CI_HTTP_SURFACE_READY_SLEEP_SECONDS:-1}" \
+    "${CI_HTTP_SURFACE_READY_CONSECUTIVE_SUCCESSES:-3}"
+}
+
 function _wait_for_host_http_ready {
   local base_url="${1:-$(_qa_base_url)}"
   local normalized_base_url="${base_url%/}"
@@ -475,6 +536,69 @@ function _wait_for_host_http_ready {
     "${CI_HTTP_READY_ATTEMPTS:-30}" \
     "${CI_HTTP_READY_SLEEP_SECONDS:-1}" \
     "${CI_HTTP_READY_CONSECUTIVE_SUCCESSES:-3}"
+}
+
+function _wait_for_container_http_surface_ready {
+  local container_port="${1:-$(_qa_container_port)}"
+  local attempts="${CI_CONTAINER_HTTP_SURFACE_READY_ATTEMPTS:-60}"
+  local sleep_seconds="${CI_CONTAINER_HTTP_SURFACE_READY_SLEEP_SECONDS:-1}"
+  local required_successes="${CI_CONTAINER_HTTP_SURFACE_READY_CONSECUTIVE_SUCCESSES:-3}"
+  local success_count=0
+  local attempt
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if docker compose exec -T web \
+      curl -sS "http://localhost:${container_port}/up" >/dev/null 2>&1; then
+      success_count=$((success_count + 1))
+      if ((success_count >= required_successes)); then
+        return 0
+      fi
+    else
+      success_count=0
+    fi
+
+    sleep "${sleep_seconds}"
+  done
+
+  echo \
+    "Timed out waiting for ${required_successes} consecutive container HTTP responses on port ${container_port}." >&2
+  return 1
+}
+
+function _wait_for_postgres_ready {
+  local postgres_user
+  postgres_user="$(_compose_env_value "POSTGRES_USER" "famichat")"
+  local postgres_password
+  postgres_password="$(_compose_env_value "POSTGRES_PASSWORD" "password")"
+  local postgres_db="${1:-${postgres_user}}"
+  local attempts="${CI_POSTGRES_READY_ATTEMPTS:-60}"
+  local sleep_seconds="${CI_POSTGRES_READY_SLEEP_SECONDS:-2}"
+  local attempt
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if docker compose exec -T \
+      -e "PGPASSWORD=${postgres_password}" postgres \
+      psql -U "${postgres_user}" "${postgres_db}" -c 'SELECT 1' >/dev/null 2>&1; then
+      return 0
+    fi
+
+    sleep "${sleep_seconds}"
+  done
+
+  echo "Timed out waiting for postgres to accept connections." >&2
+  return 1
+}
+
+function _dump_ci_startup_diagnostics {
+  local container_port="${1:-$(_qa_container_port)}"
+
+  echo
+  echo "CI startup diagnostics:"
+  echo "  container_port=${container_port}"
+  echo "  qa_base_url=$(_qa_base_url)"
+  docker compose ps || true
+  docker compose port web "${container_port}" || true
+  docker compose logs web postgres || true
 }
 
 function _qa_status_matches {
@@ -3613,15 +3737,11 @@ function db:reset {
 # -----------------------------------------------------------------------------
 
 function ci:install-deps {
-    # Unchanged
     sudo apt-get install -y curl shellcheck
-    sudo curl \
-        -L https://raw.githubusercontent.com/nickjj/wait-until/v0.2.0/wait-until \
-        -o /usr/local/bin/wait-until && sudo chmod +x /usr/local/bin/wait-until
 }
 
 function ci:setup-env {
-    cp --no-clobber .env.example .env
+    cp --update=none .env.example .env
     docker compose build
 
     # Prime the shared /mix volume before the long-running web container starts.
@@ -3630,19 +3750,22 @@ function ci:setup-env {
     docker compose run --rm -T web mix deps.get
     docker compose run --rm -T web mix compile
 
-    docker compose up -d
+    FAMICHAT_SKIP_ENTRYPOINT_DEPS_GET=1 docker compose up -d
 
-    # shellcheck disable=SC1091
-    . .env
-    wait-until "docker compose exec -T \
-        -e PGPASSWORD=${POSTGRES_PASSWORD} postgres \
-        psql -U ${POSTGRES_USER} ${POSTGRES_USER} -c 'SELECT 1'"
+    if ! _wait_for_postgres_ready; then
+      _dump_ci_startup_diagnostics
+      return 1
+    fi
 
-    wait-until "docker compose ps web | grep -q '(healthy)'"
+    if ! _wait_for_container_http_surface_ready; then
+      _dump_ci_startup_diagnostics
+      return 1
+    fi
 
-    _wait_for_host_http_ready "$(_qa_base_url)"
-
-    docker compose logs
+    if ! _wait_for_host_http_surface_ready "$(_qa_base_url)"; then
+      _dump_ci_startup_diagnostics
+      return 1
+    fi
 }
 
 function ci:lint {
@@ -3670,10 +3793,23 @@ function ci:security-check {
 }
 
 function ci:setup-db {
-    wait-until "docker compose ps web | grep -q '(healthy)'"
+    if ! _wait_for_postgres_ready; then
+      _dump_ci_startup_diagnostics
+      return 1
+    fi
+
+    if ! _wait_for_container_http_surface_ready; then
+      _dump_ci_startup_diagnostics
+      return 1
+    fi
+
     mix ecto.create
     mix ecto.migrate
-    _wait_for_host_http_ready "$(_qa_base_url)"
+
+    if ! _wait_for_host_http_ready "$(_qa_base_url)"; then
+      _dump_ci_startup_diagnostics
+      return 1
+    fi
 }
 
 function ci:test {
