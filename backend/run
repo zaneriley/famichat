@@ -404,6 +404,61 @@ function _qa_base_url {
   echo "http://${host}:${port}"
 }
 
+function _wait_for_http_200 {
+  local url="$1"
+  local attempts="${2:-30}"
+  local sleep_seconds="${3:-1}"
+  local required_successes="${4:-3}"
+  local connect_timeout="${QA_CURL_CONNECT_TIMEOUT_SECONDS:-3}"
+  local max_time="${QA_CURL_MAX_TIME_SECONDS:-12}"
+  local success_count=0
+  local attempt
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    local http_status=""
+    http_status="$(
+      curl -sS \
+        --connect-timeout "${connect_timeout}" \
+        --max-time "${max_time}" \
+        -o /dev/null \
+        -w "%{http_code}" \
+        "${url}" 2>/dev/null || true
+    )"
+
+    if [[ "${http_status}" == "200" ]]; then
+      success_count=$((success_count + 1))
+      if ((success_count >= required_successes)); then
+        return 0
+      fi
+    else
+      success_count=0
+    fi
+
+    sleep "${sleep_seconds}"
+  done
+
+  echo \
+    "Timed out waiting for ${required_successes} consecutive 200 responses from ${url}." >&2
+  return 1
+}
+
+function _wait_for_host_http_ready {
+  local base_url="${1:-$(_qa_base_url)}"
+  local normalized_base_url="${base_url%/}"
+
+  _wait_for_http_200 \
+    "${normalized_base_url}/up" \
+    "${CI_HTTP_READY_ATTEMPTS:-30}" \
+    "${CI_HTTP_READY_SLEEP_SECONDS:-1}" \
+    "${CI_HTTP_READY_CONSECUTIVE_SUCCESSES:-3}" || return 1
+
+  _wait_for_http_200 \
+    "${normalized_base_url}/api/v1/health" \
+    "${CI_HTTP_READY_ATTEMPTS:-30}" \
+    "${CI_HTTP_READY_SLEEP_SECONDS:-1}" \
+    "${CI_HTTP_READY_CONSECUTIVE_SUCCESSES:-3}"
+}
+
 function _qa_status_matches {
   local actual_status="$1"
   local expected_csv="$2"
@@ -2091,6 +2146,8 @@ function qa:messaging:preflight {
   # Validate runtime prerequisites before live messaging QA probes.
   local output_dir="${1:-}"
   local log_file=""
+  local base_url
+  base_url="$(_qa_base_url)"
 
   if [[ -n "${output_dir}" ]]; then
     mkdir -p "${output_dir}"
@@ -2105,6 +2162,7 @@ function qa:messaging:preflight {
     {
       echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       echo "cwd=$(pwd)"
+      echo "qa_base_url=${base_url}"
       echo "docker_compose_ps_start"
       _qa_compose_ps_safe
       echo "docker_compose_ps_end"
@@ -2112,6 +2170,7 @@ function qa:messaging:preflight {
   else
     echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "cwd=$(pwd)"
+    echo "qa_base_url=${base_url}"
     _qa_compose_ps_safe
   fi
 
@@ -2126,6 +2185,13 @@ function qa:messaging:preflight {
       return 1
     fi
     echo "migration_check_end" | tee -a "${log_file}"
+
+    echo "host_http_ready_check_start" | tee -a "${log_file}"
+    if ! _wait_for_host_http_ready "${base_url}" >> "${log_file}" 2>&1; then
+      echo "Host HTTP readiness check failed for ${base_url}." >&2
+      return 1
+    fi
+    echo "host_http_ready_check_end" | tee -a "${log_file}"
   else
     local migration_output
     migration_output="$(cmd mix ecto.migrations)" || {
@@ -2134,6 +2200,11 @@ function qa:messaging:preflight {
     }
     if printf '%s\n' "${migration_output}" | grep -Eq '^[[:space:]]*down[[:space:]]'; then
       echo "Migration preflight failed (pending/failed migrations). QA run blocked." >&2
+      return 1
+    fi
+
+    if ! _wait_for_host_http_ready "${base_url}"; then
+      echo "Host HTTP readiness check failed for ${base_url}." >&2
       return 1
     fi
   fi
@@ -3548,6 +3619,8 @@ function ci:setup-env {
     docker compose exec -T web mix deps.get
     docker compose exec -T web mix compile
 
+    _wait_for_host_http_ready "$(_qa_base_url)"
+
     docker compose logs
 }
 
@@ -3579,6 +3652,7 @@ function ci:setup-db {
     wait-until "docker compose ps web | grep -q '(healthy)'"
     mix ecto.create
     mix ecto.migrate
+    _wait_for_host_http_ready "$(_qa_base_url)"
 }
 
 function ci:test {
