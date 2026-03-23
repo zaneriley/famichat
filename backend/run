@@ -3605,6 +3605,13 @@ function ci:install-deps {
 function ci:setup-env {
     cp --no-clobber .env.example .env
     docker compose build
+
+    # Prime the shared /mix volume before the long-running web container starts.
+    # Running compile via `docker compose exec web ...` races process 1 for the
+    # build lock on cold CI runners and can leave the published HTTP surface down.
+    docker compose run --rm -T web mix deps.get
+    docker compose run --rm -T web mix compile
+
     docker compose up -d
 
     # shellcheck disable=SC1091
@@ -3614,10 +3621,6 @@ function ci:setup-env {
         psql -U ${POSTGRES_USER} ${POSTGRES_USER} -c 'SELECT 1'"
 
     wait-until "docker compose ps web | grep -q '(healthy)'"
-
-    # Populate /mix volume on cold runners (idempotent)
-    docker compose exec -T web mix deps.get
-    docker compose exec -T web mix compile
 
     _wait_for_host_http_ready "$(_qa_base_url)"
 
