@@ -338,6 +338,69 @@ function _qa_project_root {
   cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
 }
 
+function _qa_backend_root {
+  cd "$(dirname "${BASH_SOURCE[0]}")" && pwd
+}
+
+function _qa_path_in_js_container {
+  local host_path="$1"
+  local backend_root
+  backend_root="$(_qa_backend_root)"
+
+  if [[ "${host_path}" == "${backend_root}" ]]; then
+    echo "/app"
+    return
+  fi
+
+  if [[ "${host_path}" == "${backend_root}/"* ]]; then
+    echo "/app${host_path#"${backend_root}"}"
+    return
+  fi
+
+  echo "${host_path}"
+}
+
+function _qa_bridge_path_for_js_container {
+  local host_path="$1"
+  local project_root
+  project_root="$(_qa_project_root)"
+  local backend_root
+  backend_root="$(_qa_backend_root)"
+
+  if [[ "${host_path}" == "${backend_root}" || "${host_path}" == "${backend_root}/"* ]]; then
+    echo "${host_path}"
+    return
+  fi
+
+  if [[ "${host_path}" == "${project_root}/"* ]]; then
+    echo "${backend_root}/.tmp/_qa_ws_bridge${host_path#"${project_root}"}"
+    return
+  fi
+
+  echo "${host_path}"
+}
+
+function _qa_ws_url_in_js_container {
+  local ws_url="$1"
+  local container_port
+  container_port="$(_qa_container_port)"
+
+  if [[ "${ws_url}" =~ ^wss?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|\[::\])(:[0-9]+)?(/.*)?$ ]]; then
+    local scheme="${ws_url%%://*}"
+    local remainder="${ws_url#*://}"
+    local path_and_query=""
+
+    if [[ "${remainder}" == */* ]]; then
+      path_and_query="/${remainder#*/}"
+    fi
+
+    echo "${scheme}://web:${container_port}${path_and_query}"
+    return
+  fi
+
+  echo "${ws_url}"
+}
+
 function _qa_require_host_command {
   local command_name="$1"
   local install_hint="$2"
@@ -705,8 +768,37 @@ function _qa_spawn_ws_listener {
   local output_file="$3"
   local wait_seconds="${4:-4}"
   local ready_file="${5:-}"
+  local container_ws_url
+  container_ws_url="$(_qa_ws_url_in_js_container "${ws_url}")"
+  local bridged_output_file
+  bridged_output_file="$(_qa_bridge_path_for_js_container "${output_file}")"
+  local bridged_ready_file="${ready_file}"
 
-  docker compose exec -T js node - "${ws_url}" "${ws_topic}" "${output_file}" "${wait_seconds}" "${ready_file}" <<'NODE' &
+  if [[ -n "${ready_file}" ]]; then
+    bridged_ready_file="$(_qa_bridge_path_for_js_container "${ready_file}")"
+  fi
+
+  if [[ "${bridged_output_file}" != "${output_file}" ]]; then
+    mkdir -p "$(dirname "${bridged_output_file}")" "$(dirname "${output_file}")"
+    rm -f "${output_file}" "${bridged_output_file}"
+    ln -s "${bridged_output_file}" "${output_file}"
+  fi
+
+  local container_output_file
+  container_output_file="$(_qa_path_in_js_container "${bridged_output_file}")"
+  local container_ready_file="${ready_file}"
+
+  if [[ -n "${ready_file}" ]]; then
+    if [[ "${bridged_ready_file}" != "${ready_file}" ]]; then
+      mkdir -p "$(dirname "${bridged_ready_file}")" "$(dirname "${ready_file}")"
+      rm -f "${ready_file}" "${bridged_ready_file}"
+      ln -s "${bridged_ready_file}" "${ready_file}"
+    fi
+
+    container_ready_file="$(_qa_path_in_js_container "${bridged_ready_file}")"
+  fi
+
+  docker compose exec -T js node - "${container_ws_url}" "${ws_topic}" "${container_output_file}" "${wait_seconds}" "${container_ready_file}" <<'NODE' &
 const fs = require("fs");
 
 const [url, topic, outputFile, waitSecondsRaw, readyFile] = process.argv.slice(2);
@@ -765,6 +857,9 @@ function pushEvent(value) {
 
   events.push(JSON.stringify(value));
 }
+
+process.on("SIGTERM", finish);
+process.on("SIGINT", finish);
 
 function resolveWebSocket() {
   if (typeof WebSocket !== "undefined") {
