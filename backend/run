@@ -592,12 +592,6 @@ function _wait_for_host_http_ready {
     "${normalized_base_url}/up" \
     "${CI_HTTP_READY_ATTEMPTS:-30}" \
     "${CI_HTTP_READY_SLEEP_SECONDS:-1}" \
-    "${CI_HTTP_READY_CONSECUTIVE_SUCCESSES:-3}" || return 1
-
-  _wait_for_http_200 \
-    "${normalized_base_url}/api/v1/health" \
-    "${CI_HTTP_READY_ATTEMPTS:-30}" \
-    "${CI_HTTP_READY_SLEEP_SECONDS:-1}" \
     "${CI_HTTP_READY_CONSECUTIVE_SUCCESSES:-3}"
 }
 

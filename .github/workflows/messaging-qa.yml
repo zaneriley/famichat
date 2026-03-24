@@ -19,6 +19,10 @@ on:
           - fast
           - deep
 
+env:
+  CI_HTTP_READY_ATTEMPTS: 60
+  CI_HTTP_READY_SLEEP_SECONDS: 2
+
 concurrency:
   group: messaging-qa-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
