@@ -27,7 +27,7 @@
     "stylelint-config-tailwindcss": "^0.0.7",
     "tailwindcss": "3.4.12",
     "ts-node": "^10.9.2",
-    "vite": "6.4.1",
+    "vite": "6.4.2",
     "vitest": "3.2.4",
     "ws": "^8.18.2"
   },
